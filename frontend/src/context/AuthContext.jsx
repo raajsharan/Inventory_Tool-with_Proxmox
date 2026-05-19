@@ -3,14 +3,21 @@ import api from '../api/client';
 
 const AuthContext = createContext(null);
 
+const DEFAULT_LABELS = {
+  assets:                'Asset Inventory',
+  beijing_assets:        'Beijing Asset Inventory',
+  ext_assets:            'Ext. Asset Inventory',
+  physical_esxi_servers: 'Physical & ESXi Servers',
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem('user');
     return raw ? JSON.parse(raw) : null;
   });
   const [loading, setLoading] = useState(false);
-  // page_access matrix: { 'pageKey:role': boolean }. Default `true` when missing.
   const [pageAccess, setPageAccess] = useState({});
+  const [builtinOverrides, setBuiltinOverrides] = useState({}); // page_key -> { name, description, icon }
 
   const refreshPageAccess = useCallback(async () => {
     try {
@@ -18,6 +25,19 @@ export function AuthProvider({ children }) {
       setPageAccess(data.matrix || {});
     } catch {
       setPageAccess({});
+    }
+  }, []);
+
+  const refreshBuiltinOverrides = useCallback(async () => {
+    try {
+      const { data } = await api.get('/builtin-pages');
+      const map = {};
+      for (const p of data.items || []) {
+        map[p.page_key] = { name: p.name, description: p.description, icon: p.icon, is_overridden: p.is_overridden };
+      }
+      setBuiltinOverrides(map);
+    } catch {
+      setBuiltinOverrides({});
     }
   }, []);
 
@@ -29,9 +49,14 @@ export function AuthProvider({ children }) {
   }, []); // eslint-disable-line
 
   useEffect(() => {
-    if (user) refreshPageAccess();
-    else setPageAccess({});
-  }, [user, refreshPageAccess]);
+    if (user) {
+      refreshPageAccess();
+      refreshBuiltinOverrides();
+    } else {
+      setPageAccess({});
+      setBuiltinOverrides({});
+    }
+  }, [user, refreshPageAccess, refreshBuiltinOverrides]);
 
   async function login(email, password) {
     setLoading(true);
@@ -50,8 +75,6 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
-  // True when the current user's role is allowed to see the given page.
-  // Superadmin always sees everything. Missing matrix entry = allowed.
   function canSee(pageKey) {
     const role = user?.role;
     if (!role) return false;
@@ -60,8 +83,17 @@ export function AuthProvider({ children }) {
     return v === undefined ? true : !!v;
   }
 
+  // Resolve the display name for a built-in page, falling back to defaults.
+  function getPageLabel(pageKey, fallback) {
+    return builtinOverrides[pageKey]?.name || DEFAULT_LABELS[pageKey] || fallback || pageKey;
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, canSee, pageAccess, refreshPageAccess }}>
+    <AuthContext.Provider value={{
+      user, login, logout, loading,
+      canSee, pageAccess, refreshPageAccess,
+      builtinOverrides, refreshBuiltinOverrides, getPageLabel,
+    }}>
       {children}
     </AuthContext.Provider>
   );

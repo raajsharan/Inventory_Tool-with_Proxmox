@@ -6,59 +6,24 @@ import {
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, AppstoreAddOutlined,
   DatabaseOutlined, GlobalOutlined, CloudServerOutlined, HddOutlined, EyeOutlined, LockOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext.jsx';
 
-// Built-in inventory pages. Schema is fixed (one DB table per page) — admins
-// customize their fields through the Field Customization screen rather than
-// editing them here.
 const BUILT_IN_PAGES = [
-  {
-    id: 'built-in:assets',
-    isBuiltIn: true,
-    page_key: 'assets',
-    slug: 'assets',
-    name: 'Assets',
-    description: 'Primary asset inventory.',
-    path: '/assets',
-    icon: <DatabaseOutlined />,
-  },
-  {
-    id: 'built-in:beijing_assets',
-    isBuiltIn: true,
-    page_key: 'beijing_assets',
-    slug: 'beijing-assets',
-    name: 'Beijing Assets',
-    description: 'Beijing region asset inventory.',
-    path: '/beijing-assets',
-    icon: <GlobalOutlined />,
-  },
-  {
-    id: 'built-in:ext_assets',
-    isBuiltIn: true,
-    page_key: 'ext_assets',
-    slug: 'ext-assets',
-    name: 'Ext. Assets',
-    description: 'Extended asset inventory.',
-    path: '/ext-assets',
-    icon: <CloudServerOutlined />,
-  },
-  {
-    id: 'built-in:physical_esxi_servers',
-    isBuiltIn: true,
-    page_key: 'physical_esxi_servers',
-    slug: 'physical-esxi',
-    name: 'Physical & ESXi Servers',
-    description: 'Physical hardware and ESXi hypervisors.',
-    path: '/physical-esxi',
-    icon: <HddOutlined />,
-  },
+  { page_key: 'assets',                slug: 'assets',          path: '/assets',         icon: <DatabaseOutlined /> },
+  { page_key: 'beijing_assets',        slug: 'beijing-assets',  path: '/beijing-assets', icon: <GlobalOutlined /> },
+  { page_key: 'ext_assets',            slug: 'ext-assets',      path: '/ext-assets',     icon: <CloudServerOutlined /> },
+  { page_key: 'physical_esxi_servers', slug: 'physical-esxi',   path: '/physical-esxi',  icon: <HddOutlined /> },
 ];
 
 export default function AdminCustomPages() {
   const { message } = App.useApp();
+  const { refreshBuiltinOverrides } = useAuth();
   const nav = useNavigate();
   const [custom, setCustom] = useState([]);
+  const [builtins, setBuiltins] = useState([]);
   const [builtInFieldCounts, setBuiltInFieldCounts] = useState({});
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -68,11 +33,13 @@ export default function AdminCustomPages() {
   async function load() {
     setLoading(true);
     try {
-      const [customRes, fvRes] = await Promise.all([
+      const [customRes, biRes, fvRes] = await Promise.all([
         api.get('/custom-pages'),
+        api.get('/builtin-pages').catch(() => ({ data: { items: [] } })),
         api.get('/field-visibility').catch(() => ({ data: { items: [] } })),
       ]);
       setCustom(customRes.data.items || []);
+      setBuiltins(biRes.data.items || []);
       const counts = {};
       for (const p of fvRes.data.items || []) counts[p.key] = (p.fields || []).length;
       setBuiltInFieldCounts(counts);
@@ -96,13 +63,35 @@ export default function AdminCustomPages() {
 
   async function onSubmit(values) {
     try {
-      await api.put(`/custom-pages/${editing.id}`, values);
-      message.success('Saved');
+      if (editing.isBuiltIn) {
+        await api.put(`/builtin-pages/${editing.page_key}`, {
+          name: values.name,
+          description: values.description,
+          icon: values.icon,
+        });
+        message.success('Built-in page updated');
+        await refreshBuiltinOverrides();
+      } else {
+        await api.put(`/custom-pages/${editing.id}`, values);
+        message.success('Saved');
+      }
       setOpen(false);
       load();
       setTimeout(() => location.reload(), 50);
     } catch (e) {
       message.error(e.response?.data?.error || 'Save failed');
+    }
+  }
+
+  async function onResetBuiltin(pageKey) {
+    try {
+      await api.delete(`/builtin-pages/${pageKey}`);
+      message.success('Reset to default');
+      await refreshBuiltinOverrides();
+      load();
+      setTimeout(() => location.reload(), 50);
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Reset failed');
     }
   }
 
@@ -117,12 +106,24 @@ export default function AdminCustomPages() {
     }
   }
 
-  const rows = [
-    ...BUILT_IN_PAGES.map(p => ({
-      ...p,
+  // Merge built-in metadata from API response with hardcoded paths/icons.
+  const builtinRows = BUILT_IN_PAGES.map(meta => {
+    const api = builtins.find(b => b.page_key === meta.page_key) || {};
+    return {
+      ...meta,
+      isBuiltIn: true,
+      id: `built-in:${meta.page_key}`,
+      name: api.name || meta.page_key,
+      defaultName: api.default_name,
+      description: api.description,
+      is_overridden: !!api.is_overridden,
       is_active: true,
-      fields: { length: builtInFieldCounts[p.page_key] ?? 0 },
-    })),
+      fields: { length: builtInFieldCounts[meta.page_key] ?? 0 },
+    };
+  });
+
+  const rows = [
+    ...builtinRows,
     ...custom.map(p => ({ ...p, isBuiltIn: false, path: `/custom-pages/${p.slug}`, icon: <AppstoreAddOutlined /> })),
   ];
 
@@ -136,10 +137,9 @@ export default function AdminCustomPages() {
       }
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: -8 }}>
-        Built-in pages (Assets, Beijing Assets, Ext. Assets, Physical &amp; ESXi) are listed here
-        for reference — their schemas are fixed, so use{' '}
-        <Link to="/admin/field-visibility">Field Customization</Link> to hide individual fields.
-        Pages created via <strong>New Page</strong> can be renamed, edited, or deleted.
+        Built-in inventories appear at the top — admins/superadmins can rename them, change the description,
+        or pick a new icon. To hide individual fields, use{' '}
+        <Link to="/admin/field-visibility">Field Customization</Link>. User-created pages can be fully edited or deleted.
       </Typography.Paragraph>
 
       <Table
@@ -161,6 +161,7 @@ export default function AdminCustomPages() {
                     <Tag color="purple" icon={<LockOutlined />}>Built-in</Tag>
                   </Tooltip>
                 )}
+                {r.is_overridden && <Tag color="orange">customized</Tag>}
               </Space>
             ),
           },
@@ -176,13 +177,26 @@ export default function AdminCustomPages() {
             render: v => (v ? <Tag color="green">Yes</Tag> : <Tag>No</Tag>),
           },
           {
-            title: 'Actions', width: 220, render: (_, r) => (
+            title: 'Actions', width: 280, render: (_, r) => (
               r.isBuiltIn ? (
-                <Tooltip title="Manage which fields are visible on this page">
-                  <Button size="small" icon={<EyeOutlined />} onClick={() => nav('/admin/field-visibility')}>
-                    Customize Fields
-                  </Button>
-                </Tooltip>
+                <Space>
+                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
+                  <Tooltip title="Customize visible fields">
+                    <Button size="small" icon={<EyeOutlined />} onClick={() => nav('/admin/field-visibility')}>
+                      Fields
+                    </Button>
+                  </Tooltip>
+                  {r.is_overridden && (
+                    <Popconfirm
+                      title="Reset to default name and description?"
+                      onConfirm={() => onResetBuiltin(r.page_key)}
+                    >
+                      <Tooltip title="Reset to default">
+                        <Button size="small" icon={<ReloadOutlined />} />
+                      </Tooltip>
+                    </Popconfirm>
+                  )}
+                </Space>
               ) : (
                 <Space>
                   <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
@@ -203,14 +217,16 @@ export default function AdminCustomPages() {
 
       <Modal
         open={open}
-        title={editing ? `Edit Page: ${editing.name}` : 'Edit Page'}
+        title={editing?.isBuiltIn
+          ? `Edit Built-in Page: ${editing.defaultName || editing.name}`
+          : (editing ? `Edit Page: ${editing.name}` : 'Edit Page')}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={onSubmit}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input />
+            <Input placeholder={editing?.defaultName || ''} />
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={2} />
@@ -218,12 +234,15 @@ export default function AdminCustomPages() {
           <Form.Item name="icon" label="Icon (Ant Design name, optional)" extra="e.g. ApiOutlined, DatabaseOutlined">
             <Input />
           </Form.Item>
-          <Form.Item name="is_active" label="Active" valuePropName="checked">
-            <Switch />
-          </Form.Item>
+          {!editing?.isBuiltIn && (
+            <Form.Item name="is_active" label="Active" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          )}
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Field structure (columns) cannot be edited from this dialog to protect existing records.
-            Create a new page if you need a different schema.
+            {editing?.isBuiltIn
+              ? 'Field structure is fixed for built-in pages. Use Field Customization to hide individual fields.'
+              : 'Field structure (columns) cannot be edited from this dialog to protect existing records. Create a new page if you need a different schema.'}
           </Typography.Text>
         </Form>
       </Modal>

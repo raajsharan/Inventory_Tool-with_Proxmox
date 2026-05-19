@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Breadcrumb, Space, Typography } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Breadcrumb, Space, Typography, Button, Tooltip } from 'antd';
 import {
   DashboardOutlined, DatabaseOutlined, PlusOutlined, UploadOutlined,
   AppstoreAddOutlined, AppstoreOutlined, UnorderedListOutlined,
@@ -8,14 +8,17 @@ import {
   SettingOutlined, LogoutOutlined, HistoryOutlined, TagsOutlined,
   GlobalOutlined, BarChartOutlined, EyeOutlined, CloudServerOutlined,
   HddOutlined, SafetyCertificateOutlined,
+  SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useAppTheme } from '../../context/ThemeContext.jsx';
 import api from '../../api/client';
 
 const { Sider, Header, Content } = Layout;
 
 export default function AppLayout() {
-  const { user, logout, canSee } = useAuth();
+  const { user, logout, canSee, getPageLabel } = useAuth();
+  const { mode, toggleMode, fontPx, increaseFont, decreaseFont, canIncrease, canDecrease } = useAppTheme();
   const nav = useNavigate();
   const loc = useLocation();
   const [customPages, setCustomPages] = useState([]);
@@ -26,12 +29,11 @@ export default function AppLayout() {
 
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
-
-  // Combined gate: role check (existing) AND page_access matrix.
   const can = (pageKey, roleOk = true) => roleOk && (canSee ? canSee(pageKey) : true);
 
-  const inventoryGroup = (key, pageKey, icon, label, base, addLabel = 'Add') => {
+  const inventoryGroup = (key, pageKey, icon, defaultLabel, base, addLabel = 'Add') => {
     if (!can(pageKey)) return null;
+    const label = getPageLabel ? getPageLabel(pageKey, defaultLabel) : defaultLabel;
     return {
       key, icon, label,
       children: [
@@ -96,7 +98,28 @@ export default function AppLayout() {
       <Layout>
         <Header className="app-header">
           <Breadcrumb items={[{ title: <Link to="/">Home</Link> }, ...crumbs]} />
-          <Space>
+          <Space size="middle">
+            <Space.Compact>
+              <Tooltip title="Decrease font size">
+                <Button size="small" icon={<MinusOutlined />} onClick={decreaseFont} disabled={!canDecrease} />
+              </Tooltip>
+              <Tooltip title={`Current: ${fontPx}px`}>
+                <Button size="small" icon={<FontSizeOutlined />} style={{ pointerEvents: 'none', minWidth: 56 }}>
+                  {fontPx}
+                </Button>
+              </Tooltip>
+              <Tooltip title="Increase font size">
+                <Button size="small" icon={<PlusOutlined />} onClick={increaseFont} disabled={!canIncrease} />
+              </Tooltip>
+            </Space.Compact>
+            <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+              <Button
+                size="small"
+                shape="circle"
+                icon={mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+                onClick={toggleMode}
+              />
+            </Tooltip>
             <Typography.Text type="secondary">{user?.role?.replace('_',' ')}</Typography.Text>
             <Dropdown
               menu={{

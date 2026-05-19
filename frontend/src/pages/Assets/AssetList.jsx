@@ -17,7 +17,8 @@ export default function AssetList({
   exportFilename = 'assets-export.xlsx',
   pageKey = 'assets',
 }) {
-  const { user } = useAuth();
+  const { user, getPageLabel } = useAuth();
+  const effectiveTitle = getPageLabel ? getPageLabel(pageKey, title) : title;
   const { message } = App.useApp();
   const nav = useNavigate();
   const [data, setData] = useState({ items: [], total: 0 });
@@ -72,7 +73,7 @@ export default function AssetList({
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>{title}</Typography.Title>}
+      title={<Typography.Title level={4} style={{ margin: 0 }}>{effectiveTitle}</Typography.Title>}
       extra={
         <Space>
           <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>

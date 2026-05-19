@@ -382,6 +382,22 @@ CREATE TABLE IF NOT EXISTS page_access (
 CREATE INDEX IF NOT EXISTS idx_page_access_role ON page_access(role);
 
 -- ---------------------------------------------------------------------
+-- builtin_page_overrides
+--   Per-page label / description / icon overrides for the built-in
+--   inventory pages (assets, beijing_assets, ext_assets,
+--   physical_esxi_servers). Lets admins/superadmins rename or rebrand
+--   built-ins without changing code.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS builtin_page_overrides (
+    page_key    VARCHAR(64) PRIMARY KEY,
+    name        VARCHAR(255),
+    description TEXT,
+    icon        VARCHAR(64),
+    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------
 -- updated_at trigger
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION set_updated_at()

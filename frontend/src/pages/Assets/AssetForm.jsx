@@ -22,7 +22,8 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const { id } = useParams();
   const nav = useNavigate();
   const { message } = App.useApp();
-  const { user } = useAuth();
+  const { user, getPageLabel } = useAuth();
+  const effectiveEntityLabel = getPageLabel ? getPageLabel(pageKey, entityLabel) : entityLabel;
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
   const [form] = Form.useForm();
   const [dd, setDd] = useState({});
@@ -128,10 +129,10 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     try {
       if (mode === 'create') {
         await api.post(apiPrefix, values);
-        message.success(`${entityLabel} created`);
+        message.success(`${effectiveEntityLabel} created`);
       } else {
         await api.put(`${apiPrefix}/${id}`, values);
-        message.success(`${entityLabel} updated`);
+        message.success(`${effectiveEntityLabel} updated`);
       }
       nav(listPath);
     } catch (e) {
@@ -151,7 +152,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const range = rangeFor(department);
 
   return (
-    <Card title={<Typography.Title level={4} style={{ margin: 0 }}>{mode === 'create' ? `Add ${entityLabel}` : `Edit ${entityLabel}`}</Typography.Title>}
+    <Card title={<Typography.Title level={4} style={{ margin: 0 }}>{mode === 'create' ? `Add ${effectiveEntityLabel}` : `Edit ${effectiveEntityLabel}`}</Typography.Title>}
       className="inventory-form-card"
     >
       <Form form={form} layout="vertical" onFinish={onFinish} className="inventory-form"
@@ -324,7 +325,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
         </Row>
 
         <Space>
-          <Button type="primary" htmlType="submit" loading={submitting}>{mode === 'create' ? `Create ${entityLabel}` : 'Save Changes'}</Button>
+          <Button type="primary" htmlType="submit" loading={submitting}>{mode === 'create' ? `Create ${effectiveEntityLabel}` : 'Save Changes'}</Button>
           <Button onClick={() => nav(listPath)}>Cancel</Button>
         </Space>
       </Form>

@@ -14,10 +14,30 @@ html, body, #root { height: 100%; margin: 0; }
   padding: 0 24px;
   border-bottom: 1px solid #f0f0f0;
 }
+body[data-theme="dark"] .app-header {
+  border-bottom-color: #303030;
+}
 .page-shell {
   padding: 20px;
   background: #f5f7fb;
   min-height: calc(100vh - 64px);
+}
+body[data-theme="dark"] .page-shell {
+  background: #141414;
+}
+body[data-theme="dark"] .logo-title {
+  background: #000;
+}
+/* Soften the bright green input background in dark mode for inventory forms */
+body[data-theme="dark"] .inventory-form .ant-input,
+body[data-theme="dark"] .inventory-form .ant-input-affix-wrapper,
+body[data-theme="dark"] .inventory-form .ant-input-number,
+body[data-theme="dark"] .inventory-form .ant-picker,
+body[data-theme="dark"] .inventory-form .ant-select:not(.ant-select-customize-input) .ant-select-selector,
+body[data-theme="dark"] .inventory-form .ant-input-password {
+  background-color: #0f2e1a !important;
+  border-color: #1f5236 !important;
+  color: #e6e6e6 !important;
 }
 .card-stat .ant-statistic-title { color: #64748b; font-weight: 500; }
 .card-stat .ant-statistic-content { color: #0f172a; font-weight: 700; }
