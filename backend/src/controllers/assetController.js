@@ -52,6 +52,14 @@ async function tagStats(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function viewPassword(req, res, next) {
+  try {
+    const password = await svc.viewPassword(req.params.id);
+    await audit.log({ user: req.user, action: 'VIEW_PASSWORD', entityType: 'asset', entityId: req.params.id, ipAddress: req.ip });
+    res.json({ password: password || '' });
+  } catch (e) { next(e); }
+}
+
 async function checkIp(req, res, next) {
   try {
     const dept = require('../services/departmentService');
@@ -65,4 +73,4 @@ async function checkIp(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { list, get, create, update, remove, tagStats, checkIp };
+module.exports = { list, get, create, update, remove, tagStats, checkIp, viewPassword };

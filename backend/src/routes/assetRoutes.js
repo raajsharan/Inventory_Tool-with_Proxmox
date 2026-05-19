@@ -33,6 +33,7 @@ router.post('/smart-import',         authenticate, authorize(...writeRoles),
 
 router.get('/', authenticate, assetCtrl.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, assetCtrl.get);
+router.get('/:id/password', authenticate, authorize(...writeRoles), param('id').isUUID(), validate, assetCtrl.viewPassword);
 
 const assetBodyValidators = [
   body('vmName').optional().isString().isLength({ min: 1, max: 255 }),

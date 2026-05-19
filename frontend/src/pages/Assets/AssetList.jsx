@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Card, Table, Input, Select, Space, Button, Tag, Popconfirm, App, Row, Col, Typography,
+  Card, Table, Input, Select, Space, Button, Tag, Popconfirm, App, Row, Col, Typography, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
-  EditOutlined, DeleteOutlined, ReloadOutlined,
+  EditOutlined, DeleteOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -31,9 +32,11 @@ export default function AssetList({
   const isHidden = (k) => hiddenSet.has(k);
   const [fieldLabels, setFieldLabels] = useState({});
   const labelOf = (k, fallback) => fieldLabels[k] || fallback;
+  const [revealed, setRevealed] = useState({}); // id -> decrypted password
+  const [revealing, setRevealing] = useState({}); // id -> bool
 
-  const canWrite = ['admin','superadmin','asset_manager'].includes(user?.role);
-  const isAdmin = ['admin','superadmin'].includes(user?.role);
+  const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
   async function load() {
     setLoading(true);
@@ -41,6 +44,7 @@ export default function AssetList({
       const params = { page, pageSize, ...filters };
       const { data } = await api.get(apiPrefix, { params });
       setData(data);
+      setRevealed({});
     } finally { setLoading(false); }
   }
 
@@ -78,7 +82,139 @@ export default function AssetList({
     URL.revokeObjectURL(url);
   }
 
+  async function togglePassword(id, hasPassword) {
+    if (!hasPassword) return;
+    if (revealed[id]) {
+      setRevealed(prev => { const n = { ...prev }; delete n[id]; return n; });
+      return;
+    }
+    setRevealing(prev => ({ ...prev, [id]: true }));
+    try {
+      const { data } = await api.get(`${apiPrefix}/${id}/password`);
+      setRevealed(prev => ({ ...prev, [id]: data.password || '' }));
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Cannot view password');
+    } finally {
+      setRevealing(prev => { const n = { ...prev }; delete n[id]; return n; });
+    }
+  }
+
   const ddOptions = (cat) => (dropdowns[cat] || []).map(d => ({ label: d.value, value: d.value }));
+
+  const yesNo = (v) => v == null ? '' : (v ? <Tag color="green">Yes</Tag> : <Tag>No</Tag>);
+  const cell = (v) => (v === null || v === undefined || v === '') ? <Typography.Text type="secondary">—</Typography.Text> : v;
+
+  const allColumns = [
+    { key: 'vm_name', dataIndex: 'vm_name', fixed: 'left', width: 160,
+      title: labelOf('vm_name', 'VM Name'),
+      render: (v, r) => <Link to={`${basePath}/${r.id}`}>{v || '(unnamed)'}</Link> },
+    { key: 'ip_address', dataIndex: 'ip_address', width: 130,
+      title: labelOf('ip_address', 'IP Address'), render: cell },
+    { key: 'os_hostname', dataIndex: 'os_hostname', width: 180,
+      title: labelOf('os_hostname', 'Hostname'), render: cell },
+    { key: 'asset_type', dataIndex: 'asset_type', width: 140,
+      title: labelOf('asset_type', 'Asset Type'), render: cell },
+    { key: 'os_type', dataIndex: 'os_type', width: 110,
+      title: labelOf('os_type', 'OS Type'), render: cell },
+    { key: 'os_version', dataIndex: 'os_version', width: 150,
+      title: labelOf('os_version', 'OS Version'), render: cell },
+    { key: 'assigned_user', dataIndex: 'assigned_user', width: 150,
+      title: labelOf('assigned_user', 'Assigned User'), render: cell },
+    { key: 'department', dataIndex: 'department', width: 140,
+      title: labelOf('department', 'Department'), render: cell },
+    { key: 'server_status', dataIndex: 'server_status', width: 130,
+      title: labelOf('server_status', 'Server Status'),
+      render: v => v ? <Tag color={v === 'Active' ? 'green' : v === 'Decommissioned' ? 'red' : 'orange'}>{v}</Tag> : cell(v) },
+    { key: 'server_patch_type', dataIndex: 'server_patch_type', width: 150,
+      title: labelOf('server_patch_type', 'Server Patch Type'), render: cell },
+    { key: 'patching_type', dataIndex: 'patching_type', width: 130,
+      title: labelOf('patching_type', 'Patching Type'), render: cell },
+    { key: 'patching_schedule', dataIndex: 'patching_schedule', width: 150,
+      title: labelOf('patching_schedule', 'Patching Schedule'), render: cell },
+    { key: 'business_purpose', dataIndex: 'business_purpose', width: 200,
+      title: labelOf('business_purpose', 'Business Purpose'), ellipsis: true,
+      render: v => v ? <Tooltip title={v}>{v}</Tooltip> : cell(v) },
+    { key: 'location', dataIndex: 'location', width: 140,
+      title: labelOf('location', 'Location'), render: cell },
+    { key: 'serial_number', dataIndex: 'serial_number', width: 140,
+      title: labelOf('serial_number', 'Serial'), render: cell },
+    { key: 'idrac_enabled', dataIndex: 'idrac_enabled', width: 90,
+      title: labelOf('idrac_enabled', 'iDRAC'), align: 'center', render: yesNo },
+    { key: 'idrac_ip', dataIndex: 'idrac_ip', width: 130,
+      title: labelOf('idrac_ip', 'iDRAC IP'), render: cell },
+    { key: 'ome_status', dataIndex: 'ome_status', width: 120,
+      title: labelOf('ome_status', 'OME Status'), render: cell },
+    { key: 'eol_status', dataIndex: 'eol_status', width: 130,
+      title: labelOf('eol_status', 'EOL Status'),
+      render: v => v ? <Tag color={v === 'Supported' ? 'green' : v === 'EOL' ? 'red' : 'orange'}>{v}</Tag> : cell(v) },
+    { key: 'manage_engine_installed', dataIndex: 'manage_engine_installed', width: 130,
+      title: labelOf('manage_engine_installed', 'Manage Engine'), align: 'center', render: yesNo },
+    { key: 'tenable_installed', dataIndex: 'tenable_installed', width: 100,
+      title: labelOf('tenable_installed', 'Tenable'), align: 'center', render: yesNo },
+    { key: 'hosted_ip', dataIndex: 'hosted_ip', width: 130,
+      title: labelOf('hosted_ip', 'Hosted IP'), render: cell },
+    { key: 'asset_tag', dataIndex: 'asset_tag', width: 110,
+      title: labelOf('asset_tag', 'Asset Tag'), render: v => v ? <Tag>{v}</Tag> : cell(v) },
+    { key: 'created_by_name', dataIndex: 'created_by_name', width: 160,
+      title: 'Submitted By', render: cell },
+    { key: 'created_at', dataIndex: 'created_at', width: 170,
+      title: 'Created', render: v => v ? new Date(v).toLocaleString() : cell(v) },
+    { key: 'asset_username', dataIndex: 'asset_username', width: 150,
+      title: labelOf('asset_username', 'Asset Username'), render: cell },
+    {
+      key: 'asset_password', width: 170,
+      title: labelOf('asset_password', 'Asset Password'),
+      render: (_, r) => {
+        if (!r.hasPassword) return <Typography.Text type="secondary">—</Typography.Text>;
+        const shown = revealed[r.id];
+        return (
+          <Space size={4}>
+            <span style={{ fontFamily: 'monospace', minWidth: 70, display: 'inline-block' }}>
+              {shown ?? '••••••••'}
+            </span>
+            {canWrite && (
+              <Tooltip title={shown ? 'Hide password' : 'Reveal password'}>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={shown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                  loading={!!revealing[r.id]}
+                  onClick={() => togglePassword(r.id, r.hasPassword)}
+                />
+              </Tooltip>
+            )}
+            {!canWrite && <LockOutlined style={{ color: '#999' }} />}
+          </Space>
+        );
+      },
+    },
+    { key: 'additional_remarks', dataIndex: 'additional_remarks', width: 220,
+      title: labelOf('additional_remarks', 'Additional Remarks'), ellipsis: true,
+      render: v => v ? <Tooltip title={v}>{v}</Tooltip> : cell(v) },
+    {
+      key: '__actions__', title: 'Actions', fixed: 'right', width: 110,
+      render: (_, r) => (
+        <Space>
+          <Tooltip title="Edit">
+            <Button size="small" icon={<EditOutlined />} onClick={() => nav(`${basePath}/${r.id}`)} />
+          </Tooltip>
+          {isAdmin && (
+            <Popconfirm title="Delete this asset?" onConfirm={() => onDelete(r.id)} okType="danger">
+              <Tooltip title="Delete">
+                <Button size="small" danger icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  const visibleColumns = allColumns.filter(c => {
+    if (c.key === 'vm_name' || c.key === '__actions__' || c.key === 'asset_password'
+      || c.key === 'created_by_name' || c.key === 'created_at') return true;
+    return !isHidden(c.key);
+  });
 
   return (
     <Card
@@ -121,49 +257,15 @@ export default function AssetList({
         rowKey="id"
         loading={loading}
         dataSource={data.items}
+        size="small"
         pagination={{
           current: page, pageSize, total: data.total,
           showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100],
           onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           showTotal: (t) => `${t} assets`,
         }}
-        scroll={{ x: 1200 }}
-        columns={[
-          { title: labelOf('vm_name', 'VM Name'), dataIndex: 'vm_name', fixed: 'left', width: 160, key: 'vm_name',
-            render: (v, r) => <Link to={`${basePath}/${r.id}`}>{v}</Link> },
-          !isHidden('os_hostname') && { title: labelOf('os_hostname', 'Hostname'), dataIndex: 'os_hostname', width: 180, key: 'os_hostname' },
-          { title: labelOf('ip_address', 'IP'), dataIndex: 'ip_address', width: 130, key: 'ip_address' },
-          !isHidden('os_type') && { title: labelOf('os_type', 'OS'), dataIndex: 'os_type', width: 110, key: 'os_type' },
-          !isHidden('os_version') && { title: labelOf('os_version', 'OS Version'), dataIndex: 'os_version', width: 150, key: 'os_version' },
-          !isHidden('server_status') && { title: labelOf('server_status', 'Status'), dataIndex: 'server_status', width: 120, key: 'server_status',
-            render: v => v && <Tag color={v === 'Active' ? 'green' : v === 'Decommissioned' ? 'red' : 'orange'}>{v}</Tag> },
-          !isHidden('location') && { title: labelOf('location', 'Location'), dataIndex: 'location', width: 140, key: 'location' },
-          !isHidden('eol_status') && { title: labelOf('eol_status', 'EOL'), dataIndex: 'eol_status', width: 130, key: 'eol_status',
-            render: v => v && <Tag color={v === 'Supported' ? 'green' : v === 'EOL' ? 'red' : 'orange'}>{v}</Tag> },
-          !isHidden('assigned_user') && { title: labelOf('assigned_user', 'Assigned User'), dataIndex: 'assigned_user', width: 150, key: 'assigned_user' },
-          !isHidden('department') && { title: labelOf('department', 'Department'), dataIndex: 'department', width: 140, key: 'department' },
-          (!isHidden('manage_engine_installed') || !isHidden('tenable_installed') || !isHidden('idrac_enabled')) && {
-            title: 'Tools', width: 130, key: '__tools__', render: (_, r) => (
-              <Space size={4}>
-                {!isHidden('manage_engine_installed') && r.manage_engine_installed && <Tag color="blue">ME</Tag>}
-                {!isHidden('tenable_installed') && r.tenable_installed && <Tag color="purple">Tenable</Tag>}
-                {!isHidden('idrac_enabled') && r.idrac_enabled && <Tag color="cyan">iDRAC</Tag>}
-              </Space>
-            )
-          },
-          {
-            title: 'Actions', fixed: 'right', width: 120, key: '__actions__', render: (_, r) => (
-              <Space>
-                <Button size="small" icon={<EditOutlined />} onClick={() => nav(`${basePath}/${r.id}`)} />
-                {isAdmin && (
-                  <Popconfirm title="Delete this asset?" onConfirm={() => onDelete(r.id)}>
-                    <Button size="small" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
-                )}
-              </Space>
-            )
-          },
-        ].filter(Boolean)}
+        scroll={{ x: 'max-content' }}
+        columns={visibleColumns}
       />
     </Card>
   );

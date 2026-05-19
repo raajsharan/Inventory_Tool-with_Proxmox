@@ -40,6 +40,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const isHidden = (snakeKey) => hiddenSet.has(snakeKey);
   const [fieldMeta, setFieldMeta] = useState({ fields: [], byKey: {} });
   const labelOf = (snakeKey, fallback) => fieldMeta.byKey[snakeKey]?.label || fallback;
+  const [meta, setMeta] = useState({ created_by_name: '', created_at: '' });
 
   const departmentOptions = useMemo(
     () => departments.map(d => ({
@@ -94,6 +95,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           manageEngineInstalled: r.data.manage_engine_installed,
           tenableInstalled: r.data.tenable_installed,
           idracEnabled: r.data.idrac_enabled,
+          idracIp: r.data.idrac_ip,
           // Hydrate any admin-added extras under the `extras` namespace.
           extras: Object.fromEntries(
             Object.entries(r.data.extras || {}).map(([k, v]) =>
@@ -103,6 +105,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
         });
         setOsType(r.data.os_type);
         setDepartment(r.data.department);
+        setMeta({ created_by_name: r.data.created_by_name || '', created_at: r.data.created_at || '' });
       });
     }
   }, [id, mode]); // eslint-disable-line
@@ -184,6 +187,21 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     >
       <Form form={form} layout="vertical" onFinish={onFinish} className="inventory-form"
         initialValues={{ manageEngineInstalled: false, tenableInstalled: false, idracEnabled: false }}>
+        {mode === 'edit' && (meta.created_by_name || meta.created_at) && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={
+              <Space split={<Divider type="vertical" />} wrap>
+                <span><Typography.Text type="secondary">Submitted By:</Typography.Text>{' '}
+                  <strong>{meta.created_by_name || '—'}</strong></span>
+                <span><Typography.Text type="secondary">Created:</Typography.Text>{' '}
+                  <strong>{meta.created_at ? new Date(meta.created_at).toLocaleString() : '—'}</strong></span>
+              </Space>
+            }
+          />
+        )}
         <Divider orientation="left">Identity</Divider>
         <Row gutter={16}>
           {!isHidden('vm_name') && <Col xs={24} md={8}><Form.Item name="vmName" label={labelOf('vm_name', 'VM Name')} rules={[{ required: true }]}><Input /></Form.Item></Col>}
@@ -348,7 +366,8 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
         <Row gutter={16}>
           {!isHidden('manage_engine_installed') && <Col xs={12} md={6}><Form.Item name="manageEngineInstalled" label={labelOf('manage_engine_installed', 'ManageEngine Installed')} valuePropName="checked"><Switch /></Form.Item></Col>}
           {!isHidden('tenable_installed') && <Col xs={12} md={6}><Form.Item name="tenableInstalled" label={labelOf('tenable_installed', 'Tenable Installed')} valuePropName="checked"><Switch /></Form.Item></Col>}
-          {!isHidden('idrac_enabled') && <Col xs={12} md={6}><Form.Item name="idracEnabled" label={labelOf('idrac_enabled', 'iDRAC Enabled')} valuePropName="checked"><Switch /></Form.Item></Col>}
+          {!isHidden('idrac_enabled') && <Col xs={12} md={6}><Form.Item name="idracEnabled" label={labelOf('idrac_enabled', 'iDRAC')} valuePropName="checked"><Switch /></Form.Item></Col>}
+          {!isHidden('idrac_ip') && <Col xs={24} md={6}><Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}><Input placeholder="10.x.x.x" /></Form.Item></Col>}
         </Row>
 
         {fieldMeta.fields.filter(f => f.is_extra && !isHidden(f.field_key)).length > 0 && (

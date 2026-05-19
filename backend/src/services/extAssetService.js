@@ -10,7 +10,7 @@ const ASSET_COLUMNS = [
   'assigned_user','department','business_purpose','server_status','patching_type',
   'server_patch_type','patching_schedule','location','eol_status','serial_number',
   'ome_status','hosted_ip','asset_tag','asset_username','additional_remarks',
-  'manage_engine_installed','tenable_installed','idrac_enabled'
+  'manage_engine_installed','tenable_installed','idrac_enabled','idrac_ip'
 ];
 
 function mapBody(body) {
@@ -122,9 +122,21 @@ async function remove(id) {
 }
 
 async function get(id) {
-  const { rows } = await db.query(`SELECT * FROM ${TABLE} WHERE id = $1`, [id]);
+  const { rows } = await db.query(
+    `SELECT a.*, u.full_name AS created_by_name
+       FROM ${TABLE} a LEFT JOIN users u ON u.id = a.created_by
+      WHERE a.id = $1`,
+    [id]
+  );
   if (!rows.length) throw new ApiError(404, 'Asset not found');
   return scrub(rows[0]);
+}
+
+async function viewPassword(id) {
+  const { rows } = await db.query(`SELECT asset_password_encrypted FROM ${TABLE} WHERE id = $1`, [id]);
+  if (!rows.length) throw new ApiError(404, 'Asset not found');
+  if (!rows[0].asset_password_encrypted) return null;
+  return crypto.decrypt(rows[0].asset_password_encrypted);
 }
 
 async function list({ search, osType, serverStatus, location, eolStatus, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
@@ -146,8 +158,10 @@ async function list({ search, osType, serverStatus, location, eolStatus, page = 
 
   const [items, count] = await Promise.all([
     db.query(
-      `SELECT * FROM ${TABLE} ${whereSql}
-       ORDER BY ${safeSort} ${safeDir}
+      `SELECT a.*, u.full_name AS created_by_name
+         FROM ${TABLE} a LEFT JOIN users u ON u.id = a.created_by
+         ${whereSql}
+       ORDER BY a.${safeSort} ${safeDir}
        LIMIT ${pageSize} OFFSET ${offset}`,
       params
     ),
@@ -172,7 +186,7 @@ async function tagStats(department) {
 }
 
 module.exports = {
-  create, update, remove, get, list,
+  create, update, remove, get, list, viewPassword,
   ASSET_COLUMNS,
   TABLE,
   tagStats,

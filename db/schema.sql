@@ -425,6 +425,11 @@ ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS extras JSONB NOT NUL
 ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+ALTER TABLE assets                 ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
+ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
+ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
+ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
+
 CREATE TABLE IF NOT EXISTS builtin_page_overrides (
     page_key    VARCHAR(64) PRIMARY KEY,
     name        VARCHAR(255),

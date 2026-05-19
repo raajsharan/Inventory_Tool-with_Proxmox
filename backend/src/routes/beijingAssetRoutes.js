@@ -31,6 +31,7 @@ router.post('/smart-import',         authenticate, authorize(...writeRoles),
 
 router.get('/', authenticate, c.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, c.get);
+router.get('/:id/password', authenticate, authorize(...writeRoles), param('id').isUUID(), validate, c.viewPassword);
 
 const bodyValidators = [
   body('vmName').optional().isString().isLength({ min: 1, max: 255 }),
