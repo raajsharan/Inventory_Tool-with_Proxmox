@@ -50,6 +50,22 @@ body[data-theme="dark"] h4, body[data-theme="dark"] h5, body[data-theme="dark"] 
 body[data-theme="dark"] .ant-typography { color: #f1f5f9; }
 body[data-theme="dark"] .ant-typography.ant-typography-secondary { color: #94a3b8; }
 
+/* Dashboard stat-tile grid — 5 across on lg, 3 on md, 2 on small. */
+.stat-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 1199px) {
+  .stat-grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .stat-grid-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.stat-tile { transition: transform 0.15s, box-shadow 0.15s; }
+.stat-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
 /* Charts (@ant-design/plots) text in dark mode */
 body[data-theme="dark"] .g2-tooltip { background: #1f1f1f !important; color: #f1f5f9 !important; }
 body[data-theme="dark"] canvas + div .g2-tooltip-title,
