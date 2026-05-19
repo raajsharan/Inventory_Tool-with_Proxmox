@@ -5,6 +5,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const assetCtrl = require('../controllers/assetController');
 const importCtrl = require('../controllers/importController');
+const smartCtrl = require('../controllers/smartImportController');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -24,6 +25,11 @@ router.post(
   upload.single('file'),
   importCtrl.importAssets
 );
+
+router.post('/smart-import/preview', authenticate, authorize(...writeRoles),
+  upload.single('file'), smartCtrl.makePreview('assets'));
+router.post('/smart-import',         authenticate, authorize(...writeRoles),
+  upload.single('file'), smartCtrl.makeApply('assets'));
 
 router.get('/', authenticate, assetCtrl.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, assetCtrl.get);

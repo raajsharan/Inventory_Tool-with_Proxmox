@@ -42,6 +42,20 @@ body[data-theme="dark"] .inventory-form .ant-input-password {
 .card-stat .ant-statistic-title { color: #64748b; font-weight: 500; }
 .card-stat .ant-statistic-content { color: #0f172a; font-weight: 700; }
 
+body[data-theme="dark"] .card-stat .ant-statistic-title { color: #cbd5e1; }
+body[data-theme="dark"] .card-stat .ant-statistic-content { color: #f1f5f9; }
+body[data-theme="dark"] .ant-card-head-title,
+body[data-theme="dark"] h1, body[data-theme="dark"] h2, body[data-theme="dark"] h3,
+body[data-theme="dark"] h4, body[data-theme="dark"] h5, body[data-theme="dark"] h6,
+body[data-theme="dark"] .ant-typography { color: #f1f5f9; }
+body[data-theme="dark"] .ant-typography.ant-typography-secondary { color: #94a3b8; }
+
+/* Charts (@ant-design/plots) text in dark mode */
+body[data-theme="dark"] .g2-tooltip { background: #1f1f1f !important; color: #f1f5f9 !important; }
+body[data-theme="dark"] canvas + div .g2-tooltip-title,
+body[data-theme="dark"] canvas + div .g2-tooltip-list-item-name-label,
+body[data-theme="dark"] canvas + div .g2-tooltip-list-item-value { color: #f1f5f9 !important; }
+
 /* -------------------------------------------------------------------
    Unified inventory-form styling — applied to Add/Edit Asset, Beijing
    Asset, and Custom Page record forms.

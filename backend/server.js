@@ -33,6 +33,12 @@ const PORT = process.env.PORT || 4000;
     // eslint-disable-next-line no-console
     console.error('[bootstrap] failed:', e);
   }
+  try {
+    await require('./src/services/backupScheduler').start();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[backup-scheduler] failed to start:', e);
+  }
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`[inventory-api] listening on :${PORT} (${process.env.NODE_ENV || 'development'})`);

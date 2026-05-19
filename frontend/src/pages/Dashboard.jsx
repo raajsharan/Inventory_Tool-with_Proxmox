@@ -3,8 +3,23 @@ import { Row, Col, Card, Statistic, Table, Tag, Spin, Alert, Typography } from '
 import { DatabaseOutlined, WarningOutlined, SafetyOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { Pie, Column } from '@ant-design/plots';
 import api from '../api/client';
+import { useAppTheme } from '../context/ThemeContext.jsx';
 
 export default function Dashboard() {
+  const { mode } = useAppTheme() || { mode: 'light' };
+  const isDark = mode === 'dark';
+  const axisColor = isDark ? '#d9d9d9' : '#595959';
+  const labelColor = isDark ? '#f0f0f0' : '#262626';
+  const chartTheme = isDark ? 'classicDark' : 'classic';
+  const labelStyle = { fill: labelColor, fontWeight: 500 };
+  const axisStyle = {
+    label: { style: { fill: axisColor } },
+    title: { style: { fill: axisColor } },
+    line: { style: { stroke: isDark ? '#434343' : '#d9d9d9' } },
+    tickLine: { style: { stroke: isDark ? '#434343' : '#d9d9d9' } },
+  };
+  const legendStyle = { itemName: { style: { fill: labelColor } } };
+
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
 
@@ -39,24 +54,35 @@ export default function Dashboard() {
         <Col xs={24} lg={12}>
           <Card title="Assets by OS Type">
             <Pie data={data.byOsType} angleField="value" colorField="key" radius={0.85}
-              label={{ text: 'value', position: 'outside' }} legend={{ position: 'bottom' }} height={260} />
+              theme={chartTheme}
+              label={{ text: 'value', position: 'outside', style: labelStyle }}
+              legend={{ position: 'bottom', ...legendStyle }}
+              height={260} />
           </Card>
         </Col>
         <Col xs={24} lg={12}>
           <Card title="Assets by Server Status">
             <Column data={data.byServerStatus} xField="key" yField="value" height={260}
-              label={{ position: 'top' }} />
+              theme={chartTheme}
+              axis={{ x: axisStyle, y: axisStyle }}
+              label={{ position: 'top', style: labelStyle }} />
           </Card>
         </Col>
         <Col xs={24} lg={12}>
           <Card title="Assets by Location">
-            <Column data={data.byLocation} xField="key" yField="value" height={260} />
+            <Column data={data.byLocation} xField="key" yField="value" height={260}
+              theme={chartTheme}
+              axis={{ x: axisStyle, y: axisStyle }}
+              label={{ position: 'top', style: labelStyle }} />
           </Card>
         </Col>
         <Col xs={24} lg={12}>
           <Card title="EOL Status">
             <Pie data={data.byEolStatus} angleField="value" colorField="key" radius={0.85}
-              legend={{ position: 'bottom' }} height={260} />
+              theme={chartTheme}
+              label={{ text: 'value', position: 'outside', style: labelStyle }}
+              legend={{ position: 'bottom', ...legendStyle }}
+              height={260} />
           </Card>
         </Col>
       </Row>

@@ -20,5 +20,6 @@ router.use('/field-visibility', authenticate, requirePageAccess('admin/field-vis
 router.use('/page-access',      authenticate, requirePageAccess('admin/page-access'),      require('./pageAccessRoutes'));
 router.use('/builtin-pages',    authenticate,                                                require('./builtinPagesRoutes'));
 router.use('/inventory-fields', authenticate,                                                require('./inventoryFieldsRoutes'));
+router.use('/backup',           authenticate, requirePageAccess('admin/backup'),            require('./backupRoutes'));
 
 module.exports = router;

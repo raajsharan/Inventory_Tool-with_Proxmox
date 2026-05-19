@@ -437,6 +437,44 @@ CREATE TABLE IF NOT EXISTS builtin_page_overrides (
 -- ---------------------------------------------------------------------
 -- updated_at trigger
 -- ---------------------------------------------------------------------
+-- ---------------------------------------------------------------------
+-- backup_settings — one row per backup kind ('pg' or 'csv').
+-- backup_runs    — history of each backup, manual or scheduled.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS backup_settings (
+    kind            VARCHAR(16) PRIMARY KEY,         -- 'pg' or 'csv'
+    enabled         BOOLEAN NOT NULL DEFAULT FALSE,
+    frequency       VARCHAR(16) NOT NULL DEFAULT 'daily',  -- 'daily' | 'weekly' | 'monthly'
+    time_24h        VARCHAR(5)  NOT NULL DEFAULT '09:00',  -- 'HH:MM'
+    day_of_week     INT,                                   -- 0-6 for weekly
+    day_of_month    INT,                                   -- 1-28 for monthly
+    retain_days     INT NOT NULL DEFAULT 14,
+    directory       TEXT NOT NULL DEFAULT '/backups/postgres',
+    file_naming     VARCHAR(32) NOT NULL DEFAULT 'timestamped',  -- 'timestamped' | 'overwrite'
+    csv_targets     JSONB NOT NULL DEFAULT '["assets","beijing_assets","ext_assets","physical_esxi_servers"]'::jsonb,
+    updated_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO backup_settings (kind, directory)
+VALUES ('pg', '/backups/postgres') ON CONFLICT (kind) DO NOTHING;
+INSERT INTO backup_settings (kind, directory)
+VALUES ('csv', '/backups/csv')     ON CONFLICT (kind) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS backup_runs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kind            VARCHAR(16) NOT NULL,         -- 'pg' or 'csv'
+    trigger         VARCHAR(16) NOT NULL,         -- 'manual' | 'scheduled'
+    status          VARCHAR(16) NOT NULL,         -- 'running' | 'ok' | 'error'
+    file_path       TEXT,
+    file_size       BIGINT,
+    error           TEXT,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at     TIMESTAMPTZ,
+    triggered_by    UUID REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_backup_runs_kind_started ON backup_runs(kind, started_at DESC);
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -450,7 +488,7 @@ DECLARE
     t TEXT;
 BEGIN
     FOR t IN
-        SELECT unnest(ARRAY['users','dropdown_master','assets','beijing_assets','ext_assets','physical_esxi_servers','custom_pages','custom_page_records','department_tag_ranges','page_field_visibility','page_access'])
+        SELECT unnest(ARRAY['users','dropdown_master','assets','beijing_assets','ext_assets','physical_esxi_servers','custom_pages','custom_page_records','department_tag_ranges','page_field_visibility','page_access','backup_settings'])
     LOOP
         EXECUTE format(
             'DROP TRIGGER IF EXISTS trg_%I_updated ON %I;

@@ -4,6 +4,7 @@ const { body, param } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const c = require('../controllers/extAssetController');
+const smartCtrl = require('../controllers/smartImportController');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -22,6 +23,11 @@ router.post(
   upload.single('file'),
   c.importAssets
 );
+
+router.post('/smart-import/preview', authenticate, authorize(...writeRoles),
+  upload.single('file'), smartCtrl.makePreview('ext_assets'));
+router.post('/smart-import',         authenticate, authorize(...writeRoles),
+  upload.single('file'), smartCtrl.makeApply('ext_assets'));
 
 router.get('/', authenticate, c.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, c.get);

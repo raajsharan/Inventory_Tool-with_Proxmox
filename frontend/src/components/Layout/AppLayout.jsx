@@ -9,6 +9,7 @@ import {
   GlobalOutlined, BarChartOutlined, EyeOutlined, CloudServerOutlined,
   HddOutlined, SafetyCertificateOutlined,
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -72,6 +73,7 @@ export default function AppLayout() {
         can('admin/custom-pages')     && { key: '/admin/custom-pages',      icon: <AppstoreAddOutlined />,    label: <Link to="/admin/custom-pages">Custom Pages</Link> },
         can('admin/field-visibility') && { key: '/admin/field-visibility',  icon: <EyeOutlined />,            label: <Link to="/admin/field-visibility">Field Customization</Link> },
         can('admin/page-access')      && { key: '/admin/page-access',       icon: <SafetyCertificateOutlined />, label: <Link to="/admin/page-access">Page Access</Link> },
+        can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,  label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
         can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,        label: <Link to="/admin/imports">Import History</Link> },
         can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,     label: <Link to="/admin/audit">Audit Log</Link> },
       ].filter(Boolean),
