@@ -91,7 +91,7 @@ export default function AppLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[loc.pathname]}
-          defaultOpenKeys={['assets', 'beijing-assets', 'ext-assets', 'physical-esxi', 'admin', ...customPages.map(p => `custom-${p.slug}`)]}
+          defaultOpenKeys={[]}
           items={items}
         />
       </Sider>
