@@ -19,5 +19,6 @@ router.use('/reports',          authenticate, requirePageAccess('reports'),     
 router.use('/field-visibility', authenticate, requirePageAccess('admin/field-visibility'), require('./fieldVisibilityRoutes'));
 router.use('/page-access',      authenticate, requirePageAccess('admin/page-access'),      require('./pageAccessRoutes'));
 router.use('/builtin-pages',    authenticate,                                                require('./builtinPagesRoutes'));
+router.use('/inventory-fields', authenticate,                                                require('./inventoryFieldsRoutes'));
 
 module.exports = router;

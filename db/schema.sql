@@ -388,6 +388,43 @@ CREATE INDEX IF NOT EXISTS idx_page_access_role ON page_access(role);
 --   physical_esxi_servers). Lets admins/superadmins rename or rebrand
 --   built-ins without changing code.
 -- ---------------------------------------------------------------------
+-- ---------------------------------------------------------------------
+-- builtin_field_overrides
+--   Per-field overrides on the built-in inventory pages (assets,
+--   beijing_assets, ext_assets, physical_esxi_servers):
+--     - rename the label
+--     - move to a different section group
+--     - swap the input type (Text → Dropdown / Toggle / Number / Date /
+--       Textarea). DB-linked dropdowns (Asset Type, OS Type, Department,
+--       Server Status, EOL, Location, …) are not overridable.
+--   Same table also stores admin-added "extra" custom fields (is_extra)
+--   whose values live in the per-row `extras` JSONB column on each
+--   inventory table.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS builtin_field_overrides (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    page_key     VARCHAR(64)  NOT NULL,
+    field_key    VARCHAR(128) NOT NULL,
+    is_extra     BOOLEAN NOT NULL DEFAULT FALSE,
+    label        VARCHAR(255),
+    section      VARCHAR(64),
+    input_type   VARCHAR(32),               -- text|textarea|number|dropdown|toggle|date
+    options      JSONB,                     -- for dropdown options (array of strings)
+    is_required  BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order   INT NOT NULL DEFAULT 0,
+    updated_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (page_key, field_key)
+);
+CREATE INDEX IF NOT EXISTS idx_bfo_page_key ON builtin_field_overrides(page_key);
+
+-- Per-row "extras" JSONB column on each built-in inventory table, keyed
+-- by the field_key of an admin-added extra field.
+ALTER TABLE assets                 ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 CREATE TABLE IF NOT EXISTS builtin_page_overrides (
     page_key    VARCHAR(64) PRIMARY KEY,
     name        VARCHAR(255),

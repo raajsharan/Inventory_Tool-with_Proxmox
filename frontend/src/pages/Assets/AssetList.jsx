@@ -29,6 +29,8 @@ export default function AssetList({
   const [pageSize, setPageSize] = useState(20);
   const [hiddenSet, setHiddenSet] = useState(new Set());
   const isHidden = (k) => hiddenSet.has(k);
+  const [fieldLabels, setFieldLabels] = useState({});
+  const labelOf = (k, fallback) => fieldLabels[k] || fallback;
 
   const canWrite = ['admin','superadmin','asset_manager'].includes(user?.role);
   const isAdmin = ['admin','superadmin'].includes(user?.role);
@@ -47,6 +49,13 @@ export default function AssetList({
     api.get('/dropdowns').then(r => setDropdowns(r.data.grouped || {}));
     api.get(`/field-visibility/${pageKey}`)
       .then(r => setHiddenSet(new Set(r.data.hidden || [])))
+      .catch(() => {});
+    api.get(`/inventory-fields/${pageKey}`)
+      .then(r => {
+        const m = {};
+        for (const f of r.data.fields || []) m[f.field_key] = f.label;
+        setFieldLabels(m);
+      })
       .catch(() => {});
   }, [pageKey]);
 
@@ -120,19 +129,19 @@ export default function AssetList({
         }}
         scroll={{ x: 1200 }}
         columns={[
-          { title: 'VM Name', dataIndex: 'vm_name', fixed: 'left', width: 160, key: 'vm_name',
+          { title: labelOf('vm_name', 'VM Name'), dataIndex: 'vm_name', fixed: 'left', width: 160, key: 'vm_name',
             render: (v, r) => <Link to={`${basePath}/${r.id}`}>{v}</Link> },
-          !isHidden('os_hostname') && { title: 'Hostname', dataIndex: 'os_hostname', width: 180, key: 'os_hostname' },
-          { title: 'IP', dataIndex: 'ip_address', width: 130, key: 'ip_address' },
-          !isHidden('os_type') && { title: 'OS', dataIndex: 'os_type', width: 110, key: 'os_type' },
-          !isHidden('os_version') && { title: 'OS Version', dataIndex: 'os_version', width: 150, key: 'os_version' },
-          !isHidden('server_status') && { title: 'Status', dataIndex: 'server_status', width: 120, key: 'server_status',
+          !isHidden('os_hostname') && { title: labelOf('os_hostname', 'Hostname'), dataIndex: 'os_hostname', width: 180, key: 'os_hostname' },
+          { title: labelOf('ip_address', 'IP'), dataIndex: 'ip_address', width: 130, key: 'ip_address' },
+          !isHidden('os_type') && { title: labelOf('os_type', 'OS'), dataIndex: 'os_type', width: 110, key: 'os_type' },
+          !isHidden('os_version') && { title: labelOf('os_version', 'OS Version'), dataIndex: 'os_version', width: 150, key: 'os_version' },
+          !isHidden('server_status') && { title: labelOf('server_status', 'Status'), dataIndex: 'server_status', width: 120, key: 'server_status',
             render: v => v && <Tag color={v === 'Active' ? 'green' : v === 'Decommissioned' ? 'red' : 'orange'}>{v}</Tag> },
-          !isHidden('location') && { title: 'Location', dataIndex: 'location', width: 140, key: 'location' },
-          !isHidden('eol_status') && { title: 'EOL', dataIndex: 'eol_status', width: 130, key: 'eol_status',
+          !isHidden('location') && { title: labelOf('location', 'Location'), dataIndex: 'location', width: 140, key: 'location' },
+          !isHidden('eol_status') && { title: labelOf('eol_status', 'EOL'), dataIndex: 'eol_status', width: 130, key: 'eol_status',
             render: v => v && <Tag color={v === 'Supported' ? 'green' : v === 'EOL' ? 'red' : 'orange'}>{v}</Tag> },
-          !isHidden('assigned_user') && { title: 'Assigned User', dataIndex: 'assigned_user', width: 150, key: 'assigned_user' },
-          !isHidden('department') && { title: 'Department', dataIndex: 'department', width: 140, key: 'department' },
+          !isHidden('assigned_user') && { title: labelOf('assigned_user', 'Assigned User'), dataIndex: 'assigned_user', width: 150, key: 'assigned_user' },
+          !isHidden('department') && { title: labelOf('department', 'Department'), dataIndex: 'department', width: 140, key: 'department' },
           (!isHidden('manage_engine_installed') || !isHidden('tenable_installed') || !isHidden('idrac_enabled')) && {
             title: 'Tools', width: 130, key: '__tools__', render: (_, r) => (
               <Space size={4}>

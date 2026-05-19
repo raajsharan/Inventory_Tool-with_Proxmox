@@ -23,6 +23,9 @@ function mapBody(body) {
   if (body.assetPassword !== undefined || body.asset_password !== undefined) {
     row.asset_password_encrypted = crypto.encrypt(body.assetPassword ?? body.asset_password);
   }
+  if (body.extras !== undefined) {
+    row.extras = typeof body.extras === 'string' ? body.extras : JSON.stringify(body.extras || {});
+  }
   return row;
 }
 

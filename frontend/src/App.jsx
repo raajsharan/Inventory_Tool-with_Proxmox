@@ -26,6 +26,7 @@ import TagRanges from './pages/Admin/TagRanges.jsx';
 import AdminCustomPages from './pages/Admin/CustomPages.jsx';
 import FieldVisibility from './pages/Admin/FieldVisibility.jsx';
 import PageAccess from './pages/Admin/PageAccess.jsx';
+import InventoryFields from './pages/Admin/InventoryFields.jsx';
 import AuditLogs from './pages/Admin/AuditLogs.jsx';
 import ImportHistory from './pages/Admin/ImportHistory.jsx';
 
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/admin/custom-pages" element={<AdminCustomPages />} />
         <Route path="/admin/field-visibility" element={<FieldVisibility />} />
         <Route path="/admin/page-access" element={<PageAccess />} />
+        <Route path="/admin/inventory-fields/:pageKey" element={<InventoryFields />} />
         <Route path="/admin/audit" element={<AuditLogs />} />
         <Route path="/admin/imports" element={<ImportHistory />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

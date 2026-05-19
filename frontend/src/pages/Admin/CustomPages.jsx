@@ -180,11 +180,14 @@ export default function AdminCustomPages() {
             title: 'Actions', width: 280, render: (_, r) => (
               r.isBuiltIn ? (
                 <Space>
-                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
-                  <Tooltip title="Customize visible fields">
-                    <Button size="small" icon={<EyeOutlined />} onClick={() => nav('/admin/field-visibility')}>
-                      Fields
+                  <Tooltip title="Open the full field editor (groups, layout, input types)">
+                    <Button size="small" type="primary" icon={<EditOutlined />}
+                      onClick={() => nav(`/admin/inventory-fields/${r.page_key}`)}>
+                      Edit
                     </Button>
+                  </Tooltip>
+                  <Tooltip title="Rename / change icon">
+                    <Button size="small" onClick={() => openEdit(r)}>Page Info</Button>
                   </Tooltip>
                   {r.is_overridden && (
                     <Popconfirm
