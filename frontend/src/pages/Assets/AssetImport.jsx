@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Card, Button, Upload, Space, Typography, Alert, Table, Tag, Select, Checkbox, Tooltip, Modal,
+  Card, Button, Upload, Space, Typography, Alert, Table, Tag, Checkbox, Tooltip,
 } from 'antd';
 import {
   DownloadOutlined, UploadOutlined, FileExcelOutlined, InboxOutlined,
@@ -9,20 +8,19 @@ import {
 } from '@ant-design/icons';
 import api from '../../api/client';
 
-const TARGET_OPTIONS = [
-  { value: 'assets',         label: 'Asset List',          apiPrefix: '/assets',         basePath: '/assets/import' },
-  { value: 'ext_assets',     label: 'Ext. Asset List',     apiPrefix: '/ext-assets',     basePath: '/ext-assets/import' },
-  { value: 'beijing_assets', label: 'Beijing Asset List',  apiPrefix: '/beijing-assets', basePath: '/beijing-assets/import' },
-  { value: 'physical_esxi_servers', label: 'Physical & ESXi', apiPrefix: '/physical-esxi', basePath: '/physical-esxi/import' },
-];
+const TARGET_LABELS = {
+  '/assets':         'Asset List',
+  '/ext-assets':     'Ext. Asset List',
+  '/beijing-assets': 'Beijing Asset List',
+  '/physical-esxi':  'Physical & ESXi',
+};
 
 export default function AssetImport({
   apiPrefix = '/assets',
   title = 'Excel Smart Import',
   templateFilename = 'asset-import-template.xlsx',
 }) {
-  const nav = useNavigate();
-  const currentTarget = TARGET_OPTIONS.find(o => o.apiPrefix === apiPrefix) || TARGET_OPTIONS[0];
+  const targetLabel = TARGET_LABELS[apiPrefix] || 'Selected List';
 
   const [file, setFile] = useState(null);
   const [verifyByIp, setVerifyByIp] = useState(false);
@@ -34,14 +32,6 @@ export default function AssetImport({
   const [err, setErr] = useState('');
 
   const selectedCount = selectedRows.length;
-  const targetLabel = currentTarget.label;
-
-  function onTargetChange(value) {
-    const next = TARGET_OPTIONS.find(o => o.value === value);
-    if (next && next.basePath !== window.location.pathname) {
-      nav(next.basePath);
-    }
-  }
 
   async function onDownloadTemplate() {
     try {
@@ -160,13 +150,8 @@ export default function AssetImport({
       <Space size={16} wrap style={{ marginBottom: 12 }}>
         <div>
           <Typography.Text strong>Target List</Typography.Text>
-          <div>
-            <Select
-              value={currentTarget.value}
-              onChange={onTargetChange}
-              options={TARGET_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-              style={{ minWidth: 220 }}
-            />
+          <div style={{ marginTop: 4 }}>
+            <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>{targetLabel}</Tag>
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 280 }}>
