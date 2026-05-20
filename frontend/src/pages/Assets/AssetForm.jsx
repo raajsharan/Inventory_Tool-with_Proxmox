@@ -64,7 +64,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       .then(r => {
         const byKey = {};
         for (const f of r.data.fields || []) byKey[f.field_key] = f;
-        setFieldMeta({ fields: r.data.fields || [], byKey });
+        setFieldMeta({ fields: r.data.fields || [], byKey, groups: r.data.groups || [] });
       })
       .catch(() => {});
 
@@ -181,140 +181,137 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const showAutoTagBlock = mode === 'create' && !manualOverride;
   const range = rangeFor(department);
 
-  return (
-    <Card title={<Typography.Title level={4} style={{ margin: 0 }}>{mode === 'create' ? `Add ${effectiveEntityLabel}` : `Edit ${effectiveEntityLabel}`}</Typography.Title>}
-      className="inventory-form-card"
-    >
-      <Form form={form} layout="vertical" onFinish={onFinish} className="inventory-form"
-        initialValues={{ manageEngineInstalled: false, tenableInstalled: false, idracEnabled: false }}>
-        {mode === 'edit' && (meta.created_by_name || meta.created_at) && (
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            message={
-              <Space split={<Divider type="vertical" />} wrap>
-                <span><Typography.Text type="secondary">Submitted By:</Typography.Text>{' '}
-                  <strong>{meta.created_by_name || '—'}</strong></span>
-                <span><Typography.Text type="secondary">Created:</Typography.Text>{' '}
-                  <strong>{meta.created_at ? new Date(meta.created_at).toLocaleString() : '—'}</strong></span>
-              </Space>
-            }
-          />
-        )}
-        <Divider orientation="left">Identity</Divider>
-        <Row gutter={16}>
-          {!isHidden('vm_name') && <Col xs={24} md={8}><Form.Item name="vmName" label={labelOf('vm_name', 'VM Name')} rules={[{ required: true }]}><Input /></Form.Item></Col>}
-          {!isHidden('os_hostname') && <Col xs={24} md={8}><Form.Item name="osHostname" label={labelOf('os_hostname', 'OS Hostname')}><Input /></Form.Item></Col>}
-          {!isHidden('ip_address') && <Col xs={24} md={8}>
-            <Form.Item
-              name="ipAddress"
-              label={labelOf('ip_address', 'IP Address')}
-              validateDebounce={400}
-              rules={[
-                { required: true },
-                { pattern: ipRe, message: 'Invalid IP address' },
-                {
-                  validator: async (_, value) => {
-                    if (!value || !ipRe.test(value)) return;
-                    try {
-                      const params = { ip: value };
-                      if (mode === 'edit' && id) {
-                        params.excludeTable =
-                          apiPrefix.includes('beijing')       ? 'beijing_assets'
-                          : apiPrefix.includes('ext')         ? 'ext_assets'
-                          : apiPrefix.includes('physical')    ? 'physical_esxi_servers'
-                          : 'assets';
-                        params.excludeId = id;
-                      }
-                      const { data } = await api.get(`${apiPrefix}/check-ip`, { params });
-                      if (data.used) {
-                        const where =
-                          data.conflictTable === 'beijing_assets'        ? 'Beijing Inventory'
-                          : data.conflictTable === 'ext_assets'          ? 'Ext. Asset Inventory'
-                          : data.conflictTable === 'physical_esxi_servers' ? 'Physical & ESXi Servers'
-                          : 'Asset Inventory';
-                        throw new Error(`IP already exists in ${where}`);
-                      }
-                    } catch (e) {
-                      if (e.message?.startsWith('IP already')) throw e;
-                      // network errors fall through — server-side check is the final gate
+  // Width map for built-in widgets so a moved field keeps a sensible size.
+  const FIELD_WIDTHS = {
+    vm_name: { xs: 24, md: 8 }, os_hostname: { xs: 24, md: 8 }, ip_address: { xs: 24, md: 8 },
+    asset_type: { xs: 24, md: 8 }, os_type: { xs: 24, md: 8 }, os_version: { xs: 24, md: 8 },
+    assigned_user: { xs: 24, md: 8 }, department: { xs: 24, md: 8 }, business_purpose: { xs: 24, md: 24 },
+    server_status: { xs: 24, md: 6 }, patching_type: { xs: 24, md: 6 }, server_patch_type: { xs: 24, md: 6 },
+    patching_schedule: { xs: 24, md: 6 }, location: { xs: 24, md: 6 }, eol_status: { xs: 24, md: 6 },
+    ome_status: { xs: 24, md: 6 }, hosted_ip: { xs: 24, md: 6 },
+    serial_number: { xs: 24, md: 8 }, asset_username: { xs: 24, md: 8 }, asset_password: { xs: 24, md: 8 },
+    asset_tag: { xs: 24, md: 24 }, additional_remarks: { xs: 24, md: 24 },
+    manage_engine_installed: { xs: 12, md: 6 }, tenable_installed: { xs: 12, md: 6 },
+    idrac_enabled: { xs: 12, md: 6 }, idrac_ip: { xs: 24, md: 6 },
+  };
+
+  function renderBuiltinWidget(field_key) {
+    if (isHidden(field_key)) return null;
+    const width = FIELD_WIDTHS[field_key] || { xs: 24, md: 8 };
+    const wrap = (children) => <Col key={field_key} xs={width.xs} md={width.md}>{children}</Col>;
+
+    switch (field_key) {
+      case 'vm_name':
+        return wrap(<Form.Item name="vmName" label={labelOf('vm_name', 'VM Name')} rules={[{ required: true }]}><Input /></Form.Item>);
+      case 'os_hostname':
+        return wrap(<Form.Item name="osHostname" label={labelOf('os_hostname', 'OS Hostname')}><Input /></Form.Item>);
+      case 'ip_address':
+        return wrap(
+          <Form.Item
+            name="ipAddress"
+            label={labelOf('ip_address', 'IP Address')}
+            validateDebounce={400}
+            rules={[
+              { required: true },
+              { pattern: ipRe, message: 'Invalid IP address' },
+              {
+                validator: async (_, value) => {
+                  if (!value || !ipRe.test(value)) return;
+                  try {
+                    const params = { ip: value };
+                    if (mode === 'edit' && id) {
+                      params.excludeTable =
+                        apiPrefix.includes('beijing')    ? 'beijing_assets'
+                        : apiPrefix.includes('ext')      ? 'ext_assets'
+                        : apiPrefix.includes('physical') ? 'physical_esxi_servers'
+                        : 'assets';
+                      params.excludeId = id;
                     }
-                  },
+                    const { data } = await api.get(`${apiPrefix}/check-ip`, { params });
+                    if (data.used) {
+                      const where =
+                        data.conflictTable === 'beijing_assets'         ? 'Beijing Inventory'
+                        : data.conflictTable === 'ext_assets'           ? 'Ext. Asset Inventory'
+                        : data.conflictTable === 'physical_esxi_servers' ? 'Physical & ESXi Servers'
+                        : 'Asset Inventory';
+                      throw new Error(`IP already exists in ${where}`);
+                    }
+                  } catch (e) {
+                    if (e.message?.startsWith('IP already')) throw e;
+                  }
                 },
-              ]}
-            >
-              <Input />
-            </Form.Item>
-          </Col>}
-          {!isHidden('asset_type') && <Col xs={24} md={8}><Form.Item name="assetType" label={labelOf('asset_type', 'Asset Type')}><Input placeholder="e.g. Virtual Server" /></Form.Item></Col>}
-          {!isHidden('os_type') && <Col xs={24} md={8}>
-            <Form.Item name="osType" label={labelOf('os_type', 'OS Type')}>
-              <Select allowClear options={opts('os_type')} onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }} />
-            </Form.Item>
-          </Col>}
-          {!isHidden('os_version') && <Col xs={24} md={8}>
-            <Form.Item name="osVersion" label={labelOf('os_version', 'OS Version')}>
-              <Select allowClear options={opts('os_version', osType)} />
-            </Form.Item>
-          </Col>}
-        </Row>
-
-        <Divider orientation="left">Ownership</Divider>
-        <Row gutter={16}>
-          {!isHidden('assigned_user') && <Col xs={24} md={8}><Form.Item name="assignedUser" label={labelOf('assigned_user', 'Assigned User')}><Input /></Form.Item></Col>}
-          {!isHidden('department') && <Col xs={24} md={8}>
-            <Form.Item name="department" label={labelOf('department', 'Department')}>
-              <Select
-                allowClear
-                showSearch
-                placeholder="Select department"
-                options={departmentOptions}
-                optionFilterProp="label"
-                onChange={(v) => {
-                  setDepartment(v);
-                  if (!manualOverride) form.setFieldValue('assetTag', undefined);
-                  form.validateFields(['assetTag']).catch(() => {});
-                }}
-              />
-            </Form.Item>
-          </Col>}
-          {!isHidden('business_purpose') && <Col xs={24} md={24}><Form.Item name="businessPurpose" label={labelOf('business_purpose', 'Business Purpose')}><Input.TextArea rows={2} /></Form.Item></Col>}
-        </Row>
-
-        <Divider orientation="left">Operations</Divider>
-        <Row gutter={16}>
-          {!isHidden('server_status') && <Col xs={24} md={6}><Form.Item name="serverStatus" label={labelOf('server_status', 'Server Status')}><Select allowClear options={opts('server_status')} /></Form.Item></Col>}
-          {!isHidden('patching_type') && <Col xs={24} md={6}><Form.Item name="patchingType" label={labelOf('patching_type', 'Patching Type')}><Select allowClear options={opts('patching_type')} /></Form.Item></Col>}
-          {!isHidden('server_patch_type') && <Col xs={24} md={6}><Form.Item name="serverPatchType" label={labelOf('server_patch_type', 'Server Patch Type')}><Select allowClear options={opts('server_patch_type')} /></Form.Item></Col>}
-          {!isHidden('patching_schedule') && <Col xs={24} md={6}><Form.Item name="patchingSchedule" label={labelOf('patching_schedule', 'Patching Schedule')}><Select allowClear options={opts('patching_schedule')} /></Form.Item></Col>}
-          {!isHidden('location') && <Col xs={24} md={6}><Form.Item name="location" label={labelOf('location', 'Location')}><Select allowClear options={opts('location')} /></Form.Item></Col>}
-          {!isHidden('eol_status') && <Col xs={24} md={6}><Form.Item name="eolStatus" label={labelOf('eol_status', 'EOL Status')}><Select allowClear options={opts('eol_status')} /></Form.Item></Col>}
-          {!isHidden('ome_status') && <Col xs={24} md={6}><Form.Item name="omeStatus" label={labelOf('ome_status', 'OME Status')}><Input /></Form.Item></Col>}
-          {!isHidden('hosted_ip') && <Col xs={24} md={6}><Form.Item name="hostedIp" label={labelOf('hosted_ip', 'Hosted IP')}><Input /></Form.Item></Col>}
-        </Row>
-
-        <Divider orientation="left">Asset Tagging & Credentials</Divider>
-        <Row gutter={16}>
-          {!isHidden('serial_number') && <Col xs={24} md={8}><Form.Item name="serialNumber" label={labelOf('serial_number', 'Serial Number')}><Input /></Form.Item></Col>}
-          {!isHidden('asset_username') && <Col xs={24} md={8}><Form.Item name="assetUsername" label={labelOf('asset_username', 'Asset Username')}><Input /></Form.Item></Col>}
-          {!isHidden('asset_password') && <Col xs={24} md={8}>
-            <Form.Item name="assetPassword" label={labelOf('asset_password', 'Asset Password')} extra="Encrypted (AES-256-GCM) at rest">
-              <Input.Password placeholder={mode === 'edit' ? 'Leave blank to keep existing' : ''} autoComplete="new-password" />
-            </Form.Item>
-          </Col>}
-
-          <Col xs={24}>
+              },
+            ]}
+          ><Input /></Form.Item>
+        );
+      case 'asset_type':
+        return wrap(<Form.Item name="assetType" label={labelOf('asset_type', 'Asset Type')}><Input placeholder="e.g. Virtual Server" /></Form.Item>);
+      case 'os_type':
+        return wrap(
+          <Form.Item name="osType" label={labelOf('os_type', 'OS Type')}>
+            <Select allowClear options={opts('os_type')} onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }} />
+          </Form.Item>
+        );
+      case 'os_version':
+        return wrap(
+          <Form.Item name="osVersion" label={labelOf('os_version', 'OS Version')}>
+            <Select allowClear options={opts('os_version', osType)} />
+          </Form.Item>
+        );
+      case 'assigned_user':
+        return wrap(<Form.Item name="assignedUser" label={labelOf('assigned_user', 'Assigned User')}><Input /></Form.Item>);
+      case 'department':
+        return wrap(
+          <Form.Item name="department" label={labelOf('department', 'Department')}>
+            <Select allowClear showSearch placeholder="Select department"
+              options={departmentOptions} optionFilterProp="label"
+              onChange={(v) => {
+                setDepartment(v);
+                if (!manualOverride) form.setFieldValue('assetTag', undefined);
+                form.validateFields(['assetTag']).catch(() => {});
+              }}
+            />
+          </Form.Item>
+        );
+      case 'business_purpose':
+        return wrap(<Form.Item name="businessPurpose" label={labelOf('business_purpose', 'Business Purpose')}><Input.TextArea rows={2} /></Form.Item>);
+      case 'server_status':
+        return wrap(<Form.Item name="serverStatus" label={labelOf('server_status', 'Server Status')}><Select allowClear options={opts('server_status')} /></Form.Item>);
+      case 'patching_type':
+        return wrap(<Form.Item name="patchingType" label={labelOf('patching_type', 'Patching Type')}><Select allowClear options={opts('patching_type')} /></Form.Item>);
+      case 'server_patch_type':
+        return wrap(<Form.Item name="serverPatchType" label={labelOf('server_patch_type', 'Server Patch Type')}><Select allowClear options={opts('server_patch_type')} /></Form.Item>);
+      case 'patching_schedule':
+        return wrap(<Form.Item name="patchingSchedule" label={labelOf('patching_schedule', 'Patching Schedule')}><Select allowClear options={opts('patching_schedule')} /></Form.Item>);
+      case 'location':
+        return wrap(<Form.Item name="location" label={labelOf('location', 'Location')}><Select allowClear options={opts('location')} /></Form.Item>);
+      case 'eol_status':
+        return wrap(<Form.Item name="eolStatus" label={labelOf('eol_status', 'EOL Status')}><Select allowClear options={opts('eol_status')} /></Form.Item>);
+      case 'ome_status':
+        return wrap(<Form.Item name="omeStatus" label={labelOf('ome_status', 'OME Status')}><Input /></Form.Item>);
+      case 'hosted_ip':
+        return wrap(<Form.Item name="hostedIp" label={labelOf('hosted_ip', 'Hosted IP')}><Input /></Form.Item>);
+      case 'serial_number':
+        return wrap(<Form.Item name="serialNumber" label={labelOf('serial_number', 'Serial Number')}><Input /></Form.Item>);
+      case 'asset_username':
+        return wrap(<Form.Item name="assetUsername" label={labelOf('asset_username', 'Asset Username')}><Input /></Form.Item>);
+      case 'asset_password':
+        return wrap(
+          <Form.Item name="assetPassword" label={labelOf('asset_password', 'Asset Password')} extra="Encrypted (AES-256-GCM) at rest">
+            <Input.Password placeholder={mode === 'edit' ? 'Leave blank to keep existing' : ''} autoComplete="new-password" />
+          </Form.Item>
+        );
+      case 'asset_tag':
+        return (
+          <Col key="asset_tag" xs={24}>
             <Form.Item
               name="assetTag"
               label={
                 <Space>
-                  <span>Asset Tag</span>
+                  <span>{labelOf('asset_tag', 'Asset Tag')}</span>
                   {mode === 'create' && isAdmin && (
-                    <Tag
-                      color={manualOverride ? 'orange' : 'blue'}
-                      icon={manualOverride ? <EditOutlined /> : <ThunderboltOutlined />}
-                    >
+                    <Tag color={manualOverride ? 'orange' : 'blue'}
+                      icon={manualOverride ? <EditOutlined /> : <ThunderboltOutlined />}>
                       {manualOverride ? 'Manual override' : 'Auto-assigned'}
                     </Tag>
                   )}
@@ -340,11 +337,8 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
             >
               {showAutoTagBlock ? (
                 <AutoAssignedTagDisplay
-                  department={department}
-                  range={range}
-                  info={autoTagInfo}
-                  loading={autoTagLoading}
-                  isAdmin={isAdmin}
+                  department={department} range={range} info={autoTagInfo}
+                  loading={autoTagLoading} isAdmin={isAdmin}
                   onEnableOverride={() => setManualOverride(true)}
                 />
               ) : (
@@ -354,45 +348,99 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
             {mode === 'create' && isAdmin && manualOverride && (
               <Button size="small" type="link" style={{ paddingLeft: 0, marginTop: -8 }}
                 onClick={() => { setManualOverride(false); form.setFieldValue('assetTag', undefined); }}>
-                ← Back to auto-assign
+                ← Back to auto-assign
               </Button>
             )}
           </Col>
+        );
+      case 'additional_remarks':
+        return wrap(<Form.Item name="additionalRemarks" label={labelOf('additional_remarks', 'Additional Remarks')}><Input.TextArea rows={2} /></Form.Item>);
+      case 'manage_engine_installed':
+        return wrap(<Form.Item name="manageEngineInstalled" label={labelOf('manage_engine_installed', 'ManageEngine Installed')} valuePropName="checked"><Switch /></Form.Item>);
+      case 'tenable_installed':
+        return wrap(<Form.Item name="tenableInstalled" label={labelOf('tenable_installed', 'Tenable Installed')} valuePropName="checked"><Switch /></Form.Item>);
+      case 'idrac_enabled':
+        return wrap(<Form.Item name="idracEnabled" label={labelOf('idrac_enabled', 'iDRAC')} valuePropName="checked"><Switch /></Form.Item>);
+      case 'idrac_ip':
+        return wrap(<Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}><Input placeholder="10.x.x.x" /></Form.Item>);
+      default:
+        return null;
+    }
+  }
 
-          {!isHidden('additional_remarks') && <Col xs={24}><Form.Item name="additionalRemarks" label={labelOf('additional_remarks', 'Additional Remarks')}><Input.TextArea rows={2} /></Form.Item></Col>}
-        </Row>
+  function renderExtraWidget(f) {
+    if (isHidden(f.field_key)) return null;
+    return (
+      <Col xs={24} md={f.input_type === 'textarea' ? 24 : 8} key={f.field_key}>
+        <Form.Item
+          name={['extras', f.field_key]}
+          label={f.label}
+          rules={f.is_required ? [{ required: true, message: `${f.label} is required` }] : []}
+          valuePropName={f.input_type === 'toggle' ? 'checked' : 'value'}
+        >
+          {renderExtraInput(f)}
+        </Form.Item>
+      </Col>
+    );
+  }
 
-        <Divider orientation="left">Tools</Divider>
-        <Row gutter={16}>
-          {!isHidden('manage_engine_installed') && <Col xs={12} md={6}><Form.Item name="manageEngineInstalled" label={labelOf('manage_engine_installed', 'ManageEngine Installed')} valuePropName="checked"><Switch /></Form.Item></Col>}
-          {!isHidden('tenable_installed') && <Col xs={12} md={6}><Form.Item name="tenableInstalled" label={labelOf('tenable_installed', 'Tenable Installed')} valuePropName="checked"><Switch /></Form.Item></Col>}
-          {!isHidden('idrac_enabled') && <Col xs={12} md={6}><Form.Item name="idracEnabled" label={labelOf('idrac_enabled', 'iDRAC')} valuePropName="checked"><Switch /></Form.Item></Col>}
-          {!isHidden('idrac_ip') && <Col xs={24} md={6}><Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}><Input placeholder="10.x.x.x" /></Form.Item></Col>}
-        </Row>
+  // Group fields by their section using the latest field meta. Sections are
+  // rendered in the saved group order (fieldMeta.groups), then any orphan
+  // sections that exist on fields but not in groups are appended. Fields
+  // inside each section are ordered by sort_order.
+  const dynamicSections = useMemo(() => {
+    const fields = fieldMeta.fields || [];
+    if (!fields.length) return null;
+    const map = new Map();
+    for (const g of (fieldMeta.groups || [])) map.set(g, []);
+    for (const f of fields) {
+      const sec = f.section || 'Other';
+      if (!map.has(sec)) map.set(sec, []);
+      map.get(sec).push(f);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    }
+    return Array.from(map.entries());
+  }, [fieldMeta]);
 
-        {fieldMeta.fields.filter(f => f.is_extra && !isHidden(f.field_key)).length > 0 && (
-          <>
-            <Divider orientation="left">Custom Fields</Divider>
-            <Row gutter={16}>
-              {fieldMeta.fields
-                .filter(f => f.is_extra && !isHidden(f.field_key))
-                .sort((a, b) => a.sort_order - b.sort_order)
-                .map(f => (
-                  <Col xs={24} md={f.input_type === 'textarea' ? 24 : 8} key={f.field_key}>
-                    <Form.Item
-                      name={['extras', f.field_key]}
-                      label={f.label}
-                      rules={f.is_required ? [{ required: true, message: `${f.label} is required` }] : []}
-                      valuePropName={f.input_type === 'toggle' ? 'checked' : 'value'}
-                    >
-                      {renderExtraInput(f)}
-                    </Form.Item>
-                  </Col>
-                ))}
-            </Row>
-          </>
+  return (
+    <Card title={<Typography.Title level={4} style={{ margin: 0 }}>{mode === 'create' ? `Add ${effectiveEntityLabel}` : `Edit ${effectiveEntityLabel}`}</Typography.Title>}
+      className="inventory-form-card"
+    >
+      <Form form={form} layout="vertical" onFinish={onFinish} className="inventory-form"
+        initialValues={{ manageEngineInstalled: false, tenableInstalled: false, idracEnabled: false }}>
+        {mode === 'edit' && (meta.created_by_name || meta.created_at) && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={
+              <Space split={<Divider type="vertical" />} wrap>
+                <span><Typography.Text type="secondary">Submitted By:</Typography.Text>{' '}
+                  <strong>{meta.created_by_name || '—'}</strong></span>
+                <span><Typography.Text type="secondary">Created:</Typography.Text>{' '}
+                  <strong>{meta.created_at ? new Date(meta.created_at).toLocaleString() : '—'}</strong></span>
+              </Space>
+            }
+          />
         )}
-
+        {dynamicSections === null ? (
+          <Typography.Text type="secondary">Loading fields…</Typography.Text>
+        ) : (
+          dynamicSections.map(([sectionName, sectionFields]) => {
+            const widgets = sectionFields
+              .map(f => f.is_extra ? renderExtraWidget(f) : renderBuiltinWidget(f.field_key))
+              .filter(Boolean);
+            if (widgets.length === 0) return null;
+            return (
+              <div key={sectionName}>
+                <Divider orientation="left">{sectionName}</Divider>
+                <Row gutter={16}>{widgets}</Row>
+              </div>
+            );
+          })
+        )}
         <Space>
           <Button type="primary" htmlType="submit" loading={submitting}>{mode === 'create' ? `Create ${effectiveEntityLabel}` : 'Save Changes'}</Button>
           <Button onClick={() => nav(listPath)}>Cancel</Button>
