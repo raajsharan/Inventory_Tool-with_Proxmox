@@ -98,4 +98,40 @@ async function restoreDump(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { getSettings, updateSettings, runPgNow, runCsvNow, listRuns, restoreDump };
+async function listCsvFiles(req, res, next) {
+  try {
+    const table = req.query.table || undefined;
+    const { dir, files } = await svc.listCsvFiles({ table });
+    res.json({ directory: dir, files });
+  } catch (e) { next(e); }
+}
+
+async function restoreCsvFromHistory(req, res, next) {
+  try {
+    const { table, filename, mode } = req.body || {};
+    if (!table || !filename) throw new ApiError(400, 'table and filename are required');
+    const m = (mode === 'merge') ? 'merge' : 'replace';
+    const result = await svc.restoreTableFromHistoricalFile({ table, filename, mode: m, userId: req.user.id });
+    await audit.log({ user: req.user, action: 'IMPORT', entityType: `restore_${table}`,
+      details: { filename, mode: m, ...result }, ipAddress: req.ip });
+    res.json(result);
+  } catch (e) { next(e); }
+}
+
+async function restoreCsvUpload(req, res, next) {
+  try {
+    if (!req.file) throw new ApiError(400, 'No file uploaded');
+    const { table, mode } = req.body || {};
+    if (!table) throw new ApiError(400, 'table is required');
+    const m = (mode === 'merge') ? 'merge' : 'replace';
+    const result = await svc.restoreTableFromCsv({ table, buffer: req.file.buffer, mode: m, userId: req.user.id });
+    await audit.log({ user: req.user, action: 'IMPORT', entityType: `restore_${table}`,
+      details: { mode: m, uploaded: true, ...result }, ipAddress: req.ip });
+    res.json(result);
+  } catch (e) { next(e); }
+}
+
+module.exports = {
+  getSettings, updateSettings, runPgNow, runCsvNow, listRuns, restoreDump,
+  listCsvFiles, restoreCsvFromHistory, restoreCsvUpload,
+};

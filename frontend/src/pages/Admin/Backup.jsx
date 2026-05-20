@@ -6,6 +6,7 @@ import {
 import {
   DatabaseOutlined, FileTextOutlined, DownloadOutlined, UploadOutlined,
   PlayCircleOutlined, SaveOutlined, ReloadOutlined, ExclamationCircleOutlined,
+  HistoryOutlined, RollbackOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
@@ -370,6 +371,192 @@ function CsvExportTab() {
   );
 }
 
+function RestoreByDateTab() {
+  const { message, modal } = App.useApp();
+  const [table, setTable] = useState('assets');
+  const [files, setFiles] = useState([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [mode, setMode] = useState('replace');
+  const [restoring, setRestoring] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+
+  async function loadFiles() {
+    setLoadingFiles(true);
+    try {
+      const { data } = await api.get('/backup/csv/files', { params: { table } });
+      setFiles(data.files || []);
+      setSelectedFile(null);
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to list backup files');
+    } finally { setLoadingFiles(false); }
+  }
+  useEffect(() => { loadFiles(); }, [table]); // eslint-disable-line
+
+  function confirmAndRun(action, summary) {
+    modal.confirm({
+      title: `Restore ${CSV_TARGETS.find(t => t.value === table)?.label || table}?`,
+      icon: <ExclamationCircleOutlined />,
+      okType: 'danger',
+      okText: 'Yes, restore',
+      content: (
+        <div>
+          {mode === 'replace' && (
+            <Typography.Paragraph type="danger" style={{ marginBottom: 8 }}>
+              <strong>Replace All</strong> will TRUNCATE the {table} table and reload from the backup.
+              All current rows in this inventory will be deleted.
+            </Typography.Paragraph>
+          )}
+          {mode === 'merge' && (
+            <Typography.Paragraph style={{ marginBottom: 8 }}>
+              <strong>Merge</strong> upserts each backup row by primary key (id). Existing rows are
+              updated; new rows are inserted; rows in the DB that aren't in the backup remain.
+            </Typography.Paragraph>
+          )}
+          <div>{summary}</div>
+        </div>
+      ),
+      onOk: action,
+    });
+  }
+
+  async function onRestoreHistorical() {
+    if (!selectedFile) { message.warning('Pick a backup first'); return; }
+    confirmAndRun(async () => {
+      setRestoring(true);
+      try {
+        const { data } = await api.post('/backup/csv/restore', {
+          table, filename: selectedFile, mode,
+        });
+        message.success(`Restored: ${data.inserted}/${data.totalRows} rows (skipped ${data.skipped})`);
+      } catch (e) {
+        message.error(e.response?.data?.error || 'Restore failed');
+      } finally { setRestoring(false); }
+    }, <span>Backup: <code>{selectedFile}</code></span>);
+  }
+
+  async function onRestoreUpload() {
+    if (!uploadFile) { message.warning('Pick a CSV file to upload'); return; }
+    confirmAndRun(async () => {
+      setRestoring(true);
+      try {
+        const form = new FormData();
+        form.append('file', uploadFile);
+        form.append('table', table);
+        form.append('mode', mode);
+        const { data } = await api.post('/backup/csv/restore-upload', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        message.success(`Restored: ${data.inserted}/${data.totalRows} rows (skipped ${data.skipped})`);
+        setUploadFile(null);
+      } catch (e) {
+        message.error(e.response?.data?.error || 'Restore failed');
+      } finally { setRestoring(false); }
+    }, <span>Upload: <code>{uploadFile.name}</code></span>);
+  }
+
+  return (
+    <div>
+      <Alert
+        type="warning" showIcon
+        message="Restore an inventory from a CSV backup"
+        description="Pick which inventory and a backup date (from the server's CSV export directory). Replace All wipes and reloads; Merge upserts rows by id."
+        style={{ marginBottom: 16 }}
+      />
+
+      <Card type="inner" style={{ marginBottom: 16 }} title={<Space><RollbackOutlined /><span>Choose target</span></Space>}>
+        <Space size={16} wrap>
+          <div>
+            <Typography.Text strong>Inventory</Typography.Text>
+            <div>
+              <Select
+                value={table}
+                onChange={setTable}
+                style={{ minWidth: 240 }}
+                options={CSV_TARGETS.map(t => ({ value: t.value, label: t.label }))}
+              />
+            </div>
+          </div>
+          <div>
+            <Typography.Text strong>Mode</Typography.Text>
+            <div>
+              <Select
+                value={mode}
+                onChange={setMode}
+                style={{ minWidth: 240 }}
+                options={[
+                  { value: 'replace', label: 'Replace All (TRUNCATE + reload)' },
+                  { value: 'merge',   label: 'Merge (upsert by id)' },
+                ]}
+              />
+            </div>
+          </div>
+        </Space>
+      </Card>
+
+      <Card type="inner" style={{ marginBottom: 16 }}
+        title={<Space><HistoryOutlined /><span>Restore from a historical backup</span></Space>}
+        extra={<Button size="small" icon={<ReloadOutlined />} onClick={loadFiles}>Refresh list</Button>}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginTop: -8 }}>
+          Files are read from the CSV export directory on the server. Run a CSV export first to populate this list.
+        </Typography.Paragraph>
+        <Table
+          size="small"
+          rowKey="filename"
+          loading={loadingFiles}
+          dataSource={files}
+          pagination={{ pageSize: 10 }}
+          rowSelection={{
+            type: 'radio',
+            selectedRowKeys: selectedFile ? [selectedFile] : [],
+            onChange: (keys) => setSelectedFile(keys[0]),
+          }}
+          columns={[
+            { title: 'Taken at', dataIndex: 'takenAt', width: 200,
+              render: v => new Date(v).toLocaleString() },
+            { title: 'File',     dataIndex: 'filename', ellipsis: true },
+            { title: 'Size',     dataIndex: 'size', width: 100,
+              render: v => v ? `${(v / 1024).toFixed(1)} KB` : '—' },
+          ]}
+        />
+        <Button
+          type="primary" danger
+          icon={<RollbackOutlined />}
+          loading={restoring}
+          disabled={!selectedFile}
+          onClick={onRestoreHistorical}
+          style={{ marginTop: 8 }}
+        >
+          Restore selected backup
+        </Button>
+      </Card>
+
+      <Card type="inner" title={<Space><UploadOutlined /><span>Restore from uploaded CSV</span></Space>}>
+        <Upload
+          accept=".csv"
+          maxCount={1}
+          beforeUpload={(f) => { setUploadFile(f); return false; }}
+          fileList={uploadFile ? [{ uid: '1', name: uploadFile.name, status: 'done' }] : []}
+          onRemove={() => setUploadFile(null)}
+        >
+          <Button icon={<UploadOutlined />}>Select .csv file</Button>
+        </Upload>
+        <Button
+          type="primary" danger
+          icon={<RollbackOutlined />}
+          loading={restoring}
+          disabled={!uploadFile}
+          onClick={onRestoreUpload}
+          style={{ marginTop: 12 }}
+        >
+          Restore from upload
+        </Button>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminBackup() {
   return (
     <Card title={<Typography.Title level={4} style={{ margin: 0 }}>Backup / Export &amp; Import</Typography.Title>}>
@@ -377,6 +564,7 @@ export default function AdminBackup() {
         items={[
           { key: 'pg',  label: <span><DatabaseOutlined /> PostgreSQL Backup</span>, children: <PgBackupTab /> },
           { key: 'csv', label: <span><FileTextOutlined /> CSV Export</span>,        children: <CsvExportTab /> },
+          { key: 'restore', label: <span><RollbackOutlined /> Restore by Date</span>, children: <RestoreByDateTab /> },
         ]}
       />
     </Card>

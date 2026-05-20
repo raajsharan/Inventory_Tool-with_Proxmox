@@ -252,8 +252,149 @@ async function restoreFromDump(filePath, { dropFirst, userId }) {
   }
 }
 
+// ---------------------------------------------------------------------
+// CSV restore — per-inventory, by date.
+// Files in the configured csv directory follow the naming convention
+// "<table>_YYYYMMDD-HHMMSS.csv". This function discovers them and groups
+// them by table so the UI can offer a date picker.
+// ---------------------------------------------------------------------
+async function listCsvFiles({ table }) {
+  const settings = await getSettings('csv');
+  const dir = settings?.directory || '/backups/csv';
+  let entries = [];
+  try { entries = await fsp.readdir(dir); } catch { return { dir, files: [] }; }
+  const out = [];
+  for (const name of entries) {
+    if (!name.endsWith('.csv')) continue;
+    const m = name.match(/^(assets|beijing_assets|ext_assets|physical_esxi_servers)_(\d{8})-(\d{6})\.csv$/);
+    if (!m) continue;
+    const [, tbl, ymd, hms] = m;
+    if (table && table !== tbl) continue;
+    const iso = `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}T${hms.slice(0, 2)}:${hms.slice(2, 4)}:${hms.slice(4, 6)}`;
+    let size = 0;
+    try { size = (await fsp.stat(path.join(dir, name))).size; } catch {}
+    out.push({ filename: name, table: tbl, takenAt: iso, size });
+  }
+  out.sort((a, b) => b.takenAt.localeCompare(a.takenAt));
+  return { dir, files: out };
+}
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') q = false;
+      else cur += ch;
+    } else {
+      if (ch === ',') { out.push(cur); cur = ''; }
+      else if (ch === '"') q = true;
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function coerceCsvValue(v) {
+  if (v === '' || v === 'NULL') return null;
+  if (v === 'true' || v === 'TRUE')  return true;
+  if (v === 'false' || v === 'FALSE') return false;
+  return v;
+}
+
+async function restoreTableFromCsv({ table, buffer, mode, userId }) {
+  if (!INVENTORY_TABLES.includes(table)) {
+    throw new ApiError(400, `Restore not allowed for table: ${table}`);
+  }
+  const text = buffer.toString('utf8').replace(/^﻿/, '');
+  const lines = text.split(/\r?\n/).filter(l => l.length > 0);
+  if (!lines.length) throw new ApiError(400, 'CSV file is empty');
+
+  const headers = parseCsvLine(lines[0]);
+  const rows = lines.slice(1).map(parseCsvLine).map(cols => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = coerceCsvValue(cols[i] ?? ''); });
+    return obj;
+  });
+
+  const startedAt = new Date();
+  const client = await db.getClient();
+  let inserted = 0;
+  let skipped = 0;
+  try {
+    await client.query('BEGIN');
+    if (mode === 'replace') {
+      await client.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE`);
+    }
+    for (const row of rows) {
+      // Drop columns the live schema doesn't have (defensive: schema may have evolved).
+      const cols = Object.keys(row).filter(c => row[c] !== undefined);
+      if (!cols.length) continue;
+      const vals = cols.map(c => row[c]);
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+      try {
+        if (mode === 'merge') {
+          const updates = cols.filter(c => c !== 'id').map(c => `${c} = EXCLUDED.${c}`).join(',');
+          await client.query(
+            `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})
+             ON CONFLICT (id) DO UPDATE SET ${updates || 'id = ' + table + '.id'}`,
+            vals
+          );
+        } else {
+          await client.query(
+            `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`,
+            vals
+          );
+        }
+        inserted++;
+      } catch (e) {
+        skipped++;
+        if (mode === 'replace') {
+          await client.query('ROLLBACK');
+          throw new ApiError(500, `Row failed in replace mode (transaction aborted): ${e.message}`);
+        }
+      }
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    await recordRun({
+      kind: 'csv', trigger: 'manual', status: 'error',
+      filePath: `restore:${table}`, error: e.message, triggeredBy: userId, startedAt,
+    });
+    throw e;
+  } finally {
+    client.release();
+  }
+  await recordRun({
+    kind: 'csv', trigger: 'manual', status: 'ok',
+    filePath: `restore:${table}`, fileSize: buffer.length, triggeredBy: userId, startedAt,
+  });
+  return { table, mode, totalRows: rows.length, inserted, skipped };
+}
+
+async function restoreTableFromHistoricalFile({ table, filename, mode, userId }) {
+  const settings = await getSettings('csv');
+  const dir = settings?.directory || '/backups/csv';
+  const filePath = path.join(dir, filename);
+  if (!filePath.startsWith(path.resolve(dir))) {
+    throw new ApiError(400, 'Invalid file path');
+  }
+  if (!filename.endsWith('.csv')) throw new ApiError(400, 'Not a CSV file');
+  if (!filename.startsWith(`${table}_`)) throw new ApiError(400, 'File does not belong to the selected inventory');
+  let buf;
+  try { buf = await fsp.readFile(filePath); }
+  catch { throw new ApiError(404, 'Backup file not found'); }
+  return restoreTableFromCsv({ table, buffer: buf, mode, userId });
+}
+
 module.exports = {
   INVENTORY_TABLES,
   getSettings, updateSettings, listRuns,
   runPgBackup, runCsvExport, restoreFromDump,
+  listCsvFiles, restoreTableFromCsv, restoreTableFromHistoricalFile,
 };

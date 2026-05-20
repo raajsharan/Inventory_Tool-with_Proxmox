@@ -13,4 +13,8 @@ router.post('/pg/run',         adminOnly, ctrl.runPgNow);
 router.post('/csv/run',        adminOnly, ctrl.runCsvNow);
 router.post('/pg/restore',     adminOnly, upload.single('file'), ctrl.restoreDump);
 
+router.get('/csv/files',        adminOnly, ctrl.listCsvFiles);
+router.post('/csv/restore',     adminOnly, ctrl.restoreCsvFromHistory);
+router.post('/csv/restore-upload', adminOnly, upload.single('file'), ctrl.restoreCsvUpload);
+
 module.exports = router;
