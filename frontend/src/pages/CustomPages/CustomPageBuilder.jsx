@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Card, Form, Input, Button, Space, Typography, Select, Switch, Row, Col, App, Alert,
+  Card, Form, Input, Button, Space, Typography, Select, Switch, Row, Col, App, Alert, AutoComplete,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+
+const COMMON_SECTIONS = [
+  'Basic Information', 'Identity', 'Ownership', 'Operations',
+  'Asset Tagging & Credentials', 'Tools', 'Network', 'Other',
+];
 import api from '../../api/client';
 
 const FIELD_TYPES = [
@@ -64,7 +69,7 @@ export default function CustomPageBuilder() {
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="Group fields into sections (e.g. Basic Information, Ownership) — the Add Record page renders one panel per section."
+          message="Group fields into sections (e.g. Basic Information, Ownership). Pick from the suggestions or type a new section name — the Add Record page renders one panel per section."
         />
         <Form.List name="fields">
           {(items, { add, remove }) => (
@@ -73,7 +78,18 @@ export default function CustomPageBuilder() {
                 <Row key={key} gutter={8} align="bottom" style={{ marginBottom: 8 }}>
                   <Col xs={24} md={5}>
                     <Form.Item {...rest} name={[name, 'section']} label="Section">
-                      <Input placeholder="Basic Information" />
+                      <AutoComplete
+                        placeholder="Basic Information"
+                        options={(() => {
+                          const used = (form.getFieldValue('fields') || [])
+                            .map(f => f?.section).filter(Boolean);
+                          const set = new Set([...used, ...COMMON_SECTIONS]);
+                          return Array.from(set).map(v => ({ value: v }));
+                        })()}
+                        filterOption={(input, option) =>
+                          (option?.value || '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
                     </Form.Item>
                   </Col>
                   <Col xs={24} md={5}>

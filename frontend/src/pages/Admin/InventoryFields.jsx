@@ -27,6 +27,51 @@ const INPUT_TYPES = [
   { value: 'date',     label: 'Date' },
 ];
 
+// A <Select> for group/section names that has an inline "Add new group"
+// footer. When the user enters a new name and clicks Add, it calls
+// addGroup() to extend the parent's data.groups list and then assigns the
+// current field to it.
+function GroupSelect({ value, onChange, groups, addGroup, size, style, placeholder }) {
+  const [newName, setNewName] = useState('');
+  return (
+    <Select
+      size={size}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder || 'Pick a group'}
+      style={style}
+      options={(groups || []).map(g => ({ value: g, label: g }))}
+      popupRender={(menu) => (
+        <div>
+          {menu}
+          <Divider style={{ margin: '6px 0' }} />
+          <div style={{ display: 'flex', gap: 6, padding: '4px 8px 8px' }} onMouseDown={(e) => e.preventDefault()}>
+            <Input
+              size="small"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="New group name"
+              onPressEnter={() => {
+                if (addGroup(newName)) { onChange?.(newName.trim()); setNewName(''); }
+              }}
+            />
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                if (addGroup(newName)) { onChange?.(newName.trim()); setNewName(''); }
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
+    />
+  );
+}
+
 export default function InventoryFields() {
   const { pageKey } = useParams();
   const nav = useNavigate();
@@ -55,6 +100,33 @@ export default function InventoryFields() {
       ...d,
       fields: d.fields.map(f => f.field_key === field_key ? { ...f, ...patch } : f),
     }));
+  }
+
+  function addGroup(name) {
+    const clean = String(name || '').trim();
+    if (!clean) { message.warning('Group name cannot be empty'); return false; }
+    if ((data?.groups || []).some(g => g.toLowerCase() === clean.toLowerCase())) {
+      message.warning('Group already exists');
+      return false;
+    }
+    setData(d => ({ ...d, groups: [...(d.groups || []), clean] }));
+    message.success(`Group "${clean}" added — assign fields and click Save to persist`);
+    return true;
+  }
+
+  function renameGroup(oldName, newName) {
+    const clean = String(newName || '').trim();
+    if (!clean || clean === oldName) return false;
+    if ((data?.groups || []).some(g => g.toLowerCase() === clean.toLowerCase())) {
+      message.warning('Another group already has that name');
+      return false;
+    }
+    setData(d => ({
+      ...d,
+      groups: (d.groups || []).map(g => g === oldName ? clean : g),
+      fields: d.fields.map(f => f.section === oldName ? { ...f, section: clean } : f),
+    }));
+    return true;
   }
 
   async function saveAll() {
@@ -191,6 +263,8 @@ export default function InventoryFields() {
           data={data}
           grouped={grouped}
           patchField={patchField}
+          addGroup={addGroup}
+          renameGroup={renameGroup}
           openCreateExtra={openCreateExtra}
           openEditExtra={openEditExtra}
           deleteExtra={deleteExtra}
@@ -199,7 +273,7 @@ export default function InventoryFields() {
       )}
 
       {tab === 'move' && (
-        <MoveBuiltInFields data={data} grouped={grouped} patchField={patchField} />
+        <MoveBuiltInFields data={data} grouped={grouped} patchField={patchField} addGroup={addGroup} renameGroup={renameGroup} />
       )}
 
       {tab === 'types' && (
@@ -218,7 +292,7 @@ export default function InventoryFields() {
             <Input placeholder="e.g. Cost Center" />
           </Form.Item>
           <Form.Item name="section" label="Group" rules={[{ required: true }]}>
-            <Select options={(data?.groups || []).map(g => ({ value: g, label: g }))} />
+            <GroupSelect groups={data?.groups || []} addGroup={addGroup} />
           </Form.Item>
           <Form.Item name="input_type" label="Input Type" rules={[{ required: true }]}>
             <Select options={INPUT_TYPES} />
@@ -240,7 +314,8 @@ export default function InventoryFields() {
 }
 
 // ===== Tab 1: Fields & Groups =====
-function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, deleteExtra, resetField, patchField }) {
+function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, deleteExtra, resetField, patchField, addGroup, renameGroup }) {
+  const [newGroup, setNewGroup] = useState('');
   return (
     <>
       <Alert
@@ -252,7 +327,22 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
             Add Asset fields by group · Edit custom fields inline · Reassign to different groups
           </span>
         }
-        action={<Button size="small" type="primary" icon={<PlusOutlined />} onClick={openCreateExtra}>Add Field</Button>}
+        action={
+          <Space>
+            <Input
+              size="small"
+              value={newGroup}
+              onChange={(e) => setNewGroup(e.target.value)}
+              placeholder="New group name"
+              style={{ width: 180 }}
+              onPressEnter={() => { if (addGroup(newGroup)) setNewGroup(''); }}
+            />
+            <Button size="small" icon={<PlusOutlined />} onClick={() => { if (addGroup(newGroup)) setNewGroup(''); }}>
+              Add Group
+            </Button>
+            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={openCreateExtra}>Add Field</Button>
+          </Space>
+        }
       />
       {grouped.map(g => (
         <div key={g.name} style={{ marginBottom: 16 }}>
@@ -282,10 +372,11 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
               </Col>
               <Col xs={24} md={5}>
                 <Typography.Text type="secondary" style={{ fontSize: 11 }}>Group</Typography.Text>
-                <Select
+                <GroupSelect
                   value={f.section}
                   onChange={(v) => patchField(f.field_key, { section: v })}
-                  options={data.groups.map(g => ({ value: g, label: g }))}
+                  groups={data.groups}
+                  addGroup={addGroup}
                   style={{ width: '100%' }}
                 />
               </Col>
@@ -323,7 +414,11 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
 }
 
 // ===== Tab 2: Move Built-in Fields =====
-function MoveBuiltInFields({ data, grouped, patchField }) {
+function MoveBuiltInFields({ data, grouped, patchField, addGroup, renameGroup }) {
+  const [newGroup, setNewGroup] = useState('');
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
+
   function move(field_key, direction) {
     const current = data.fields.find(f => f.field_key === field_key);
     if (!current) return;
@@ -334,6 +429,17 @@ function MoveBuiltInFields({ data, grouped, patchField }) {
     patchField(field_key, { sort_order: swap.sort_order });
     patchField(swap.field_key, { sort_order: current.sort_order });
   }
+
+  // Include empty groups (no fields yet) so users can see and target them.
+  const allGroups = useMemo(() => {
+    const used = new Set(grouped.map(g => g.name));
+    const all = [...grouped];
+    for (const g of (data?.groups || [])) {
+      if (!used.has(g)) all.push({ name: g, fields: [] });
+    }
+    return all;
+  }, [grouped, data]);
+
   return (
     <>
       <Alert
@@ -341,13 +447,49 @@ function MoveBuiltInFields({ data, grouped, patchField }) {
         showIcon
         style={{ marginBottom: 12 }}
         message="Reassign built-in fields to a different group, or change their order within a group. Save when you're done."
+        action={
+          <Space>
+            <Input
+              size="small"
+              value={newGroup}
+              onChange={(e) => setNewGroup(e.target.value)}
+              placeholder="New group name"
+              style={{ width: 200 }}
+              onPressEnter={() => { if (addGroup(newGroup)) setNewGroup(''); }}
+            />
+            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => { if (addGroup(newGroup)) setNewGroup(''); }}>
+              Add Group
+            </Button>
+          </Space>
+        }
       />
-      {grouped.map(g => (
+      {allGroups.map(g => (
         <div key={g.name} style={{ marginBottom: 16 }}>
           <Divider orientation="left" style={{ fontSize: 11, letterSpacing: 1.5, color: '#94a3b8', textTransform: 'uppercase' }}>
-            {g.name}
+            {editingGroup === g.name ? (
+              <Space size={4}>
+                <Input
+                  size="small"
+                  value={editingValue}
+                  autoFocus
+                  onChange={(e) => setEditingValue(e.target.value)}
+                  onPressEnter={() => { if (renameGroup(g.name, editingValue)) setEditingGroup(null); }}
+                  style={{ width: 180 }}
+                />
+                <Button size="small" type="primary" onClick={() => { if (renameGroup(g.name, editingValue)) setEditingGroup(null); }}>Save</Button>
+                <Button size="small" onClick={() => setEditingGroup(null)}>Cancel</Button>
+              </Space>
+            ) : (
+              <Space size={4}>
+                <span>{g.name}</span>
+                <Tooltip title="Rename group">
+                  <Button size="small" type="text" icon={<EditOutlined style={{ color: '#94a3b8' }} />}
+                    onClick={() => { setEditingGroup(g.name); setEditingValue(g.name); }} />
+                </Tooltip>
+              </Space>
+            )}
           </Divider>
-          {g.fields.length === 0 && <Typography.Text type="secondary">No fields in this group.</Typography.Text>}
+          {g.fields.length === 0 && <Typography.Text type="secondary">No fields in this group yet — drop one here using the dropdown on any field below.</Typography.Text>}
           {g.fields.map((f, i) => (
             <Row key={f.field_key} gutter={8} align="middle" style={{
               padding: '8px 12px', marginBottom: 6,
@@ -364,12 +506,13 @@ function MoveBuiltInFields({ data, grouped, patchField }) {
                 <Space>
                   <Button size="small" icon={<ArrowUpOutlined />} disabled={i === 0} onClick={() => move(f.field_key, 'up')} />
                   <Button size="small" icon={<ArrowDownOutlined />} disabled={i === g.fields.length-1} onClick={() => move(f.field_key, 'down')} />
-                  <Select
+                  <GroupSelect
                     size="small"
                     value={f.section}
                     onChange={(v) => patchField(f.field_key, { section: v })}
-                    options={data.groups.map(grp => ({ value: grp, label: grp }))}
-                    style={{ width: 200 }}
+                    groups={data.groups}
+                    addGroup={addGroup}
+                    style={{ width: 220 }}
                   />
                 </Space>
               </Col>
