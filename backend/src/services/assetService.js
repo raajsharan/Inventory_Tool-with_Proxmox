@@ -128,9 +128,12 @@ async function remove(id) {
 
 async function get(id) {
   const { rows } = await db.query(
-    `SELECT a.*, u.full_name AS created_by_name
+    `SELECT a.*,
+            u.full_name  AS created_by_name,
+            u2.full_name AS updated_by_name
        FROM assets a
-       LEFT JOIN users u ON u.id = a.created_by
+       LEFT JOIN users u  ON u.id  = a.created_by
+       LEFT JOIN users u2 ON u2.id = a.updated_by
       WHERE a.id = $1`,
     [id]
   );
@@ -164,9 +167,12 @@ async function list({ search, osType, serverStatus, location, eolStatus, page = 
 
   const [items, count] = await Promise.all([
     db.query(
-      `SELECT a.*, u.full_name AS created_by_name
+      `SELECT a.*,
+              u.full_name  AS created_by_name,
+              u2.full_name AS updated_by_name
          FROM assets a
-         LEFT JOIN users u ON u.id = a.created_by
+         LEFT JOIN users u  ON u.id  = a.created_by
+         LEFT JOIN users u2 ON u2.id = a.updated_by
          ${whereSql}
        ORDER BY a.${safeSort} ${safeDir}
        LIMIT ${pageSize} OFFSET ${offset}`,

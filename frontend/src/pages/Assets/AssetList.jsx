@@ -159,6 +159,10 @@ export default function AssetList({
       title: 'Submitted By', render: cell },
     { key: 'created_at', dataIndex: 'created_at', width: 170,
       title: 'Created', render: v => v ? new Date(v).toLocaleString() : cell(v) },
+    { key: 'updated_by_name', dataIndex: 'updated_by_name', width: 160,
+      title: 'Modified By', render: cell },
+    { key: 'updated_at', dataIndex: 'updated_at', width: 170,
+      title: 'Modified', render: v => v ? new Date(v).toLocaleString() : cell(v) },
     { key: 'asset_username', dataIndex: 'asset_username', width: 150,
       title: labelOf('asset_username', 'Asset Username'), render: cell },
     {
@@ -212,7 +216,8 @@ export default function AssetList({
 
   const visibleColumns = allColumns.filter(c => {
     if (c.key === 'vm_name' || c.key === '__actions__' || c.key === 'asset_password'
-      || c.key === 'created_by_name' || c.key === 'created_at') return true;
+      || c.key === 'created_by_name' || c.key === 'created_at'
+      || c.key === 'updated_by_name' || c.key === 'updated_at') return true;
     return !isHidden(c.key);
   });
 
