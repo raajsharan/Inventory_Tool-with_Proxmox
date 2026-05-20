@@ -99,8 +99,71 @@ async function summary(_req, res, next) {
       FROM inv;
     `);
 
-    const [inv, ext, os, st, lo, eol, recent, weekly] = await Promise.all([
+    // ---------------------------------------------------------------
+    // MSL Compliance: VMs/physical that are Alive or Powered Off and
+    // NOT Decommissioned / Not Applicable.
+    // ---------------------------------------------------------------
+    const mslQ = db.query(`
+      WITH inv AS (
+        SELECT server_status, eol_status FROM assets
+        UNION ALL SELECT server_status, eol_status FROM beijing_assets
+        UNION ALL SELECT server_status, eol_status FROM physical_esxi_servers
+      )
+      SELECT COUNT(*)::int AS msl
+        FROM inv
+       WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%'
+              OR server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')
+         AND (eol_status IS NULL
+              OR (eol_status NOT IN ('Decommissioned','Not Applicable','Decom','NA','N/A')
+                  AND eol_status NOT ILIKE 'Decom%'
+                  AND eol_status NOT ILIKE 'Not Applic%'));
+    `);
+
+    const extComplianceQ = db.query(`
+      SELECT
+        COUNT(*)::int                                                  AS total,
+        COUNT(*) FILTER (WHERE asset_password_encrypted IS NOT NULL)::int AS with_password,
+        COUNT(*) FILTER (WHERE manage_engine_installed = TRUE)::int   AS me_installed,
+        COUNT(*) FILTER (
+          WHERE asset_type ILIKE '%network%' OR asset_type ILIKE '%switch%'
+             OR asset_type ILIKE '%printer%' OR asset_type ILIKE '%ups%'
+             OR asset_type ILIKE '%router%'  OR asset_type ILIKE '%firewall%'
+        )::int                                                         AS me_not_applicable,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int       AS auto_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int     AS manual_patching
+      FROM ext_assets;
+    `);
+
+    // Name conflicts: ext_assets whose vm_name OR os_hostname collides
+    // with a record in any other inventory.
+    const nameConflictQ = db.query(`
+      SELECT COUNT(*)::int AS c FROM ext_assets e
+       WHERE EXISTS (SELECT 1 FROM assets a
+                       WHERE a.vm_name = e.vm_name OR a.os_hostname = e.os_hostname)
+          OR EXISTS (SELECT 1 FROM beijing_assets b
+                       WHERE b.vm_name = e.vm_name OR b.os_hostname = e.os_hostname)
+          OR EXISTS (SELECT 1 FROM physical_esxi_servers p
+                       WHERE p.vm_name = e.vm_name OR p.os_hostname = e.os_hostname);
+    `);
+
+    // Location-wise count across all four inventories.
+    const locationCountQ = db.query(`
+      SELECT COALESCE(location, 'Unspecified') AS location, COUNT(*)::int AS count
+        FROM (
+          SELECT location FROM assets
+          UNION ALL SELECT location FROM beijing_assets
+          UNION ALL SELECT location FROM physical_esxi_servers
+          UNION ALL SELECT location FROM ext_assets
+        ) x
+        WHERE location IS NOT NULL AND location <> ''
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 10;
+    `);
+
+    const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
+      mslQ, extComplianceQ, nameConflictQ, locationCountQ,
     ]);
 
     const i = inv.rows[0];
@@ -156,6 +219,26 @@ async function summary(_req, res, next) {
         compliantNow:  weekly.rows[0].compliant_now,
         totalNow:      weekly.rows[0].total_now,
         currentCompliancePct: compliancePct,
+      },
+
+      mslCompliance: {
+        mslNumerator:   mslRow.rows[0].msl,
+        mslDenominator: mslRow.rows[0].msl,
+        extNumerator:   extComp.rows[0].with_password,
+        extDenominator: extComp.rows[0].total,
+        combinedNumerator:   mslRow.rows[0].msl + extComp.rows[0].with_password,
+        combinedDenominator: mslRow.rows[0].msl + extComp.rows[0].total,
+        locations: locationCount.rows,
+      },
+
+      extEndpointCompliance: {
+        total:           extComp.rows[0].total,
+        withPassword:    extComp.rows[0].with_password,
+        meInstalled:     extComp.rows[0].me_installed,
+        meNotApplicable: extComp.rows[0].me_not_applicable,
+        nameConflicts:   nameConflict.rows[0].c,
+        autoPatching:    extComp.rows[0].auto_patching,
+        manualPatching:  extComp.rows[0].manual_patching,
       },
 
       // Legacy keys kept for backwards compatibility with the old Dashboard.

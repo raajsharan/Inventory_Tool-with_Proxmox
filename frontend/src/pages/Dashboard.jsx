@@ -8,7 +8,7 @@ import {
   ToolOutlined, StopOutlined, TeamOutlined, WarningOutlined,
   ClockCircleOutlined, PauseCircleOutlined, CheckCircleOutlined, PoweroffOutlined,
   CloseCircleOutlined, BlockOutlined,
-  BarChartOutlined, CalendarOutlined, FundOutlined,
+  BarChartOutlined, CalendarOutlined, FundOutlined, RiseOutlined,
 } from '@ant-design/icons';
 import { Pie, Column } from '@ant-design/plots';
 import api from '../api/client';
@@ -56,10 +56,52 @@ const C = {
   indigo: { bg: 'rgba(67,56,202,0.16)',  fg: '#4338ca' },
 };
 
+function ratioLine({ label, numerator, denominator, tone }) {
+  const pct = denominator ? (numerator / denominator) * 100 : 0;
+  const toneStyle = {
+    blue:   { bg: 'rgba(22,119,255,0.08)',  fg: '#1d4ed8' },
+    indigo: { bg: 'rgba(99,102,241,0.10)',  fg: '#4338ca' },
+    green:  { bg: 'rgba(34,197,94,0.10)',   fg: '#15803d' },
+  }[tone || 'blue'];
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', borderRadius: 8,
+        background: toneStyle.bg, color: toneStyle.fg, marginBottom: 8,
+      }}
+    >
+      <span>{label}</span>
+      <strong>{numerator.toLocaleString()} out of {denominator.toLocaleString()} = {pct.toFixed(2)}%</strong>
+    </div>
+  );
+}
+
+function ExtChip({ label, value, tone }) {
+  const toneStyle = {
+    green:  { bg: 'rgba(34,197,94,0.10)',   border: '#bbf7d0', fg: '#15803d' },
+    gray:   { bg: 'rgba(148,163,184,0.10)', border: '#e2e8f0', fg: '#475569' },
+    yellow: { bg: 'rgba(253,224,71,0.18)',  border: '#fde68a', fg: '#854d0e' },
+    emerald:{ bg: 'rgba(16,185,129,0.10)',  border: '#bbf7d0', fg: '#047857' },
+    blue:   { bg: 'rgba(59,130,246,0.10)',  border: '#bfdbfe', fg: '#1d4ed8' },
+  }[tone || 'gray'];
+  return (
+    <div style={{
+      padding: '10px 14px', borderRadius: 8,
+      background: toneStyle.bg, border: `1px solid ${toneStyle.border}`,
+      color: toneStyle.fg,
+    }}>
+      {label}: <strong>{(value ?? 0).toLocaleString()}</strong>
+    </div>
+  );
+}
+
 function ExecutiveOverview({ data }) {
   const h = data.headline || {};
   const a = data.assetInventory || {};
   const e = data.extendedInventory || {};
+  const msl = data.mslCompliance || {};
+  const ec  = data.extEndpointCompliance || {};
 
   return (
     <div>
@@ -187,6 +229,77 @@ function ExecutiveOverview({ data }) {
           <StatTile icon={<SafetyCertificateOutlined />} value={e.tenable} label="Ext. Tenable"      color={C.cyan} />
         </div>
       </div>
+
+      <Card style={{ marginTop: 24 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <RiseOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}>Total Inventory MSL Compliance</Typography.Title>
+              <Typography.Text type="secondary">MSL includes VMs in Alive/Powered Off scope and excludes Decom/Not Applicable</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        {ratioLine({ label: 'MSL',                numerator: msl.mslNumerator ?? 0,      denominator: msl.mslDenominator ?? 0,      tone: 'blue' })}
+        {ratioLine({ label: 'Extended Inventory', numerator: msl.extNumerator ?? 0,      denominator: msl.extDenominator ?? 0,      tone: 'indigo' })}
+        {ratioLine({ label: 'MSL + E-INV',        numerator: msl.combinedNumerator ?? 0, denominator: msl.combinedDenominator ?? 0, tone: 'green' })}
+
+        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 16, marginBottom: 8,
+          textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 12, fontWeight: 600 }}>
+          Location-wise count
+        </Typography.Text>
+        <Table
+          size="small"
+          rowKey="location"
+          pagination={false}
+          dataSource={msl.locations || []}
+          columns={[
+            { title: 'Location', dataIndex: 'location' },
+            { title: 'Count', dataIndex: 'count', align: 'right', width: 120,
+              render: v => <a style={{ fontWeight: 600 }}>{(v ?? 0).toLocaleString()}</a> },
+          ]}
+        />
+      </Card>
+
+      <Card style={{ marginTop: 16 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <AppstoreOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}>Ext. Endpoint Compliance</Typography.Title>
+              <Typography.Text type="secondary">Password and agent compliance across extended inventory endpoints</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        <Typography.Paragraph style={{ marginBottom: 4 }}>
+          Total <strong>{(ec.total ?? 0).toLocaleString()}</strong> endpoints
+        </Typography.Paragraph>
+        <Typography.Paragraph style={{ marginBottom: 4 }}>
+          For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints we received password info.
+        </Typography.Paragraph>
+        <Typography.Paragraph strong style={{ color: '#1d4ed8', marginBottom: 16 }}>
+          Compliance: {(ec.withPassword ?? 0).toLocaleString()} out of {(ec.total ?? 0).toLocaleString()} ={' '}
+          {(ec.total ? (ec.withPassword / ec.total) * 100 : 0).toFixed(2)}%
+        </Typography.Paragraph>
+
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={12}><ExtChip label="ManageEngine Installed" value={ec.meInstalled}     tone="emerald" /></Col>
+          <Col xs={24} md={12}><ExtChip label="ME Not Applicable"      value={ec.meNotApplicable} tone="gray" /></Col>
+          <Col xs={24} md={12}><ExtChip label="Name Conflicts"         value={ec.nameConflicts}   tone="yellow" /></Col>
+          <Col xs={24} md={12}><ExtChip label="Auto Patching"          value={ec.autoPatching}    tone="green" /></Col>
+          <Col xs={24} md={12}><ExtChip label="Manual Patching"        value={ec.manualPatching}  tone="blue" /></Col>
+        </Row>
+      </Card>
     </div>
   );
 }
