@@ -18,6 +18,7 @@ const STATIC_PAGES = [
   { key: 'admin/field-visibility',label: 'Field Customization',      group: 'Administration' },
   { key: 'admin/page-access',     label: 'Page Access',              group: 'Administration' },
   { key: 'admin/backup',          label: 'Backup / Export & Import', group: 'Administration' },
+  { key: 'admin/branding',        label: 'Branding & Customization', group: 'Administration' },
   { key: 'admin/imports',         label: 'Import History',           group: 'Administration' },
   { key: 'admin/audit',           label: 'Audit Log',                group: 'Administration' },
 ];

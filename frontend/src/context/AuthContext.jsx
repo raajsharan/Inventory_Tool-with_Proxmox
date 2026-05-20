@@ -18,6 +18,19 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [pageAccess, setPageAccess] = useState({});
   const [builtinOverrides, setBuiltinOverrides] = useState({}); // page_key -> { name, description, icon }
+  const [branding, setBranding] = useState(() => {
+    const raw = localStorage.getItem('branding');
+    return raw ? JSON.parse(raw) : null;
+  });
+
+  const refreshBranding = useCallback(async () => {
+    try {
+      const { data } = await api.get('/branding');
+      setBranding(data);
+      localStorage.setItem('branding', JSON.stringify(data));
+      if (data?.tool_name) document.title = data.tool_name;
+    } catch { /* keep prior */ }
+  }, []);
 
   const refreshPageAccess = useCallback(async () => {
     try {
@@ -46,6 +59,7 @@ export function AuthProvider({ children }) {
     if (token && !user) {
       api.get('/auth/me').then((r) => setUser(r.data.user)).catch(() => {});
     }
+    refreshBranding();
   }, []); // eslint-disable-line
 
   useEffect(() => {
@@ -88,11 +102,21 @@ export function AuthProvider({ children }) {
     return builtinOverrides[pageKey]?.name || DEFAULT_LABELS[pageKey] || fallback || pageKey;
   }
 
+  async function refreshMe() {
+    try {
+      const { data } = await api.get('/auth/me');
+      setUser(data.user);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      return data.user;
+    } catch { return null; }
+  }
+
   return (
     <AuthContext.Provider value={{
-      user, login, logout, loading,
+      user, login, logout, loading, refreshMe, setUser,
       canSee, pageAccess, refreshPageAccess,
       builtinOverrides, refreshBuiltinOverrides, getPageLabel,
+      branding, refreshBranding,
     }}>
       {children}
     </AuthContext.Provider>

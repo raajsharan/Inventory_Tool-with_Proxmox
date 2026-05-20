@@ -21,5 +21,6 @@ router.use('/page-access',      authenticate, requirePageAccess('admin/page-acce
 router.use('/builtin-pages',    authenticate,                                                require('./builtinPagesRoutes'));
 router.use('/inventory-fields', authenticate,                                                require('./inventoryFieldsRoutes'));
 router.use('/backup',           authenticate, requirePageAccess('admin/backup'),            require('./backupRoutes'));
+router.use('/branding',         require('./brandingRoutes'));
 
 module.exports = router;

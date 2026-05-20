@@ -30,6 +30,8 @@ import InventoryFields from './pages/Admin/InventoryFields.jsx';
 import AuditLogs from './pages/Admin/AuditLogs.jsx';
 import ImportHistory from './pages/Admin/ImportHistory.jsx';
 import AdminBackup from './pages/Admin/Backup.jsx';
+import AdminBranding from './pages/Admin/Branding.jsx';
+import Profile from './pages/Profile.jsx';
 
 export default function App() {
   return (
@@ -77,6 +79,8 @@ export default function App() {
         <Route path="/admin/audit" element={<AuditLogs />} />
         <Route path="/admin/imports" element={<ImportHistory />} />
         <Route path="/admin/backup" element={<AdminBackup />} />
+        <Route path="/admin/branding" element={<AdminBranding />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

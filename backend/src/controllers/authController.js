@@ -39,8 +39,77 @@ async function login(req, res, next) {
   } catch (e) { next(e); }
 }
 
-async function me(req, res) {
-  res.json({ user: req.user });
+async function me(req, res, next) {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, email, full_name, role, is_active, last_login_at, created_at,
+              first_name, last_name, job_role, avatar_data_url
+         FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    if (!rows.length) throw new ApiError(404, 'User not found');
+    const u = rows[0];
+    res.json({
+      user: {
+        id: u.id, email: u.email, fullName: u.full_name, role: u.role,
+        isActive: u.is_active, lastLoginAt: u.last_login_at, createdAt: u.created_at,
+        firstName: u.first_name, lastName: u.last_name,
+        jobRole: u.job_role, avatarDataUrl: u.avatar_data_url,
+      },
+    });
+  } catch (e) { next(e); }
 }
 
-module.exports = { login, me };
+async function updateProfile(req, res, next) {
+  try {
+    const map = {
+      firstName: 'first_name', lastName: 'last_name',
+      jobRole: 'job_role', avatarDataUrl: 'avatar_data_url',
+      first_name: 'first_name', last_name: 'last_name',
+      job_role: 'job_role', avatar_data_url: 'avatar_data_url',
+    };
+    const sets = [];
+    const vals = [];
+    let firstName = null, lastName = null, hasName = false;
+    for (const [k, v] of Object.entries(req.body || {})) {
+      const col = map[k];
+      if (!col) continue;
+      sets.push(`${col} = $${sets.length + 1}`);
+      vals.push(v);
+      if (col === 'first_name') { firstName = v; hasName = true; }
+      if (col === 'last_name')  { lastName  = v; hasName = true; }
+    }
+    if (sets.length) {
+      if (hasName) {
+        const composed = [firstName, lastName].filter(Boolean).join(' ').trim();
+        if (composed) {
+          sets.push(`full_name = $${sets.length + 1}`);
+          vals.push(composed);
+        }
+      }
+      vals.push(req.user.id);
+      await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals);
+      await audit.log({ user: req.user, action: 'UPDATE', entityType: 'profile', entityId: req.user.id, ipAddress: req.ip });
+    }
+    return me(req, res, next);
+  } catch (e) { next(e); }
+}
+
+async function changePassword(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!newPassword || newPassword.length < 6) {
+      throw new ApiError(400, 'New password must be at least 6 characters');
+    }
+    const { rows } = await db.query(`SELECT password_hash FROM users WHERE id = $1`, [req.user.id]);
+    if (!rows.length) throw new ApiError(404, 'User not found');
+    const ok = await bcrypt.compare(currentPassword || '', rows[0].password_hash);
+    if (!ok) throw new ApiError(401, 'Current password is incorrect');
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await db.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newHash, req.user.id]);
+    await audit.log({ user: req.user, action: 'UPDATE_PASSWORD', entityType: 'user', entityId: req.user.id, ipAddress: req.ip });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+}
+
+module.exports = { login, me, updateProfile, changePassword };

@@ -9,16 +9,16 @@ import {
   GlobalOutlined, BarChartOutlined, EyeOutlined, CloudServerOutlined,
   HddOutlined, SafetyCertificateOutlined,
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
-  CloudDownloadOutlined,
+  CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
 import api from '../../api/client';
 
-const { Sider, Header, Content } = Layout;
+const { Sider, Header, Content, Footer } = Layout;
 
 export default function AppLayout() {
-  const { user, logout, canSee, getPageLabel } = useAuth();
+  const { user, logout, canSee, getPageLabel, branding } = useAuth();
   const { mode, toggleMode, fontPx, increaseFont, decreaseFont, canIncrease, canDecrease } = useAppTheme();
   const nav = useNavigate();
   const loc = useLocation();
@@ -74,6 +74,7 @@ export default function AppLayout() {
         can('admin/field-visibility') && { key: '/admin/field-visibility',  icon: <EyeOutlined />,            label: <Link to="/admin/field-visibility">Field Customization</Link> },
         can('admin/page-access')      && { key: '/admin/page-access',       icon: <SafetyCertificateOutlined />, label: <Link to="/admin/page-access">Page Access</Link> },
         can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,  label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
+        can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,       label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
         can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,        label: <Link to="/admin/imports">Import History</Link> },
         can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,     label: <Link to="/admin/audit">Audit Log</Link> },
       ].filter(Boolean),
@@ -87,7 +88,20 @@ export default function AppLayout() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider width={240} breakpoint="lg" collapsedWidth={64} theme="dark">
-        <div className="logo-title">INVENTORY · IT</div>
+        <div className="logo-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {branding?.logo_data_url && (
+            <span style={{
+              width: 28, height: 28, borderRadius: 6, background: 'white',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+              flexShrink: 0,
+            }}>
+              <img alt="logo" src={branding.logo_data_url} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+            </span>
+          )}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {branding?.tool_name || 'INVENTORY · IT'}
+          </span>
+        </div>
         <Menu
           key={`menu-${customPages.length}`}
           theme="dark"
@@ -126,12 +140,14 @@ export default function AppLayout() {
             <Dropdown
               menu={{
                 items: [
+                  { key: 'profile', icon: <IdcardOutlined />, label: 'My Profile', onClick: () => nav('/profile') },
+                  { type: 'divider' },
                   { key: 'logout', icon: <LogoutOutlined />, label: 'Sign out', onClick: () => { logout(); nav('/login'); } },
                 ],
               }}
             >
               <Space style={{ cursor: 'pointer' }}>
-                <Avatar size="small" icon={<UserOutlined />} />
+                <Avatar size="small" src={user?.avatarDataUrl} icon={!user?.avatarDataUrl && <UserOutlined />} />
                 {user?.fullName}
               </Space>
             </Dropdown>
@@ -140,6 +156,14 @@ export default function AppLayout() {
         <Content className="page-shell">
           <Outlet />
         </Content>
+        <Footer style={{ textAlign: 'center', padding: '12px 24px', fontSize: 12 }}>
+          <span dangerouslySetInnerHTML={{
+            __html: (branding?.footer_html
+              || `© ${new Date().getFullYear()} ${branding?.tool_name || 'Inventory IT'}. All rights reserved.`)
+              .replace(/\{year\}/g, new Date().getFullYear())
+              .replace(/\{tool\}/g, branding?.tool_name || 'Inventory IT')
+          }} />
+        </Footer>
       </Layout>
     </Layout>
   );

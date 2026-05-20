@@ -430,6 +430,30 @@ ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64)
 ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
 ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
 
+-- ---------------------------------------------------------------------
+-- app_branding (singleton row id=1) and user profile fields.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_branding (
+    id              INT PRIMARY KEY DEFAULT 1,
+    tool_name       VARCHAR(255) NOT NULL DEFAULT 'Inventory IT',
+    company_name    VARCHAR(255) NOT NULL DEFAULT '',
+    tagline         VARCHAR(255) NOT NULL DEFAULT 'Infrastructure',
+    footer_html     TEXT NOT NULL DEFAULT '',
+    logo_data_url   TEXT,
+    updated_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT app_branding_singleton CHECK (id = 1)
+);
+INSERT INTO app_branding (id, tool_name, company_name, tagline, footer_html)
+VALUES (1, 'Inventory IT', '', 'Infrastructure',
+        '© 2026 Inventory IT. All rights reserved.')
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(128);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(128);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data_url TEXT;
+
 CREATE TABLE IF NOT EXISTS builtin_page_overrides (
     page_key    VARCHAR(64) PRIMARY KEY,
     name        VARCHAR(255),

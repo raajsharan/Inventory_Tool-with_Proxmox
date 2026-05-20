@@ -31,5 +31,7 @@ router.post(
 );
 
 router.get('/me', authenticate, c.me);
+router.put('/me', authenticate, c.updateProfile);
+router.post('/me/change-password', authenticate, c.changePassword);
 
 module.exports = router;
