@@ -161,9 +161,79 @@ async function summary(_req, res, next) {
         LIMIT 10;
     `);
 
-    const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount] = await Promise.all([
+    // ---------------------------------------------------------------
+    // Asset Inventory Active Status (Windows/Linux only, excluding VMware).
+    // ---------------------------------------------------------------
+    const activeStatusQ = db.query(`
+      WITH inv AS (
+        SELECT os_type, server_status FROM assets
+        UNION ALL SELECT os_type, server_status FROM beijing_assets
+        UNION ALL SELECT os_type, server_status FROM physical_esxi_servers
+      ), filtered AS (
+        SELECT * FROM inv
+         WHERE (os_type ILIKE '%windows%' OR os_type ILIKE '%linux%')
+           AND COALESCE(os_type,'') NOT ILIKE '%vmware%'
+      )
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE server_status = 'Active' OR server_status ILIKE 'Alive%')::int       AS active,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'
+                            OR server_status IN ('Decommissioned','Not Alive','Inactive','Dead'))::int AS non_active,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int  AS pending,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                                     AS on_hold,
+        COUNT(*) FILTER (
+          WHERE server_status IS NULL
+             OR (server_status NOT IN ('Active')
+                 AND server_status NOT ILIKE 'Alive%'
+                 AND server_status NOT ILIKE 'Powered Off%'
+                 AND server_status NOT ILIKE 'Power Off%'
+                 AND server_status NOT IN ('Decommissioned','Not Alive','Inactive','Dead')
+                 AND server_status NOT ILIKE 'Onboard%'
+                 AND server_status NOT ILIKE 'Pending%'
+                 AND server_status NOT ILIKE 'On Hold%'))::int                                          AS uncategorized
+      FROM filtered;
+    `);
+
+    // ---------------------------------------------------------------
+    // Asset Inventory Patching Status across VM/physical/bare-metal.
+    // ---------------------------------------------------------------
+    const patchingStatusQ = db.query(`
+      WITH inv AS (
+        SELECT 'assets'::text AS source, server_status, patching_type, eol_status FROM assets
+        UNION ALL SELECT 'beijing_assets', server_status, patching_type, eol_status FROM beijing_assets
+        UNION ALL SELECT 'physical_esxi_servers', server_status, patching_type, eol_status FROM physical_esxi_servers
+      )
+      SELECT
+        COUNT(*)::int                                                                                AS total,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int                                     AS auto_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                                   AS manual_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Exception%')::int                                AS exception,
+        COUNT(*) FILTER (WHERE source = 'beijing_assets')::int                                       AS beijing_it,
+        COUNT(*) FILTER (WHERE eol_status = 'EOL')::int                                              AS eol,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int AS pending,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                                  AS on_hold,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS alive_powered_off
+      FROM inv;
+    `);
+
+    // VM-only location distribution (assets + beijing_assets).
+    const vmLocationQ = db.query(`
+      SELECT COALESCE(location, 'Unspecified') AS location, COUNT(*)::int AS count
+        FROM (
+          SELECT location FROM assets
+          UNION ALL SELECT location FROM beijing_assets
+        ) x
+        WHERE location IS NOT NULL AND location <> ''
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 10;
+    `);
+
+    const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
+           activeStatus, patchingStatus, vmLocation] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
+      activeStatusQ, patchingStatusQ, vmLocationQ,
     ]);
 
     const i = inv.rows[0];
@@ -240,6 +310,10 @@ async function summary(_req, res, next) {
         autoPatching:    extComp.rows[0].auto_patching,
         manualPatching:  extComp.rows[0].manual_patching,
       },
+
+      assetInventoryActiveStatus: activeStatus.rows[0],
+      assetInventoryPatchingStatus: patchingStatus.rows[0],
+      vmCountByLocation: vmLocation.rows,
 
       // Legacy keys kept for backwards compatibility with the old Dashboard.
       total: i.total,

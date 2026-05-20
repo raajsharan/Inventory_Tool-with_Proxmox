@@ -9,8 +9,9 @@ import {
   ClockCircleOutlined, PauseCircleOutlined, CheckCircleOutlined, PoweroffOutlined,
   CloseCircleOutlined, BlockOutlined,
   BarChartOutlined, CalendarOutlined, FundOutlined, RiseOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons';
-import { Pie, Column } from '@ant-design/plots';
+import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
 import { useAppTheme } from '../context/ThemeContext.jsx';
 
@@ -304,9 +305,177 @@ function ExecutiveOverview({ data }) {
   );
 }
 
+function DonutRing({ percent, color = '#22c55e', label, sub }) {
+  const r = 38, c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, percent || 0));
+  const offset = c - (pct / 100) * c;
+  return (
+    <div style={{ width: 110, textAlign: 'center', flexShrink: 0 }}>
+      <svg width="110" height="110" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="50" cy="50" r={r} stroke="rgba(0,0,0,0.08)" strokeWidth="10" fill="none" />
+        <circle cx="50" cy="50" r={r} stroke={color} strokeWidth="10" fill="none"
+          strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+      </svg>
+      <div style={{ marginTop: -82, fontSize: 22, fontWeight: 700 }}>{pct.toFixed(0)}%</div>
+      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 60 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function StatusBox({ value, label, tone }) {
+  const toneStyle = {
+    green:   { bg: 'rgba(34,197,94,0.10)',   fg: '#15803d' },
+    orange:  { bg: 'rgba(249,115,22,0.10)',  fg: '#c2410c' },
+    cyan:    { bg: 'rgba(6,182,212,0.10)',   fg: '#0891b2' },
+    gray:    { bg: 'rgba(148,163,184,0.12)', fg: '#475569' },
+    blue:    { bg: 'rgba(59,130,246,0.10)',  fg: '#1d4ed8' },
+    yellow:  { bg: 'rgba(234,179,8,0.15)',   fg: '#a16207' },
+    purple:  { bg: 'rgba(168,85,247,0.10)',  fg: '#7e22ce' },
+    red:     { bg: 'rgba(239,68,68,0.10)',   fg: '#b91c1c' },
+  }[tone || 'gray'];
+  return (
+    <div style={{
+      background: toneStyle.bg, color: toneStyle.fg,
+      padding: '12px 16px', borderRadius: 8,
+    }}>
+      <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>
+        {(value ?? 0).toLocaleString()}
+      </div>
+      <div style={{ fontSize: 13 }}>{label}</div>
+    </div>
+  );
+}
+
 function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, chartTheme }) {
+  const as = data.assetInventoryActiveStatus || {};
+  const ps = data.assetInventoryPatchingStatus || {};
+  const vmLoc = data.vmCountByLocation || [];
+  const activePct  = as.total ? (as.active / as.total) * 100 : 0;
+  const patchedPct = ps.total ? ((ps.auto_patching + ps.manual_patching) / ps.total) * 100 : 0;
+  const labelColor = isDark ? '#f0f0f0' : '#262626';
+
+  const activeStatusCard = (
+    <Card style={{ marginBottom: 16 }}
+      title={
+        <Space>
+          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <RiseOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}>Asset Inventory Active Status</Typography.Title>
+            <Typography.Text type="secondary">VM and Physical Server records on Windows/Linux, based on patching type and excluding VMware</Typography.Text>
+          </div>
+        </Space>
+      }
+    >
+      <Row gutter={16} align="middle">
+        <Col xs={24} md={5} style={{ textAlign: 'center' }}>
+          <DonutRing percent={activePct} color="#16a34a" label="Active"
+            sub={`${(as.total ?? 0).toLocaleString()} total records`} />
+        </Col>
+        <Col xs={24} md={19}>
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={8}><StatusBox value={as.active}        label="Active"        tone="green" /></Col>
+            <Col xs={24} md={8}><StatusBox value={as.non_active}    label="Non-Active"    tone="orange" /></Col>
+            <Col xs={24} md={8}><StatusBox value={as.pending}       label="Pending"       tone="cyan" /></Col>
+            <Col xs={24} md={8}><StatusBox value={as.on_hold}       label="On Hold"       tone="gray" /></Col>
+            <Col xs={24} md={8}><StatusBox value={as.uncategorized} label="Uncategorized" tone="gray" /></Col>
+            <Col xs={24} md={8}><StatusBox value={as.total}         label="Total"         tone="gray" /></Col>
+          </Row>
+        </Col>
+      </Row>
+    </Card>
+  );
+
+  const patchingStatusCard = (
+    <Card style={{ marginBottom: 16 }}
+      title={
+        <Space>
+          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <ThunderboltOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}>Asset Inventory Patching Status</Typography.Title>
+            <Typography.Text type="secondary">Patching type distribution across VM, Physical Server, and Bare Metal Server inventory</Typography.Text>
+          </div>
+        </Space>
+      }
+    >
+      <Row gutter={16} align="middle">
+        <Col xs={24} md={5} style={{ textAlign: 'center' }}>
+          <DonutRing percent={patchedPct} color="#2563eb" label="Auto + Manual"
+            sub={`${(ps.total ?? 0).toLocaleString()} total records`} />
+        </Col>
+        <Col xs={24} md={19}>
+          <Row gutter={[12, 12]}>
+            <Col xs={24} md={8}><StatusBox value={ps.auto_patching}     label="Auto"               tone="green" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.manual_patching}   label="Manual"             tone="blue" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.exception}         label="Exception"          tone="yellow" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.beijing_it}        label="Beijing IT"         tone="purple" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.eol}               label="EOL"                tone="red" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.pending}           label="Pending"            tone="cyan" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.on_hold}           label="On Hold"            tone="gray" /></Col>
+            <Col xs={24} md={8}><StatusBox value={ps.alive_powered_off} label="Alive Powered Off"  tone="orange" /></Col>
+          </Row>
+        </Col>
+      </Row>
+    </Card>
+  );
+
+  const vmLocationCard = (
+    <Card style={{ marginBottom: 16 }}
+      title={
+        <Space>
+          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <EnvironmentOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}>VM Count by Location</Typography.Title>
+            <Typography.Text type="secondary">Live VM inventory grouped by location</Typography.Text>
+          </div>
+        </Space>
+      }
+    >
+      {vmLoc.length > 0 && (
+        <Bar
+          data={vmLoc}
+          xField="count"
+          yField="location"
+          theme={chartTheme}
+          height={Math.max(220, vmLoc.length * 36)}
+          colorField="location"
+          color="#0d9488"
+          label={{ style: { fill: labelColor } }}
+          axis={{ x: axisStyle, y: axisStyle }}
+          legend={false}
+        />
+      )}
+      <Table
+        size="small"
+        rowKey="location"
+        pagination={false}
+        style={{ marginTop: 12 }}
+        dataSource={vmLoc}
+        columns={[
+          { title: 'Location', dataIndex: 'location' },
+          { title: 'Count', dataIndex: 'count', align: 'right', width: 120,
+            render: v => <a style={{ fontWeight: 600 }}>{(v ?? 0).toLocaleString()}</a> },
+        ]}
+      />
+    </Card>
+  );
+
   return (
     <div>
+
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
           <Card title="Assets by OS Type">
@@ -343,6 +512,10 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           </Card>
         </Col>
       </Row>
+
+      {activeStatusCard}
+      {patchingStatusCard}
+      {vmLocationCard}
 
       <Card title="Recent Assets" style={{ marginTop: 16 }}>
         <Table
