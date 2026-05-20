@@ -7,7 +7,7 @@ import {
 import {
   SaveOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, EditOutlined,
   AppstoreOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, ArrowDownOutlined,
-  LockOutlined, FontSizeOutlined,
+  LockOutlined, FontSizeOutlined, CheckOutlined, CloseOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 
@@ -27,32 +27,113 @@ const INPUT_TYPES = [
   { value: 'date',     label: 'Date' },
 ];
 
-// A <Select> for group/section names that has an inline "Add new group"
-// footer. When the user enters a new name and clicks Add, it calls
-// addGroup() to extend the parent's data.groups list and then assigns the
-// current field to it.
-function GroupSelect({ value, onChange, groups, addGroup, size, style, placeholder }) {
+// A <Select> for group/section names. Custom popup that shows each group
+// with inline Rename and Delete actions, plus an Add row at the bottom.
+function GroupSelect({ value, onChange, groups, addGroup, renameGroup, deleteGroup, size, style, placeholder }) {
   const [newName, setNewName] = useState('');
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [open, setOpen] = useState(false);
+
+  function commitEdit(g) {
+    const clean = (editingValue || '').trim();
+    if (renameGroup && renameGroup(g, clean)) {
+      if (value === g) onChange?.(clean);
+      setEditingGroup(null);
+    }
+  }
+
   return (
     <Select
       size={size}
       value={value}
-      onChange={onChange}
+      onChange={(v) => { onChange?.(v); setOpen(false); }}
+      open={open}
+      onDropdownVisibleChange={(v) => { if (!v) setEditingGroup(null); setOpen(v); }}
       placeholder={placeholder || 'Pick a group'}
       style={style}
+      // We use popupRender to fully control the list; native options are kept
+      // for keyboard access and tag rendering.
       options={(groups || []).map(g => ({ value: g, label: g }))}
-      popupRender={(menu) => (
-        <div>
-          {menu}
+      popupRender={() => (
+        <div onMouseDown={(e) => e.preventDefault()} style={{ padding: 4 }}>
+          {(groups || []).length === 0 && (
+            <div style={{ padding: 12, color: '#94a3b8', textAlign: 'center' }}>No groups yet</div>
+          )}
+          {(groups || []).map(g => {
+            const isActive = value === g;
+            const isEditing = editingGroup === g;
+            return (
+              <div
+                key={g}
+                onClick={() => { if (!isEditing) { onChange?.(g); setOpen(false); } }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 8px', borderRadius: 4, cursor: isEditing ? 'default' : 'pointer',
+                  background: isActive ? 'rgba(22,119,255,0.10)' : 'transparent',
+                }}
+                onMouseEnter={(e) => { if (!isActive && !isEditing) e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
+                onMouseLeave={(e) => { if (!isActive && !isEditing) e.currentTarget.style.background = 'transparent'; }}
+              >
+                {isEditing ? (
+                  <>
+                    <Input
+                      size="small"
+                      value={editingValue}
+                      autoFocus
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onPressEnter={() => commitEdit(g)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ flex: 1 }}
+                    />
+                    <Tooltip title="Save">
+                      <Button size="small" type="primary" icon={<CheckOutlined />}
+                        onClick={(e) => { e.stopPropagation(); commitEdit(g); }} />
+                    </Tooltip>
+                    <Tooltip title="Cancel">
+                      <Button size="small" icon={<CloseOutlined />}
+                        onClick={(e) => { e.stopPropagation(); setEditingGroup(null); }} />
+                    </Tooltip>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ flex: 1, fontWeight: isActive ? 600 : 400 }}>{g}</span>
+                    {renameGroup && (
+                      <Tooltip title="Rename group">
+                        <Button size="small" type="text"
+                          icon={<EditOutlined style={{ color: '#1677ff' }} />}
+                          onClick={(e) => { e.stopPropagation(); setEditingGroup(g); setEditingValue(g); }} />
+                      </Tooltip>
+                    )}
+                    {deleteGroup && (
+                      <Popconfirm
+                        title={`Delete group "${g}"?`}
+                        description="Fields in this group will be moved to a default group."
+                        okType="danger"
+                        onConfirm={(e) => { e?.stopPropagation?.(); deleteGroup(g); }}
+                        onCancel={(e) => e?.stopPropagation?.()}
+                      >
+                        <Tooltip title="Delete group">
+                          <Button size="small" type="text"
+                            icon={<DeleteOutlined style={{ color: '#dc2626' }} />}
+                            onClick={(e) => e.stopPropagation()} />
+                        </Tooltip>
+                      </Popconfirm>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
           <Divider style={{ margin: '6px 0' }} />
-          <div style={{ display: 'flex', gap: 6, padding: '4px 8px 8px' }} onMouseDown={(e) => e.preventDefault()}>
+          <div style={{ display: 'flex', gap: 6, padding: '4px 8px 8px' }}>
             <Input
               size="small"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="New group name"
               onPressEnter={() => {
-                if (addGroup(newName)) { onChange?.(newName.trim()); setNewName(''); }
+                if (addGroup(newName)) { onChange?.(newName.trim()); setNewName(''); setOpen(false); }
               }}
             />
             <Button
@@ -60,7 +141,7 @@ function GroupSelect({ value, onChange, groups, addGroup, size, style, placehold
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => {
-                if (addGroup(newName)) { onChange?.(newName.trim()); setNewName(''); }
+                if (addGroup(newName)) { onChange?.(newName.trim()); setNewName(''); setOpen(false); }
               }}
             >
               Add
@@ -126,6 +207,17 @@ export default function InventoryFields() {
       groups: (d.groups || []).map(g => g === oldName ? clean : g),
       fields: d.fields.map(f => f.section === oldName ? { ...f, section: clean } : f),
     }));
+    return true;
+  }
+
+  function deleteGroup(name) {
+    const fallback = (data?.default_groups || data?.groups || []).find(g => g !== name) || 'Other';
+    setData(d => ({
+      ...d,
+      groups: (d.groups || []).filter(g => g !== name),
+      fields: d.fields.map(f => f.section === name ? { ...f, section: fallback } : f),
+    }));
+    message.success(`Group "${name}" removed — fields moved to "${fallback}"`);
     return true;
   }
 
@@ -265,6 +357,7 @@ export default function InventoryFields() {
           patchField={patchField}
           addGroup={addGroup}
           renameGroup={renameGroup}
+          deleteGroup={deleteGroup}
           openCreateExtra={openCreateExtra}
           openEditExtra={openEditExtra}
           deleteExtra={deleteExtra}
@@ -273,7 +366,8 @@ export default function InventoryFields() {
       )}
 
       {tab === 'move' && (
-        <MoveBuiltInFields data={data} grouped={grouped} patchField={patchField} addGroup={addGroup} renameGroup={renameGroup} />
+        <MoveBuiltInFields data={data} grouped={grouped} patchField={patchField}
+          addGroup={addGroup} renameGroup={renameGroup} deleteGroup={deleteGroup} />
       )}
 
       {tab === 'types' && (
@@ -292,7 +386,7 @@ export default function InventoryFields() {
             <Input placeholder="e.g. Cost Center" />
           </Form.Item>
           <Form.Item name="section" label="Group" rules={[{ required: true }]}>
-            <GroupSelect groups={data?.groups || []} addGroup={addGroup} />
+            <GroupSelect groups={data?.groups || []} addGroup={addGroup} renameGroup={renameGroup} deleteGroup={deleteGroup} />
           </Form.Item>
           <Form.Item name="input_type" label="Input Type" rules={[{ required: true }]}>
             <Select options={INPUT_TYPES} />
@@ -314,7 +408,7 @@ export default function InventoryFields() {
 }
 
 // ===== Tab 1: Fields & Groups =====
-function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, deleteExtra, resetField, patchField, addGroup, renameGroup }) {
+function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, deleteExtra, resetField, patchField, addGroup, renameGroup, deleteGroup }) {
   const [newGroup, setNewGroup] = useState('');
   return (
     <>
@@ -377,6 +471,8 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
                   onChange={(v) => patchField(f.field_key, { section: v })}
                   groups={data.groups}
                   addGroup={addGroup}
+                  renameGroup={renameGroup}
+                  deleteGroup={deleteGroup}
                   style={{ width: '100%' }}
                 />
               </Col>
@@ -414,7 +510,7 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
 }
 
 // ===== Tab 2: Move Built-in Fields =====
-function MoveBuiltInFields({ data, grouped, patchField, addGroup, renameGroup }) {
+function MoveBuiltInFields({ data, grouped, patchField, addGroup, renameGroup, deleteGroup }) {
   const [newGroup, setNewGroup] = useState('');
   const [editingGroup, setEditingGroup] = useState(null);
   const [editingValue, setEditingValue] = useState('');
@@ -512,6 +608,8 @@ function MoveBuiltInFields({ data, grouped, patchField, addGroup, renameGroup })
                     onChange={(v) => patchField(f.field_key, { section: v })}
                     groups={data.groups}
                     addGroup={addGroup}
+                    renameGroup={renameGroup}
+                    deleteGroup={deleteGroup}
                     style={{ width: 220 }}
                   />
                 </Space>
