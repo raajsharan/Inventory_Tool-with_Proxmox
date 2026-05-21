@@ -539,28 +539,219 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
 }
 
 function ExtendedInventoryTab({ data }) {
-  const e = data.extendedInventory || {};
-  const rows = [
-    { metric: 'Total records',          value: e.total },
-    { metric: 'Active',                 value: e.active },
-    { metric: 'Inactive',               value: e.inactive },
-    { metric: 'With ManageEngine',      value: e.meInstalled },
-    { metric: 'With Tenable',           value: e.tenable },
+  const h  = data.headline || {};
+  const e  = data.extendedInventory || {};
+  const ec = data.extEndpointCompliance || {};
+  const depts = data.extDeptDistribution || [];
+
+  const numCell = (color) => (v) => {
+    const n = Number(v ?? 0);
+    if (n === 0) return <Tag color="default">0</Tag>;
+    return <Tag color={color}>{n.toLocaleString()}</Tag>;
+  };
+
+  const deptColumns = [
+    { title: 'Department', dataIndex: 'department', fixed: 'left', width: 160,
+      render: v => <strong>{v}</strong> },
+    { title: 'Total',          dataIndex: 'total',          width: 80,  align: 'center', render: numCell('default') },
+    { title: 'Active',         dataIndex: 'active',         width: 90,  align: 'center', render: numCell('green') },
+    { title: 'Inactive',       dataIndex: 'inactive',       width: 90,  align: 'center', render: numCell('default') },
+    { title: 'Decommissioned', dataIndex: 'decommissioned', width: 130, align: 'center', render: numCell('red') },
+    { title: 'Maintenance',    dataIndex: 'maintenance',    width: 110, align: 'center', render: numCell('orange') },
+    { title: 'Auto',           dataIndex: 'auto_patching',  width: 80,  align: 'center', render: numCell('green') },
+    { title: 'Manual',         dataIndex: 'manual_patching',width: 80,  align: 'center', render: numCell('blue') },
+    { title: 'Exception',      dataIndex: 'exception',      width: 100, align: 'center', render: numCell('orange') },
+    { title: 'Beijing IT',     dataIndex: 'beijing_it',     width: 100, align: 'center', render: numCell('magenta') },
+    { title: 'EOL',            dataIndex: 'eol',            width: 80,  align: 'center', render: numCell('red') },
+    { title: 'Not Applicable', dataIndex: 'not_applicable', width: 130, align: 'center', render: numCell('default') },
+    { title: 'Pending',        dataIndex: 'pending',        width: 90,  align: 'center', render: numCell('cyan') },
+    { title: 'On Hold',        dataIndex: 'on_hold',        width: 90,  align: 'center', render: numCell('default') },
+    { title: 'Alive',          dataIndex: 'alive',          width: 80,  align: 'center', render: numCell('green') },
+    { title: 'Powered Off',    dataIndex: 'powered_off',    width: 110, align: 'center', render: numCell('orange') },
+    { title: 'Not Alive',      dataIndex: 'not_alive',      width: 100, align: 'center', render: numCell('red') },
+    { title: 'ME',             dataIndex: 'me',             width: 70,  align: 'center', render: numCell('purple') },
+    { title: 'Tenable',        dataIndex: 'tenable',        width: 90,  align: 'center', render: numCell('cyan') },
   ];
+
   return (
-    <Card title="Extended Inventory Breakdown">
-      <Table
-        rowKey="metric"
-        size="small"
-        pagination={false}
-        dataSource={rows}
-        columns={[
-          { title: 'Metric', dataIndex: 'metric' },
-          { title: 'Count',  dataIndex: 'value', align: 'right',
-            render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
-        ]}
-      />
-    </Card>
+    <div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <Typography.Text type="secondary">Total Inventory</Typography.Text>
+                <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
+                  {(h.totalInventory ?? 0).toLocaleString()}
+                </div>
+                <Typography.Text type="secondary">Assets under management</Typography.Text>
+              </div>
+              <div style={{ background: '#0f172a', color: 'white', padding: 10, borderRadius: 10 }}>
+                <BlockOutlined style={{ fontSize: 22 }} />
+              </div>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <Typography.Text type="secondary">Patching Compliance</Typography.Text>
+                <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
+                  {(h.patchingCompliancePct ?? 0).toFixed(1)}%
+                </div>
+                <Typography.Text type="secondary">Current compliance level</Typography.Text>
+              </div>
+              <div style={{ background: '#0f172a', color: 'white', padding: 10, borderRadius: 10 }}>
+                <SafetyCertificateOutlined style={{ fontSize: 22 }} />
+              </div>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <Typography.Text type="secondary">Operational Readiness</Typography.Text>
+                <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
+                  {(h.operationalReadinessPct ?? 0).toFixed(2)}%
+                </div>
+                <Typography.Text type="secondary">
+                  {h.pendingActions ?? 0} {h.pendingActions === 1 ? 'asset' : 'assets'} pending actions
+                </Typography.Text>
+              </div>
+              <div style={{ background: '#0f172a', color: 'white', padding: 10, borderRadius: 10 }}>
+                <ThunderboltOutlined style={{ fontSize: 22 }} />
+              </div>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <Typography.Text type="secondary">Infrastructure Health Score</Typography.Text>
+                <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1, color: '#1677ff' }}>
+                  {h.infrastructureHealthScore ?? 0}
+                </div>
+                <Typography.Text type="secondary">Weighted from compliance and readiness</Typography.Text>
+              </div>
+              <div style={{ color: '#94a3b8', padding: 10 }}>
+                <FundOutlined style={{ fontSize: 26 }} />
+              </div>
+            </Space>
+          </Card>
+        </Col>
+      </Row>
+
+      <div style={{ marginTop: 24 }}>
+        <Space size={10} style={{ marginBottom: 12 }}>
+          <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <AppstoreOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}>Extended Inventory Summary</Typography.Title>
+            <Typography.Text type="secondary">Live counts from extended inventory</Typography.Text>
+          </div>
+        </Space>
+        <div className="stat-grid-5">
+          <StatTile icon={<AppstoreOutlined />}      value={e.total}       label="Ext. Total"        color={C.indigo} />
+          <StatTile icon={<CheckCircleOutlined />}   value={e.active}      label="Ext. Active"       color={C.emerald} />
+          <StatTile icon={<PoweroffOutlined />}      value={e.inactive}    label="Ext. Inactive"     color={C.gray} />
+          <StatTile icon={<SafetyOutlined />}        value={e.meInstalled} label="Ext. ME Installed" color={C.emerald} />
+          <StatTile icon={<SafetyCertificateOutlined />} value={e.tenable} label="Ext. Tenable"      color={C.cyan} />
+        </div>
+      </div>
+
+      <Card style={{ marginTop: 24 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <AppstoreOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}>Ext. Endpoint Compliance</Typography.Title>
+              <Typography.Text type="secondary">Password and agent compliance across extended inventory endpoints</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        <Typography.Paragraph style={{ marginBottom: 4 }}>
+          Total <strong>{(ec.total ?? 0).toLocaleString()}</strong> endpoints
+        </Typography.Paragraph>
+        <Typography.Paragraph style={{ marginBottom: 4 }}>
+          For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints we received password info.
+        </Typography.Paragraph>
+        <Typography.Paragraph strong style={{ color: '#1d4ed8', marginBottom: 16 }}>
+          Compliance: {(ec.withPassword ?? 0).toLocaleString()} out of {(ec.total ?? 0).toLocaleString()} ={' '}
+          {(ec.total ? (ec.withPassword / ec.total) * 100 : 0).toFixed(2)}%
+        </Typography.Paragraph>
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={12}><ExtChip label="ManageEngine Installed" value={ec.meInstalled}     tone="emerald" /></Col>
+          <Col xs={24} md={12}><ExtChip label="ME Not Applicable"      value={ec.meNotApplicable} tone="gray" /></Col>
+          <Col xs={24} md={12}><ExtChip label="Name Conflicts"         value={ec.nameConflicts}   tone="yellow" /></Col>
+          <Col xs={24} md={12}><ExtChip label="Auto Patching"          value={ec.autoPatching}    tone="green" /></Col>
+          <Col xs={24} md={12}><ExtChip label="Manual Patching"        value={ec.manualPatching}  tone="blue" /></Col>
+        </Row>
+      </Card>
+
+      <div style={{ marginTop: 24 }}>
+        <Space size={10} style={{ marginBottom: 12 }}>
+          <div style={{ background: 'rgba(124,58,237,0.16)', color: '#7c3aed',
+            width: 28, height: 28, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <AppstoreOutlined />
+          </div>
+          <Typography.Text strong style={{ letterSpacing: 1, color: '#7c3aed', textTransform: 'uppercase' }}>
+            Extended Inventory Analytics
+          </Typography.Text>
+        </Space>
+
+        <Card
+          title={
+            <Space>
+              <TeamOutlined style={{ color: '#7c3aed' }} />
+              <div>
+                <Typography.Title level={5} style={{ margin: 0 }}>Ext. Dept-wise Endpoint Distribution</Typography.Title>
+                <Typography.Text type="secondary">
+                  Extended inventory assets by department with status, patching, agent, and server-state details.
+                  Updated {new Date().toLocaleTimeString()}
+                </Typography.Text>
+              </div>
+            </Space>
+          }
+        >
+          <Table
+            rowKey="department"
+            size="small"
+            dataSource={depts}
+            columns={deptColumns}
+            scroll={{ x: 'max-content' }}
+            pagination={false}
+            summary={(rows) => {
+              if (!rows.length) return null;
+              const sum = (k) => rows.reduce((s, r) => s + Number(r[k] || 0), 0);
+              return (
+                <Table.Summary.Row style={{ background: 'rgba(124,58,237,0.06)', fontWeight: 700 }}>
+                  <Table.Summary.Cell index={0}><strong>Total</strong></Table.Summary.Cell>
+                  {['total','active','inactive','decommissioned','maintenance','auto_patching','manual_patching',
+                    'exception','beijing_it','eol','not_applicable','pending','on_hold','alive','powered_off',
+                    'not_alive','me','tenable'].map((k, i) => (
+                    <Table.Summary.Cell key={k} index={i + 1} align="center">
+                      <strong>{sum(k).toLocaleString()}</strong>
+                    </Table.Summary.Cell>
+                  ))}
+                </Table.Summary.Row>
+              );
+            }}
+          />
+        </Card>
+      </div>
+    </div>
   );
 }
 

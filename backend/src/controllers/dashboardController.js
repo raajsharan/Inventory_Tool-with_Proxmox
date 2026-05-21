@@ -229,11 +229,44 @@ async function summary(_req, res, next) {
         LIMIT 10;
     `);
 
+    // Department-wise breakdown of ext_assets — one row per department
+    // with totals across server_status / patching_type / eol_status /
+    // agent installations.
+    const extDeptDistQ = db.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(department), ''), 'Unassigned')                                   AS department,
+        COUNT(*)::int                                                                          AS total,
+        COUNT(*) FILTER (WHERE server_status = 'Active' OR server_status ILIKE 'Alive%')::int  AS active,
+        COUNT(*) FILTER (
+          WHERE server_status IS NOT NULL
+            AND server_status <> 'Active'
+            AND server_status NOT ILIKE 'Alive%'
+        )::int                                                                                  AS inactive,
+        COUNT(*) FILTER (WHERE server_status = 'Decommissioned' OR server_status ILIKE 'Decom%')::int AS decommissioned,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Maintenance%')::int                        AS maintenance,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int                               AS auto_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                             AS manual_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Exception%')::int                          AS exception,
+        COUNT(*) FILTER (WHERE department ILIKE '%beijing%' OR business_purpose ILIKE '%beijing%')::int AS beijing_it,
+        COUNT(*) FILTER (WHERE eol_status = 'EOL')::int                                        AS eol,
+        COUNT(*) FILTER (WHERE eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A'))::int AS not_applicable,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int AS pending,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                            AS on_hold,
+        COUNT(*) FILTER (WHERE server_status = 'Active' OR server_status ILIKE 'Alive%')::int  AS alive,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS powered_off,
+        COUNT(*) FILTER (WHERE server_status IN ('Decommissioned','Not Alive','Inactive','Dead'))::int AS not_alive,
+        COUNT(*) FILTER (WHERE manage_engine_installed = TRUE)::int                            AS me,
+        COUNT(*) FILTER (WHERE tenable_installed = TRUE)::int                                  AS tenable
+      FROM ext_assets
+      GROUP BY 1
+      ORDER BY 2 DESC;
+    `);
+
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
-           activeStatus, patchingStatus, vmLocation] = await Promise.all([
+           activeStatus, patchingStatus, vmLocation, extDeptDist] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
-      activeStatusQ, patchingStatusQ, vmLocationQ,
+      activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
     ]);
 
     const i = inv.rows[0];
@@ -314,6 +347,7 @@ async function summary(_req, res, next) {
       assetInventoryActiveStatus: activeStatus.rows[0],
       assetInventoryPatchingStatus: patchingStatus.rows[0],
       vmCountByLocation: vmLocation.rows,
+      extDeptDistribution: extDeptDist.rows,
 
       // Legacy keys kept for backwards compatibility with the old Dashboard.
       total: i.total,
