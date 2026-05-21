@@ -137,6 +137,38 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
   }
 }
 
+/* Inventory Fields editor — row cards + greenish inputs that stay readable in both themes. */
+.inv-field-row {
+  background: #ffffff;
+  border: 1px solid #f0f0f0;
+}
+body[data-theme="dark"] .inv-field-row {
+  background: #1f1f1f;
+  border-color: #303030;
+}
+
+.inv-edit-input.ant-input,
+.inv-edit-input.ant-input-affix-wrapper,
+.inv-edit-input .ant-input,
+.inv-edit-input.ant-input-disabled {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+  color: #0f172a !important;
+}
+.inv-edit-input.ant-input::placeholder,
+.inv-edit-input .ant-input::placeholder { color: #94a3b8 !important; }
+
+body[data-theme="dark"] .inv-edit-input.ant-input,
+body[data-theme="dark"] .inv-edit-input.ant-input-affix-wrapper,
+body[data-theme="dark"] .inv-edit-input .ant-input,
+body[data-theme="dark"] .inv-edit-input.ant-input-disabled {
+  background: #0f2e1a !important;
+  border-color: #1f5236 !important;
+  color: #e8f5e9 !important;
+}
+body[data-theme="dark"] .inv-edit-input.ant-input::placeholder,
+body[data-theme="dark"] .inv-edit-input .ant-input::placeholder { color: #6b7d72 !important; }
+
 /* Dropdown Master — accordion list */
 .dd-collapse .ant-collapse-item {
   background: var(--ant-color-bg-container, #fff);

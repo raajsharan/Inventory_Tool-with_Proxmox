@@ -449,9 +449,8 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
           {g.fields.length === 0 && <Typography.Text type="secondary">No fields in this group.</Typography.Text>}
           {g.fields.map(f => (
             <Row key={f.field_key} gutter={16} align="middle" style={{
-              padding: '10px 12px', marginBottom: 8, background: '#fff',
-              border: '1px solid #f0f0f0', borderRadius: 6,
-            }}>
+              padding: '10px 12px', marginBottom: 8, borderRadius: 6,
+            }} className="inv-field-row">
               <Col xs={24} md={6}>
                 <Space direction="vertical" size={2}>
                   <Typography.Text strong>{f.label}</Typography.Text>
@@ -464,7 +463,7 @@ function FieldsAndGroups({ data, grouped, openCreateExtra, openEditExtra, delete
                   value={f.label}
                   disabled={f.frozen && f.field_key === 'asset_password'}
                   onChange={e => patchField(f.field_key, { label: e.target.value })}
-                  style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}
+                  className="inv-edit-input"
                 />
               </Col>
               <Col xs={24} md={5}>
@@ -592,8 +591,8 @@ function MoveBuiltInFields({ data, grouped, patchField, addGroup, renameGroup, d
           {g.fields.map((f, i) => (
             <Row key={f.field_key} gutter={8} align="middle" style={{
               padding: '8px 12px', marginBottom: 6,
-              background: '#fff', border: '1px solid #f0f0f0', borderRadius: 6,
-            }}>
+              borderRadius: 6,
+            }} className="inv-field-row">
               <Col flex="auto">
                 <Space>
                   <Typography.Text strong>{f.label}</Typography.Text>
@@ -656,9 +655,8 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
             </Divider>
             {editable.map(f => (
               <Row key={f.field_key} gutter={16} align="middle" style={{
-                padding: '12px 14px', marginBottom: 10,
-                background: '#fff', border: '1px solid #f0f0f0', borderRadius: 6,
-              }}>
+                padding: '12px 14px', marginBottom: 10, borderRadius: 6,
+              }} className="inv-field-row">
                 <Col xs={24} md={5}>
                   <Space direction="vertical" size={0}>
                     <Typography.Text strong>{f.default_label || f.label}</Typography.Text>
@@ -670,7 +668,7 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
                   <Input
                     value={f.label}
                     onChange={e => patchField(f.field_key, { label: e.target.value })}
-                    style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}
+                    className="inv-edit-input"
                   />
                 </Col>
                 <Col xs={24} md={4}>
@@ -678,7 +676,7 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
                   <Input
                     value={INPUT_TYPES.find(t => t.value === f.default_type)?.label || f.default_type}
                     disabled
-                    style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}
+                    className="inv-edit-input"
                   />
                 </Col>
                 <Col xs={24} md={4}>
@@ -712,7 +710,8 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
                       value={(f.options || []).join('\n')}
                       onChange={e => patchField(f.field_key, { options: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })}
                       placeholder="Option A&#10;Option B&#10;Option C"
-                      style={{ background: '#f0fdf4', borderColor: '#bbf7d0', fontFamily: 'monospace' }}
+                      className="inv-edit-input"
+                      style={{ fontFamily: 'monospace' }}
                     />
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                       {(f.options || []).length} options defined
