@@ -212,7 +212,11 @@ async function summary(_req, res, next) {
         COUNT(*) FILTER (WHERE eol_status = 'EOL')::int                                              AS eol,
         COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int AS pending,
         COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                                  AS on_hold,
-        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS alive_powered_off
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS alive_powered_off,
+        COUNT(*) FILTER (
+          WHERE eol_status IS NULL
+             OR (eol_status NOT ILIKE 'Not Applicable%' AND eol_status NOT IN ('NA','N/A'))
+        )::int                                                                                       AS total_excl_na
       FROM inv;
     `);
 
@@ -227,6 +231,62 @@ async function summary(_req, res, next) {
         GROUP BY 1
         ORDER BY 2 DESC
         LIMIT 10;
+    `);
+
+    // ---------------------------------------------------------------
+    // Weekly Report: VM-side "gaps" (no password / missing hosted_ip /
+    // OS-hostname collisions) and the Ext patching-status row.
+    // ---------------------------------------------------------------
+    const weeklyVmGapsQ = db.query(`
+      WITH vm AS (
+        SELECT asset_password_encrypted, hosted_ip, os_hostname,
+               server_status, eol_status
+          FROM assets               WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT asset_password_encrypted, hosted_ip, os_hostname,
+               server_status, eol_status
+          FROM beijing_assets       WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT asset_password_encrypted, hosted_ip, os_hostname,
+               server_status, eol_status
+          FROM physical_esxi_servers WHERE deleted_at IS NULL
+      ), dup_hostnames AS (
+        SELECT os_hostname FROM vm
+         WHERE os_hostname IS NOT NULL AND os_hostname <> ''
+        GROUP BY 1 HAVING COUNT(*) > 1
+      )
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (
+          WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%')
+            AND asset_password_encrypted IS NULL
+        )::int AS no_password,
+        COUNT(*) FILTER (
+          WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%')
+            AND (hosted_ip IS NULL OR hosted_ip = '')
+        )::int AS no_hosted_ip,
+        (SELECT COUNT(*)::int FROM vm
+           WHERE os_hostname IN (SELECT os_hostname FROM dup_hostnames)
+        ) AS name_conflicts
+      FROM vm;
+    `);
+
+    const extPatchingStatusQ = db.query(`
+      SELECT
+        COUNT(*)::int                                                                           AS total,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int                                AS auto_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                              AS manual_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Exception%')::int                           AS exception,
+        COUNT(*) FILTER (WHERE department ILIKE '%beijing%' OR business_purpose ILIKE '%beijing%')::int AS beijing_it,
+        COUNT(*) FILTER (WHERE eol_status = 'EOL')::int                                         AS eol,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int AS pending,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                             AS on_hold,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS alive_powered_off,
+        COUNT(*) FILTER (
+          WHERE eol_status IS NULL
+             OR (eol_status NOT ILIKE 'Not Applicable%' AND eol_status NOT IN ('NA','N/A'))
+        )::int                                                                                  AS total_excl_na
+      FROM ext_assets;
     `);
 
     // Department-wise breakdown of ext_assets — one row per department
@@ -263,10 +323,11 @@ async function summary(_req, res, next) {
     `);
 
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
-           activeStatus, patchingStatus, vmLocation, extDeptDist] = await Promise.all([
+           activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
+      weeklyVmGapsQ, extPatchingStatusQ,
     ]);
 
     const i = inv.rows[0];
@@ -346,8 +407,10 @@ async function summary(_req, res, next) {
 
       assetInventoryActiveStatus: activeStatus.rows[0],
       assetInventoryPatchingStatus: patchingStatus.rows[0],
+      extInventoryPatchingStatus:   extPatchingStatus.rows[0],
       vmCountByLocation: vmLocation.rows,
       extDeptDistribution: extDeptDist.rows,
+      weeklyVmGaps: weeklyVmGaps.rows[0],
 
       // Legacy keys kept for backwards compatibility with the old Dashboard.
       total: i.total,

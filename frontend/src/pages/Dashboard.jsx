@@ -755,55 +755,190 @@ function ExtendedInventoryTab({ data }) {
   );
 }
 
-function WeeklyReportTab({ data }) {
-  const w = data.weekly || {};
-  const delta = (w.addedThisWeek || 0) - (w.addedLastWeek || 0);
-  const deltaPct = w.addedLastWeek ? Math.round((delta / w.addedLastWeek) * 100) : null;
-  const compliance = Math.round((w.currentCompliancePct ?? 0) * 10) / 10;
+function PatchPill({ n, label, tone }) {
+  const palette = {
+    green:  { bg: 'rgba(34,197,94,0.10)',  fg: '#15803d' },
+    blue:   { bg: 'rgba(59,130,246,0.10)', fg: '#1d4ed8' },
+    yellow: { bg: 'rgba(234,179,8,0.18)',  fg: '#a16207' },
+    purple: { bg: 'rgba(168,85,247,0.10)', fg: '#7e22ce' },
+    red:    { bg: 'rgba(239,68,68,0.10)',  fg: '#b91c1c' },
+    cyan:   { bg: 'rgba(6,182,212,0.10)',  fg: '#0e7490' },
+    gray:   { bg: 'rgba(148,163,184,0.12)',fg: '#475569' },
+    orange: { bg: 'rgba(249,115,22,0.10)', fg: '#c2410c' },
+  }[tone || 'gray'];
+  return (
+    <div style={{
+      background: palette.bg, color: palette.fg,
+      borderRadius: 8, padding: '8px 12px',
+    }}>
+      <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{(n ?? 0).toLocaleString()}</div>
+      <div style={{ fontSize: 12 }}>{label}</div>
+    </div>
+  );
+}
+
+function PatchingStatusCard({ title, data, isDark }) {
+  const auto = data?.auto_patching ?? 0;
+  const manual = data?.manual_patching ?? 0;
+  const totalExclNa = data?.total_excl_na ?? data?.total ?? 0;
+  const pct = totalExclNa ? Math.round(((auto + manual) / totalExclNa) * 100) : 0;
+  const overall = (data?.auto_patching ?? 0) + (data?.manual_patching ?? 0)
+    + (data?.pending ?? 0) + (data?.on_hold ?? 0) + (data?.alive_powered_off ?? 0);
+  const overallPct = totalExclNa ? ((overall / totalExclNa) * 100) : 0;
 
   return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24} md={8}>
-        <Card>
-          <Statistic
-            title="Assets added this week"
-            value={w.addedThisWeek ?? 0}
-            prefix={<CalendarOutlined />}
-          />
-          <Typography.Text type="secondary">
-            Previous 7 days: <strong>{w.addedLastWeek ?? 0}</strong>
-            {deltaPct !== null && (
-              <> · <span style={{ color: delta >= 0 ? '#389e0d' : '#cf1322' }}>
-                {delta >= 0 ? '+' : ''}{deltaPct}%
-              </span></>
-            )}
-          </Typography.Text>
-        </Card>
+    <Card type="inner"
+      title={
+        <Space>
+          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+            width: 30, height: 30, borderRadius: 6, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <ThunderboltOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}>{title}</Typography.Title>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>Patching type distribution</Typography.Text>
+          </div>
+        </Space>
+      }
+    >
+      <Row gutter={16} align="middle">
+        <Col xs={24} md={6} style={{ textAlign: 'center' }}>
+          <DonutRing percent={pct} color="#2563eb" label="Auto + Manual"
+            sub={`${totalExclNa.toLocaleString()} total records`} />
+        </Col>
+        <Col xs={24} md={18}>
+          <Row gutter={[10, 10]}>
+            <Col xs={12} md={8}><PatchPill n={data?.auto_patching}     label="Auto"               tone="green" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.manual_patching}   label="Manual"             tone="blue" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.exception}         label="Exception"          tone="yellow" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.beijing_it}        label="Beijing IT"         tone="purple" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.eol}               label="EOL - No Patches"   tone="red" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.pending}           label="Pending"            tone="cyan" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.on_hold}           label="On Hold"            tone="gray" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.alive_powered_off} label="Alive Powered Off"  tone="orange" /></Col>
+          </Row>
+        </Col>
+      </Row>
+      <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>
+        <strong>Overall:</strong> {overall.toLocaleString()} / (Auto + Manual + Pending + On Hold + Alive Powered Off)
+        = <strong>{overallPct.toFixed(2)}%</strong>
+      </Typography.Paragraph>
+    </Card>
+  );
+}
+
+function WeeklyReportRow({ label, children }) {
+  return (
+    <Row gutter={16} style={{ padding: '16px 0', borderBottom: '1px solid var(--ant-color-border-secondary, #f0f0f0)' }}>
+      <Col xs={24} md={4}>
+        <Typography.Text strong>{label}</Typography.Text>
       </Col>
-      <Col xs={24} md={8}>
-        <Card>
-          <Statistic
-            title="Patching Compliance"
-            value={compliance}
-            suffix="%"
-            prefix={<SafetyCertificateOutlined />}
-          />
-          <Progress percent={Math.min(100, compliance)} showInfo={false} strokeColor="#16a34a" />
-        </Card>
-      </Col>
-      <Col xs={24} md={8}>
-        <Card>
-          <Statistic
-            title="Total managed"
-            value={w.totalNow ?? 0}
-            prefix={<DatabaseOutlined />}
-          />
-          <Typography.Text type="secondary">
-            Compliant: <strong>{w.compliantNow ?? 0}</strong>
-          </Typography.Text>
-        </Card>
-      </Col>
+      <Col xs={24} md={20}>{children}</Col>
     </Row>
+  );
+}
+
+function WeeklyReportTab({ data, isDark }) {
+  const msl = data.mslCompliance || {};
+  const ec  = data.extEndpointCompliance || {};
+  const vmGaps = data.weeklyVmGaps || {};
+  const assetPatching = data.assetInventoryPatchingStatus || {};
+  const extPatching   = data.extInventoryPatchingStatus || {};
+
+  const mslOverall  = msl.mslNumerator ?? 0;
+  const mslOverallD = msl.mslDenominator ?? 0;
+  const extNum  = msl.extNumerator ?? 0;
+  const extDen  = msl.extDenominator ?? 0;
+  const combNum = msl.combinedNumerator ?? 0;
+  const combDen = msl.combinedDenominator ?? 0;
+  const pct = (n, d) => d ? ((n / d) * 100).toFixed(2) : '0.00';
+
+  const apTotal = (assetPatching.total_excl_na ?? assetPatching.total) ?? 0;
+  const epTotal = (extPatching.total_excl_na   ?? extPatching.total)   ?? 0;
+  const overallPatchN = (assetPatching.auto_patching ?? 0) + (assetPatching.manual_patching ?? 0)
+                     + (extPatching.auto_patching ?? 0)   + (extPatching.manual_patching ?? 0);
+  const overallPatchD = apTotal + epTotal;
+  const overallPatchPct = overallPatchD ? ((overallPatchN / overallPatchD) * 100).toFixed(2) : '0.00';
+
+  return (
+    <div>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+        Last refreshed: {new Date().toLocaleString()}
+      </Typography.Text>
+
+      <Card bodyStyle={{ padding: '0 20px' }}>
+        <WeeklyReportRow label="Asset Inventory">
+          <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 8, textDecoration: 'underline' }}>
+            MSL OVERALL ACTIVE COUNT STATUS
+          </Typography.Title>
+          <Typography.Paragraph style={{ marginBottom: 6 }}>
+            <strong>Total Inventory MSL Compliance:</strong>
+          </Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            <strong>Asset Inventory Overall:</strong> {mslOverall.toLocaleString()} out of {mslOverallD.toLocaleString()} X 100 = <strong>{pct(mslOverall, mslOverallD)}%</strong>
+          </Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            <strong>Ext. Asset Inventory Overall:</strong> {extNum.toLocaleString()} out of {extDen.toLocaleString()} X 100 = <strong>{pct(extNum, extDen)}%</strong>
+          </Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 16 }}>
+            <strong>Asset + Ext Overall:</strong> {combNum.toLocaleString()} out of {combDen.toLocaleString()} X 100 = <strong>{pct(combNum, combDen)}%</strong>
+          </Typography.Paragraph>
+
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            <strong>Total Asset Inventory Count is {mslOverall.toLocaleString()}</strong>
+          </Typography.Paragraph>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>From active inventory, pending/follow-ups:</Typography.Paragraph>
+          <ul style={{ paddingLeft: 18, marginBottom: 4 }}>
+            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
+            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
+            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
+            <li><strong>Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
+          </ul>
+        </WeeklyReportRow>
+
+        <WeeklyReportRow label="Extended Inventory">
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            <strong>Total {(ec.total ?? 0).toLocaleString()} endpoints</strong>
+          </Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints, password info is received.
+          </Typography.Paragraph>
+          <Typography.Paragraph strong style={{ color: '#1d4ed8', marginBottom: 12 }}>
+            Compliance: {(ec.withPassword ?? 0).toLocaleString()} out of {(ec.total ?? 0).toLocaleString()} = {pct(ec.withPassword, ec.total)}%
+          </Typography.Paragraph>
+          <ul style={{ paddingLeft: 18, marginBottom: 0 }}>
+            <li><strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
+            <li><strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
+            <li><strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
+          </ul>
+        </WeeklyReportRow>
+
+        <WeeklyReportRow label="Patch Management Solution">
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={
+              <span>
+                <strong>Overall Patch Compliance (Auto + Manual):</strong>{' '}
+                <strong>{overallPatchN.toLocaleString()}</strong> / <strong>{overallPatchD.toLocaleString()}</strong> ={' '}
+                <strong>{overallPatchPct}%</strong>{' '}
+                <Typography.Text type="secondary">(Not Applicable excluded)</Typography.Text>
+              </span>
+            }
+          />
+          <Row gutter={[16, 16]}>
+            <Col xs={24} lg={12}>
+              <PatchingStatusCard title="Asset Inventory Patching Status" data={assetPatching} isDark={isDark} />
+            </Col>
+            <Col xs={24} lg={12}>
+              <PatchingStatusCard title="Ext. Inventory Patching Status" data={extPatching} isDark={isDark} />
+            </Col>
+          </Row>
+        </WeeklyReportRow>
+      </Card>
+    </div>
   );
 }
 
@@ -854,7 +989,7 @@ export default function Dashboard() {
           },
           {
             key: 'weekly', label: 'Weekly Report',
-            children: <WeeklyReportTab data={data} />,
+            children: <WeeklyReportTab data={data} isDark={isDark} />,
           },
         ]}
       />
