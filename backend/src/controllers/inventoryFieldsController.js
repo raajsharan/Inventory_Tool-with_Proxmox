@@ -7,7 +7,14 @@ async function get(req, res, next) {
 async function bulkUpdateOverrides(req, res, next) {
   try {
     const updates = Array.isArray(req.body.updates) ? req.body.updates : [];
-    res.json(await svc.upsertOverrides(req.params.pageKey, updates, req.user?.id));
+    const groups  = Array.isArray(req.body.groups)  ? req.body.groups  : null;
+    if (updates.length) {
+      await svc.upsertOverrides(req.params.pageKey, updates, req.user?.id);
+    }
+    if (groups) {
+      return res.json(await svc.setGroups(req.params.pageKey, groups, req.user?.id));
+    }
+    res.json(await svc.get(req.params.pageKey));
   } catch (e) { next(e); }
 }
 

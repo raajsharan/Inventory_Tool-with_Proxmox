@@ -88,13 +88,16 @@ function slugifyKey(label) {
 async function get(pageKey) {
   if (!PAGE_KEYS.has(pageKey)) throw new ApiError(404, 'Unknown built-in page');
 
-  // Pull overrides + extras + hidden fields together.
-  const [{ rows: overrideRows }, hidden, fieldVisData] = await Promise.all([
+  // Pull overrides + extras + hidden fields + the saved group order together.
+  const [{ rows: overrideRows }, hidden, fieldVisData, { rows: groupRows }] = await Promise.all([
     db.query(`SELECT * FROM builtin_field_overrides WHERE page_key = $1`, [pageKey]),
     db.query(`SELECT hidden FROM page_field_visibility WHERE page_key = $1`, [pageKey])
       .then(r => r.rows[0]?.hidden || []),
     fieldVis.get(pageKey).catch(() => ({ fields: [] })),
+    db.query(`SELECT groups FROM builtin_page_group_overrides WHERE page_key = $1`, [pageKey]),
   ]);
+
+  const savedGroups = Array.isArray(groupRows[0]?.groups) ? groupRows[0].groups : null;
 
   const overrideMap = {};
   for (const r of overrideRows) overrideMap[r.field_key] = r;
@@ -142,16 +145,61 @@ async function get(pageKey) {
   const allFields = [...builtIns, ...extras].sort((a, b) =>
     a.section === b.section ? a.sort_order - b.sort_order : 0);
 
-  // Discover any non-default group names present in overrides/extras.
-  const groupSet = new Set(DEFAULT_GROUPS);
-  for (const f of allFields) groupSet.add(f.section);
+  // Group list precedence:
+  //  - If savedGroups exists, use it as the canonical order. Append any
+  //    sections that fields are currently using but aren't in savedGroups
+  //    (so a field can never end up orphaned with no visible group).
+  //  - Otherwise fall back to DEFAULT_GROUPS + discovered sections.
+  let groups;
+  if (savedGroups) {
+    const set = new Set(savedGroups);
+    for (const f of allFields) if (f.section) set.add(f.section);
+    // Preserve savedGroups order, then append any discovered sections.
+    const extra = [];
+    for (const f of allFields) {
+      if (f.section && !savedGroups.includes(f.section) && !extra.includes(f.section)) {
+        extra.push(f.section);
+      }
+    }
+    groups = [...savedGroups, ...extra];
+  } else {
+    const set = new Set(DEFAULT_GROUPS);
+    for (const f of allFields) set.add(f.section);
+    groups = Array.from(set);
+  }
 
   return {
     page_key: pageKey,
-    groups: Array.from(groupSet),
+    groups,
     default_groups: DEFAULT_GROUPS,
     fields: allFields,
   };
+}
+
+async function setGroups(pageKey, groups, userId) {
+  if (!PAGE_KEYS.has(pageKey)) throw new ApiError(404, 'Unknown built-in page');
+  if (!Array.isArray(groups)) throw new ApiError(400, 'groups must be an array');
+  // Trim, drop empties, de-duplicate (case-insensitive), keep first occurrence.
+  const seen = new Set();
+  const clean = [];
+  for (const g of groups) {
+    const s = String(g || '').trim();
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push(s);
+  }
+  await db.query(
+    `INSERT INTO builtin_page_group_overrides (page_key, groups, updated_by, updated_at)
+     VALUES ($1, $2::jsonb, $3, NOW())
+     ON CONFLICT (page_key) DO UPDATE
+       SET groups     = EXCLUDED.groups,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+    [pageKey, JSON.stringify(clean), userId || null]
+  );
+  return get(pageKey);
 }
 
 // updates: [{ field_key, label?, section?, input_type?, options?, is_required?, sort_order? }]
@@ -282,6 +330,7 @@ async function resetField(pageKey, fieldKey) {
 module.exports = {
   get,
   upsertOverrides,
+  setGroups,
   createExtra,
   updateExtra,
   deleteExtra,

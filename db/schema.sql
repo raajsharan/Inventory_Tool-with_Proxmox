@@ -454,6 +454,18 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(128);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role VARCHAR(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data_url TEXT;
 
+-- ---------------------------------------------------------------------
+-- builtin_page_group_overrides — remembers each built-in page's group
+-- list (renames, deletions, additions, empty groups). When no row exists
+-- the inventoryFieldsService falls back to its DEFAULT_GROUPS array.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS builtin_page_group_overrides (
+    page_key     VARCHAR(64) PRIMARY KEY,
+    groups       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS builtin_page_overrides (
     page_key    VARCHAR(64) PRIMARY KEY,
     name        VARCHAR(255),

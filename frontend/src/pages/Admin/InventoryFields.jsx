@@ -236,7 +236,10 @@ export default function InventoryFields() {
         sort_order: f.sort_order,
       }));
     try {
-      const { data: fresh } = await api.put(`/inventory-fields/${pageKey}`, { updates });
+      const { data: fresh } = await api.put(`/inventory-fields/${pageKey}`, {
+        updates,
+        groups: data.groups || [],   // persist renames, deletions, new groups, empty groups
+      });
       setData(fresh);
       message.success('Saved');
     } catch (e) {
