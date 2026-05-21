@@ -231,7 +231,9 @@ export default function InventoryFields() {
         label: f.label,
         section: f.section,
         input_type: f.frozen ? null : f.input_type,
-        options: f.input_type === 'dropdown' ? (f.options || []) : null,
+        options: f.input_type === 'dropdown'
+          ? (f.options || []).map(s => String(s ?? '').trim()).filter(Boolean)
+          : null,
         is_required: !!f.is_required,
         sort_order: f.sort_order,
       }));
@@ -708,13 +710,13 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
                     <Input.TextArea
                       rows={3}
                       value={(f.options || []).join('\n')}
-                      onChange={e => patchField(f.field_key, { options: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })}
+                      onChange={e => patchField(f.field_key, { options: e.target.value.split('\n') })}
                       placeholder="Option A&#10;Option B&#10;Option C"
                       className="inv-edit-input"
                       style={{ fontFamily: 'monospace' }}
                     />
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                      {(f.options || []).length} options defined
+                      {(f.options || []).filter(s => s && s.trim()).length} options defined
                     </Typography.Text>
                   </Col>
                 )}
