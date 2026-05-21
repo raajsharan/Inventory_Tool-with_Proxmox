@@ -195,6 +195,36 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     idrac_enabled: { xs: 12, md: 6 }, idrac_ip: { xs: 24, md: 6 },
   };
 
+  // Build a Form.Item that respects an input_type override from the field
+  // editor. If the field is unchanged from its default, falls back to the
+  // caller's defaultChild. Used by the "plain" built-in widgets (vm_name,
+  // asset_type, ...). Frozen and DB-linked fields bypass this and keep
+  // their special widgets so we don't lose IP/asset-tag/cascade behavior.
+  function overridableFormItem({ fieldKey, name, label, defaultChild, defaultValuePropName = 'value', rules, extra }) {
+    const f = fieldMeta.byKey[fieldKey];
+    const type = f?.input_type;
+    const isOverridden = type && type !== f?.default_type;
+    let child = defaultChild;
+    let valuePropName = defaultValuePropName;
+    if (isOverridden) {
+      switch (type) {
+        case 'textarea': child = <Input.TextArea rows={3} />; valuePropName = 'value'; break;
+        case 'number':   child = <InputNumber style={{ width: '100%' }} />; valuePropName = 'value'; break;
+        case 'dropdown': child = (
+          <Select options={(f.options || []).map(o => ({ label: o, value: o }))} allowClear showSearch optionFilterProp="label" />
+        ); valuePropName = 'value'; break;
+        case 'toggle':   child = <Switch />; valuePropName = 'checked'; break;
+        case 'date':     child = <DatePicker style={{ width: '100%' }} />; valuePropName = 'value'; break;
+        default:         child = <Input />; valuePropName = 'value';
+      }
+    }
+    return (
+      <Form.Item name={name} label={label} rules={rules} extra={extra} valuePropName={valuePropName}>
+        {child}
+      </Form.Item>
+    );
+  }
+
   function renderBuiltinWidget(field_key) {
     if (isHidden(field_key)) return null;
     const width = FIELD_WIDTHS[field_key] || { xs: 24, md: 8 };
@@ -202,9 +232,18 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
 
     switch (field_key) {
       case 'vm_name':
-        return wrap(<Form.Item name="vmName" label={labelOf('vm_name', 'VM Name')} rules={[{ required: true }]}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'vm_name', name: 'vmName',
+          label: labelOf('vm_name', 'VM Name'),
+          rules: [{ required: true }],
+          defaultChild: <Input />,
+        }));
       case 'os_hostname':
-        return wrap(<Form.Item name="osHostname" label={labelOf('os_hostname', 'OS Hostname')}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'os_hostname', name: 'osHostname',
+          label: labelOf('os_hostname', 'OS Hostname'),
+          defaultChild: <Input />,
+        }));
       case 'ip_address':
         return wrap(
           <Form.Item
@@ -245,7 +284,11 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           ><Input /></Form.Item>
         );
       case 'asset_type':
-        return wrap(<Form.Item name="assetType" label={labelOf('asset_type', 'Asset Type')}><Input placeholder="e.g. Virtual Server" /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'asset_type', name: 'assetType',
+          label: labelOf('asset_type', 'Asset Type'),
+          defaultChild: <Input placeholder="e.g. Virtual Server" />,
+        }));
       case 'os_type':
         return wrap(
           <Form.Item name="osType" label={labelOf('os_type', 'OS Type')}>
@@ -259,7 +302,11 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           </Form.Item>
         );
       case 'assigned_user':
-        return wrap(<Form.Item name="assignedUser" label={labelOf('assigned_user', 'Assigned User')}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'assigned_user', name: 'assignedUser',
+          label: labelOf('assigned_user', 'Assigned User'),
+          defaultChild: <Input />,
+        }));
       case 'department':
         return wrap(
           <Form.Item name="department" label={labelOf('department', 'Department')}>
@@ -274,7 +321,11 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           </Form.Item>
         );
       case 'business_purpose':
-        return wrap(<Form.Item name="businessPurpose" label={labelOf('business_purpose', 'Business Purpose')}><Input.TextArea rows={2} /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'business_purpose', name: 'businessPurpose',
+          label: labelOf('business_purpose', 'Business Purpose'),
+          defaultChild: <Input.TextArea rows={2} />,
+        }));
       case 'server_status':
         return wrap(<Form.Item name="serverStatus" label={labelOf('server_status', 'Server Status')}><Select allowClear options={opts('server_status')} /></Form.Item>);
       case 'patching_type':
@@ -288,13 +339,29 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       case 'eol_status':
         return wrap(<Form.Item name="eolStatus" label={labelOf('eol_status', 'EOL Status')}><Select allowClear options={opts('eol_status')} /></Form.Item>);
       case 'ome_status':
-        return wrap(<Form.Item name="omeStatus" label={labelOf('ome_status', 'OME Status')}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'ome_status', name: 'omeStatus',
+          label: labelOf('ome_status', 'OME Status'),
+          defaultChild: <Input />,
+        }));
       case 'hosted_ip':
-        return wrap(<Form.Item name="hostedIp" label={labelOf('hosted_ip', 'Hosted IP')}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'hosted_ip', name: 'hostedIp',
+          label: labelOf('hosted_ip', 'Hosted IP'),
+          defaultChild: <Input />,
+        }));
       case 'serial_number':
-        return wrap(<Form.Item name="serialNumber" label={labelOf('serial_number', 'Serial Number')}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'serial_number', name: 'serialNumber',
+          label: labelOf('serial_number', 'Serial Number'),
+          defaultChild: <Input />,
+        }));
       case 'asset_username':
-        return wrap(<Form.Item name="assetUsername" label={labelOf('asset_username', 'Asset Username')}><Input /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'asset_username', name: 'assetUsername',
+          label: labelOf('asset_username', 'Asset Username'),
+          defaultChild: <Input />,
+        }));
       case 'asset_password':
         return wrap(
           <Form.Item name="assetPassword" label={labelOf('asset_password', 'Asset Password')} extra="Encrypted (AES-256-GCM) at rest">
@@ -354,13 +421,29 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           </Col>
         );
       case 'additional_remarks':
-        return wrap(<Form.Item name="additionalRemarks" label={labelOf('additional_remarks', 'Additional Remarks')}><Input.TextArea rows={2} /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'additional_remarks', name: 'additionalRemarks',
+          label: labelOf('additional_remarks', 'Additional Remarks'),
+          defaultChild: <Input.TextArea rows={2} />,
+        }));
       case 'manage_engine_installed':
-        return wrap(<Form.Item name="manageEngineInstalled" label={labelOf('manage_engine_installed', 'ManageEngine Installed')} valuePropName="checked"><Switch /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'manage_engine_installed', name: 'manageEngineInstalled',
+          label: labelOf('manage_engine_installed', 'ManageEngine Installed'),
+          defaultChild: <Switch />, defaultValuePropName: 'checked',
+        }));
       case 'tenable_installed':
-        return wrap(<Form.Item name="tenableInstalled" label={labelOf('tenable_installed', 'Tenable Installed')} valuePropName="checked"><Switch /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'tenable_installed', name: 'tenableInstalled',
+          label: labelOf('tenable_installed', 'Tenable Installed'),
+          defaultChild: <Switch />, defaultValuePropName: 'checked',
+        }));
       case 'idrac_enabled':
-        return wrap(<Form.Item name="idracEnabled" label={labelOf('idrac_enabled', 'iDRAC')} valuePropName="checked"><Switch /></Form.Item>);
+        return wrap(overridableFormItem({
+          fieldKey: 'idrac_enabled', name: 'idracEnabled',
+          label: labelOf('idrac_enabled', 'iDRAC'),
+          defaultChild: <Switch />, defaultValuePropName: 'checked',
+        }));
       case 'idrac_ip':
         return wrap(<Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}><Input placeholder="10.x.x.x" /></Form.Item>);
       default:
