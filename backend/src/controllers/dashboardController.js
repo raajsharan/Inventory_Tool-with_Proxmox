@@ -271,6 +271,41 @@ async function summary(_req, res, next) {
       FROM vm;
     `);
 
+    // ---------------------------------------------------------------
+    // Weekly Report extras: location-wise + department-wise patching
+    // breakdown across the three VM-side tables. Beijing IT column =
+    // rows that came from the beijing_assets table for that bucket.
+    // ---------------------------------------------------------------
+    const buildWeeklyBreakdown = (groupCol) => `
+      WITH inv AS (
+        SELECT 'assets'::text AS source, location, department, server_status, patching_type, eol_status
+          FROM assets WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT 'beijing_assets', location, department, server_status, patching_type, eol_status
+          FROM beijing_assets WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT 'physical_esxi_servers', location, department, server_status, patching_type, eol_status
+          FROM physical_esxi_servers WHERE deleted_at IS NULL
+      )
+      SELECT
+        COALESCE(NULLIF(TRIM(${groupCol}), ''), 'Unassigned')                                        AS bucket,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS alive_powered_off,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int                                     AS auto_patching,
+        COUNT(*) FILTER (WHERE source = 'beijing_assets')::int                                       AS beijing_it,
+        COUNT(*) FILTER (WHERE eol_status = 'EOL')::int                                              AS eol,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Exception%')::int                                AS exception,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                                   AS manual_patching,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                                  AS on_hold,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int AS onboard_pending,
+        COUNT(*)::int                                                                                AS total
+      FROM inv
+      WHERE COALESCE(NULLIF(TRIM(${groupCol}), ''), '') <> ''
+      GROUP BY 1
+      ORDER BY total DESC, 1
+    `;
+    const weeklyLocationPatchingQ   = db.query(buildWeeklyBreakdown('location'));
+    const weeklyDepartmentPatchingQ = db.query(buildWeeklyBreakdown('department'));
+
     const extPatchingStatusQ = db.query(`
       SELECT
         COUNT(*)::int                                                                           AS total,
@@ -323,11 +358,13 @@ async function summary(_req, res, next) {
     `);
 
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
-           activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus] = await Promise.all([
+           activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
+           weeklyLocationPatching, weeklyDepartmentPatching] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
+      weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
     ]);
 
     const i = inv.rows[0];
@@ -411,6 +448,8 @@ async function summary(_req, res, next) {
       vmCountByLocation: vmLocation.rows,
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
+      weeklyLocationPatching:   weeklyLocationPatching.rows,
+      weeklyDepartmentPatching: weeklyDepartmentPatching.rows,
 
       // Legacy keys kept for backwards compatibility with the old Dashboard.
       total: i.total,

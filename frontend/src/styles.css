@@ -137,6 +137,16 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
   }
 }
 
+/* Weekly Report breakdown tables — blue header band like the screenshot. */
+.weekly-breakdown-card .ant-table-thead > tr > th {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+}
+body[data-theme="dark"] .weekly-breakdown-card .ant-table-thead > tr > th {
+  background: #1e40af !important;
+}
+
 /* Inventory Fields editor — row cards + greenish inputs that stay readable in both themes. */
 .inv-field-row {
   background: #ffffff;
