@@ -116,8 +116,12 @@ async function update(id, body, userId) {
   return scrub(rows[0]);
 }
 
-async function remove(id) {
-  const { rowCount } = await db.query(`DELETE FROM ${TABLE} WHERE id = $1`, [id]);
+async function remove(id, userId) {
+  const { rowCount } = await db.query(
+    `UPDATE ${TABLE} SET deleted_at = NOW(), deleted_by = $2
+       WHERE id = $1 AND deleted_at IS NULL`,
+    [id, userId || null]
+  );
   if (!rowCount) throw new ApiError(404, 'Asset not found');
 }
 
@@ -129,7 +133,7 @@ async function get(id) {
        FROM ${TABLE} a
        LEFT JOIN users u  ON u.id  = a.created_by
        LEFT JOIN users u2 ON u2.id = a.updated_by
-      WHERE a.id = $1`,
+      WHERE a.id = $1 AND a.deleted_at IS NULL`,
     [id]
   );
   if (!rows.length) throw new ApiError(404, 'Asset not found');
@@ -144,7 +148,7 @@ async function viewPassword(id) {
 }
 
 async function list({ search, osType, serverStatus, location, eolStatus, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
-  const where = [];
+  const where = ['a.deleted_at IS NULL'];
   const params = [];
   if (search) {
     params.push(`%${search}%`);
@@ -173,7 +177,7 @@ async function list({ search, osType, serverStatus, location, eolStatus, page = 
        LIMIT ${pageSize} OFFSET ${offset}`,
       params
     ),
-    db.query(`SELECT COUNT(*)::int AS c FROM ${TABLE} ${whereSql}`, params),
+    db.query(`SELECT COUNT(*)::int AS c FROM ${TABLE} a ${whereSql}`, params),
   ]);
 
   return {

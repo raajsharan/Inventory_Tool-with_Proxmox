@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
 
 export default function CustomPageView() {
   const { slug } = useParams();
@@ -19,6 +20,7 @@ export default function CustomPageView() {
   const [pageEditOpen, setPageEditOpen] = useState(false);
   const [pageForm] = Form.useForm();
   const [pg, setPg] = useState({ current: 1, pageSize: 20 });
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
@@ -36,9 +38,11 @@ export default function CustomPageView() {
   }
   useEffect(() => { loadRecords(); }, [page, pg.current, pg.pageSize]); // eslint-disable-line
 
-  async function onDelete(id) {
-    await api.delete(`/custom-pages/${page.id}/records/${id}`);
-    message.success('Deleted');
+  async function onDeleteConfirmed(password) {
+    if (!deleteTarget) return;
+    await api.delete(`/custom-pages/${page.id}/records/${deleteTarget}`, { data: { password } });
+    message.success('Moved to Recycle Bin');
+    setDeleteTarget(null);
     loadRecords();
   }
 
@@ -138,9 +142,8 @@ export default function CustomPageView() {
               <Space>
                 {canWrite && <Button size="small" icon={<EditOutlined />} onClick={() => nav(`/custom-pages/${slug}/${r.id}/edit`)} />}
                 {isAdmin && (
-                  <Popconfirm title="Delete?" onConfirm={() => onDelete(r.id)}>
-                    <Button size="small" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
+                  <Button size="small" danger icon={<DeleteOutlined />}
+                    onClick={() => setDeleteTarget(r.id)} />
                 )}
               </Space>
             )
@@ -173,6 +176,15 @@ export default function CustomPageView() {
           </Typography.Text>
         </Form>
       </Modal>
+
+      <PasswordConfirmModal
+        open={!!deleteTarget}
+        title="Delete this record?"
+        message="The record will be moved to the Recycle Bin. A superadmin can restore it later."
+        okText="Delete"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={onDeleteConfirmed}
+      />
     </Card>
   );
 }

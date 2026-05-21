@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Card, Table, Input, Select, Space, Button, Tag, Popconfirm, App, Row, Col, Typography, Tooltip,
+  Card, Table, Input, Select, Space, Button, Tag, App, Row, Col, Typography, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
 
 export default function AssetList({
   apiPrefix = '/assets',
@@ -34,6 +35,7 @@ export default function AssetList({
   const labelOf = (k, fallback) => fieldLabels[k] || fallback;
   const [revealed, setRevealed] = useState({}); // id -> decrypted password
   const [revealing, setRevealing] = useState({}); // id -> bool
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, vm_name } awaiting password confirm
 
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
@@ -65,9 +67,11 @@ export default function AssetList({
 
   function onSearch() { setPage(1); load(); }
 
-  async function onDelete(id) {
-    await api.delete(`${apiPrefix}/${id}`);
-    message.success('Asset deleted');
+  async function onDeleteConfirmed(password) {
+    if (!deleteTarget) return;
+    await api.delete(`${apiPrefix}/${deleteTarget.id}`, { data: { password } });
+    message.success('Moved to Recycle Bin');
+    setDeleteTarget(null);
     load();
   }
 
@@ -203,11 +207,10 @@ export default function AssetList({
             <Button size="small" icon={<EditOutlined />} onClick={() => nav(`${basePath}/${r.id}`)} />
           </Tooltip>
           {isAdmin && (
-            <Popconfirm title="Delete this asset?" onConfirm={() => onDelete(r.id)} okType="danger">
-              <Tooltip title="Delete">
-                <Button size="small" danger icon={<DeleteOutlined />} />
-              </Tooltip>
-            </Popconfirm>
+            <Tooltip title="Delete">
+              <Button size="small" danger icon={<DeleteOutlined />}
+                onClick={() => setDeleteTarget({ id: r.id, vm_name: r.vm_name })} />
+            </Tooltip>
           )}
         </Space>
       ),
@@ -271,6 +274,14 @@ export default function AssetList({
         }}
         scroll={{ x: 'max-content' }}
         columns={visibleColumns}
+      />
+      <PasswordConfirmModal
+        open={!!deleteTarget}
+        title={`Delete "${deleteTarget?.vm_name || 'asset'}"?`}
+        message="This will move the record to the Recycle Bin. A superadmin can restore it later."
+        okText="Delete"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={onDeleteConfirmed}
       />
     </Card>
   );

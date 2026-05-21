@@ -455,6 +455,59 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role VARCHAR(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data_url TEXT;
 
 -- ---------------------------------------------------------------------
+-- Recycle Bin: soft-delete columns on every inventory + custom records.
+-- Active rows have deleted_at IS NULL; restoring clears it; the
+-- superadmin can permanently DELETE from the Recycle Bin page.
+-- ---------------------------------------------------------------------
+ALTER TABLE assets                ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE assets                ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE beijing_assets        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE beijing_assets        ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE ext_assets            ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE ext_assets            ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE custom_page_records   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE custom_page_records   ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id) ON DELETE SET NULL;
+
+-- Replace blanket UNIQUE constraints with partial unique indexes so a
+-- soft-deleted row no longer blocks a new active row with the same
+-- vm_name / ip_address / asset_tag.
+DO $$ BEGIN
+  ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key;
+  ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_ip_address_key;
+  ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_asset_tag_key;
+  ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_vm_name_key;
+  ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_ip_address_key;
+  ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_asset_tag_key;
+  ALTER TABLE ext_assets            DROP CONSTRAINT IF EXISTS ext_assets_vm_name_key;
+  ALTER TABLE ext_assets            DROP CONSTRAINT IF EXISTS ext_assets_ip_address_key;
+  ALTER TABLE ext_assets            DROP CONSTRAINT IF EXISTS ext_assets_asset_tag_key;
+  ALTER TABLE physical_esxi_servers DROP CONSTRAINT IF EXISTS physical_esxi_servers_vm_name_key;
+  ALTER TABLE physical_esxi_servers DROP CONSTRAINT IF EXISTS physical_esxi_servers_ip_address_key;
+  ALTER TABLE physical_esxi_servers DROP CONSTRAINT IF EXISTS physical_esxi_servers_asset_tag_key;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_vm_active                  ON assets(vm_name)                  WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_ip_active                  ON assets(ip_address)               WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_tag_active                 ON assets(asset_tag)                WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_beijing_vm_active                 ON beijing_assets(vm_name)          WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_beijing_ip_active                 ON beijing_assets(ip_address)       WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_beijing_tag_active                ON beijing_assets(asset_tag)        WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ext_vm_active                     ON ext_assets(vm_name)              WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ext_ip_active                     ON ext_assets(ip_address)           WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ext_tag_active                    ON ext_assets(asset_tag)            WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_vm_active                ON physical_esxi_servers(vm_name)   WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_ip_active                ON physical_esxi_servers(ip_address) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_tag_active               ON physical_esxi_servers(asset_tag) WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_assets_deleted_at                 ON assets(deleted_at)                 WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_beijing_deleted_at                ON beijing_assets(deleted_at)         WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ext_deleted_at                    ON ext_assets(deleted_at)             WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_physical_deleted_at               ON physical_esxi_servers(deleted_at)  WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_custom_records_deleted_at         ON custom_page_records(deleted_at)    WHERE deleted_at IS NOT NULL;
+
+-- ---------------------------------------------------------------------
 -- builtin_page_group_overrides — remembers each built-in page's group
 -- list (renames, deletions, additions, empty groups). When no row exists
 -- the inventoryFieldsService falls back to its DEFAULT_GROUPS array.

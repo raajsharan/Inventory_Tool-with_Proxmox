@@ -22,5 +22,6 @@ router.use('/builtin-pages',    authenticate,                                   
 router.use('/inventory-fields', authenticate,                                                require('./inventoryFieldsRoutes'));
 router.use('/backup',           authenticate, requirePageAccess('admin/backup'),            require('./backupRoutes'));
 router.use('/branding',         require('./brandingRoutes'));
+router.use('/recycle-bin',      authenticate, requirePageAccess('admin/recycle-bin'),     require('./recycleBinRoutes'));
 
 module.exports = router;

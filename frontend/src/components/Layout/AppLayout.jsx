@@ -10,6 +10,7 @@ import {
   HddOutlined, SafetyCertificateOutlined,
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
+  RestOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -75,6 +76,7 @@ export default function AppLayout() {
         can('admin/page-access')      && { key: '/admin/page-access',       icon: <SafetyCertificateOutlined />, label: <Link to="/admin/page-access">Page Access</Link> },
         can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,  label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
         can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,       label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
+        can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,           label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
         can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,        label: <Link to="/admin/imports">Import History</Link> },
         can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,     label: <Link to="/admin/audit">Audit Log</Link> },
       ].filter(Boolean),

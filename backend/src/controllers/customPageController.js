@@ -122,10 +122,15 @@ async function listRecords(req, res, next) {
     const [items, count] = await Promise.all([
       db.query(
         `SELECT id, data, created_at, updated_at FROM custom_page_records
-          WHERE page_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+          WHERE page_id = $1 AND deleted_at IS NULL
+          ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
         [req.params.id, pageSize, offset]
       ),
-      db.query(`SELECT COUNT(*)::int AS c FROM custom_page_records WHERE page_id = $1`, [req.params.id]),
+      db.query(
+        `SELECT COUNT(*)::int AS c FROM custom_page_records
+          WHERE page_id = $1 AND deleted_at IS NULL`,
+        [req.params.id]
+      ),
     ]);
     res.json({ items: items.rows, total: count.rows[0].c, page, pageSize });
   } catch (e) { next(e); }
@@ -158,9 +163,13 @@ async function updateRecord(req, res, next) {
 
 async function deleteRecord(req, res, next) {
   try {
+    const { verifyCurrentPassword } = require('../utils/verifyPassword');
+    await verifyCurrentPassword(req.user.id, req.body?.password);
     const { rowCount } = await db.query(
-      `DELETE FROM custom_page_records WHERE id = $1 AND page_id = $2`,
-      [req.params.recordId, req.params.id]
+      `UPDATE custom_page_records
+          SET deleted_at = NOW(), deleted_by = $3
+        WHERE id = $1 AND page_id = $2 AND deleted_at IS NULL`,
+      [req.params.recordId, req.params.id, req.user.id]
     );
     if (!rowCount) throw new ApiError(404, 'Record not found');
     await audit.log({ user: req.user, action: 'DELETE', entityType: 'custom_page_record', entityId: req.params.recordId, ipAddress: req.ip });

@@ -120,7 +120,7 @@ async function usedTagsForRange(range) {
     const { rows } = await db.query(
       `SELECT DISTINCT NULLIF((regexp_match(asset_tag, '\\d+'))[1], '')::int AS n
          FROM ${t}
-        WHERE asset_tag ~ '\\d'`
+        WHERE asset_tag ~ '\\d' AND deleted_at IS NULL`
     );
     for (const r of rows) {
       if (r.n !== null && r.n >= range.min_tag && r.n <= range.max_tag) used.add(r.n);
@@ -163,7 +163,7 @@ async function allTagStats() {
     const { rows } = await db.query(
       `SELECT NULLIF((regexp_match(asset_tag, '\\d+'))[1], '')::int AS n
          FROM ${t}
-        WHERE asset_tag ~ '\\d'`
+        WHERE asset_tag ~ '\\d' AND deleted_at IS NULL`
     );
     for (const r of rows) if (r.n !== null) all.push(r.n);
   }
@@ -188,7 +188,7 @@ async function isValueUsedAnywhere(column, value, { excludeTable, excludeId } = 
   if (!value) return null;
   for (const t of ALL_TABLES) {
     const params = [value];
-    let sql = `SELECT 1 FROM ${t} WHERE ${column} = $1`;
+    let sql = `SELECT 1 FROM ${t} WHERE ${column} = $1 AND deleted_at IS NULL`;
     if (excludeTable === t && excludeId) {
       params.push(excludeId);
       sql += ` AND id <> $${params.length}`;

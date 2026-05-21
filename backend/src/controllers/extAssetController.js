@@ -91,7 +91,9 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    await svc.remove(req.params.id);
+    const { verifyCurrentPassword } = require('../utils/verifyPassword');
+    await verifyCurrentPassword(req.user.id, req.body?.password);
+    await svc.remove(req.params.id, req.user.id);
     await audit.log({ user: req.user, action: 'DELETE', entityType: 'ext_asset', entityId: req.params.id, ipAddress: req.ip });
     res.status(204).end();
   } catch (e) { next(e); }
