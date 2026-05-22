@@ -7,6 +7,7 @@ export default function ExtAssetView() {
       basePath="/ext-assets"
       entityLabel="Ext. Asset"
       pageKey="ext_assets"
+      auditEntityType="ext_asset"
     />
   );
 }

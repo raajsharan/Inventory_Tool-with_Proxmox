@@ -21,11 +21,12 @@ async function log({ user, action, entityType, entityId, details, ipAddress }) {
   }
 }
 
-async function list({ page = 1, pageSize = 50, action, entityType, userId, viewerRole }) {
+async function list({ page = 1, pageSize = 50, action, entityType, entityId, userId, viewerRole }) {
   const where = [];
   const params = [];
   if (action)     { params.push(action);     where.push(`action = $${params.length}`); }
   if (entityType) { params.push(entityType); where.push(`entity_type = $${params.length}`); }
+  if (entityId)   { params.push(String(entityId)); where.push(`entity_id = $${params.length}`); }
   if (userId)     { params.push(userId);     where.push(`user_id = $${params.length}`); }
   // Hide entries authored by superadmin from anyone who isn't superadmin.
   if (viewerRole !== 'superadmin') {

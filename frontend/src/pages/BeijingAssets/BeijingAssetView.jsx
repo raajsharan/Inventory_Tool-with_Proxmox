@@ -7,6 +7,7 @@ export default function BeijingAssetView() {
       basePath="/beijing-assets"
       entityLabel="Beijing Asset"
       pageKey="beijing_assets"
+      auditEntityType="beijing_asset"
     />
   );
 }

@@ -7,6 +7,7 @@ export default function PhysicalEsxiView() {
       basePath="/physical-esxi"
       entityLabel="Physical / ESXi Server"
       pageKey="physical_esxi_servers"
+      auditEntityType="physical_esxi"
     />
   );
 }
