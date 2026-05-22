@@ -204,7 +204,7 @@ export default function AssetList({
       render: (_, r) => (
         <Space>
           <Tooltip title="Edit">
-            <Button size="small" icon={<EditOutlined />} onClick={() => nav(`${basePath}/${r.id}`)} />
+            <Button size="small" icon={<EditOutlined />} onClick={() => nav(`${basePath}/${r.id}/edit`)} />
           </Tooltip>
           {isAdmin && (
             <Tooltip title="Delete">

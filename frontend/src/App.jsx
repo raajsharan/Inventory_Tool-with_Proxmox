@@ -5,15 +5,19 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import AssetList from './pages/Assets/AssetList.jsx';
 import AssetForm from './pages/Assets/AssetForm.jsx';
+import AssetView from './pages/Assets/AssetView.jsx';
 import AssetImport from './pages/Assets/AssetImport.jsx';
 import BeijingAssetList from './pages/BeijingAssets/BeijingAssetList.jsx';
 import BeijingAssetForm from './pages/BeijingAssets/BeijingAssetForm.jsx';
+import BeijingAssetView from './pages/BeijingAssets/BeijingAssetView.jsx';
 import BeijingAssetImport from './pages/BeijingAssets/BeijingAssetImport.jsx';
 import ExtAssetList from './pages/ExtAssets/ExtAssetList.jsx';
 import ExtAssetForm from './pages/ExtAssets/ExtAssetForm.jsx';
+import ExtAssetView from './pages/ExtAssets/ExtAssetView.jsx';
 import ExtAssetImport from './pages/ExtAssets/ExtAssetImport.jsx';
 import PhysicalEsxiList from './pages/PhysicalEsxi/PhysicalEsxiList.jsx';
 import PhysicalEsxiForm from './pages/PhysicalEsxi/PhysicalEsxiForm.jsx';
+import PhysicalEsxiView from './pages/PhysicalEsxi/PhysicalEsxiView.jsx';
 import PhysicalEsxiImport from './pages/PhysicalEsxi/PhysicalEsxiImport.jsx';
 import CustomPageBuilder from './pages/CustomPages/CustomPageBuilder.jsx';
 import CustomPageView from './pages/CustomPages/CustomPageView.jsx';
@@ -44,23 +48,27 @@ export default function App() {
 
         <Route path="/assets" element={<AssetList />} />
         <Route path="/assets/new" element={<AssetForm mode="create" />} />
-        <Route path="/assets/:id" element={<AssetForm mode="edit" />} />
         <Route path="/assets/import" element={<AssetImport />} />
+        <Route path="/assets/:id" element={<AssetView />} />
+        <Route path="/assets/:id/edit" element={<AssetForm mode="edit" />} />
 
         <Route path="/beijing-assets" element={<BeijingAssetList />} />
         <Route path="/beijing-assets/new" element={<BeijingAssetForm mode="create" />} />
-        <Route path="/beijing-assets/:id" element={<BeijingAssetForm mode="edit" />} />
         <Route path="/beijing-assets/import" element={<BeijingAssetImport />} />
+        <Route path="/beijing-assets/:id" element={<BeijingAssetView />} />
+        <Route path="/beijing-assets/:id/edit" element={<BeijingAssetForm mode="edit" />} />
 
         <Route path="/ext-assets" element={<ExtAssetList />} />
         <Route path="/ext-assets/new" element={<ExtAssetForm mode="create" />} />
-        <Route path="/ext-assets/:id" element={<ExtAssetForm mode="edit" />} />
         <Route path="/ext-assets/import" element={<ExtAssetImport />} />
+        <Route path="/ext-assets/:id" element={<ExtAssetView />} />
+        <Route path="/ext-assets/:id/edit" element={<ExtAssetForm mode="edit" />} />
 
         <Route path="/physical-esxi" element={<PhysicalEsxiList />} />
         <Route path="/physical-esxi/new" element={<PhysicalEsxiForm mode="create" />} />
-        <Route path="/physical-esxi/:id" element={<PhysicalEsxiForm mode="edit" />} />
         <Route path="/physical-esxi/import" element={<PhysicalEsxiImport />} />
+        <Route path="/physical-esxi/:id" element={<PhysicalEsxiView />} />
+        <Route path="/physical-esxi/:id/edit" element={<PhysicalEsxiForm mode="edit" />} />
 
         <Route path="/custom-pages/new" element={<CustomPageBuilder />} />
         <Route path="/custom-pages/:slug" element={<CustomPageView />} />
