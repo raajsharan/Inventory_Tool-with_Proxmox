@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Card, Button, Upload, Space, Typography, Alert, Table, Tag, Checkbox, Tooltip,
+  Card, Button, Upload, Space, Typography, Alert, Table, Tag, Checkbox, Tooltip, Segmented,
 } from 'antd';
 import {
   DownloadOutlined, UploadOutlined, FileExcelOutlined, InboxOutlined,
@@ -30,6 +30,7 @@ export default function AssetImport({
   const [selectedRows, setSelectedRows] = useState([]);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState('');
+  const [rowFilter, setRowFilter] = useState('all'); // all | create | merge | errors
 
   const selectedCount = selectedRows.length;
 
@@ -49,6 +50,7 @@ export default function AssetImport({
     setSelectedRows([]);
     setResult(null);
     setErr('');
+    setRowFilter('all');
   }
 
   async function onVerifyData() {
@@ -125,6 +127,26 @@ export default function AssetImport({
       },
     },
   ]), []);
+
+  const counts = useMemo(() => {
+    const rows = preview?.rows || [];
+    return {
+      all: rows.length,
+      create: rows.filter(r => !r.errors.length && r.action === 'create').length,
+      merge: rows.filter(r => !r.errors.length && r.action === 'merge').length,
+      errors: rows.filter(r => r.errors.length).length,
+    };
+  }, [preview]);
+
+  const filteredRows = useMemo(() => {
+    const rows = preview?.rows || [];
+    switch (rowFilter) {
+      case 'create': return rows.filter(r => !r.errors.length && r.action === 'create');
+      case 'merge':  return rows.filter(r => !r.errors.length && r.action === 'merge');
+      case 'errors': return rows.filter(r => r.errors.length);
+      default:       return rows;
+    }
+  }, [preview, rowFilter]);
 
   const rowSelection = preview ? {
     selectedRowKeys: selectedRows,
@@ -235,21 +257,26 @@ export default function AssetImport({
 
       {preview && (
         <Card type="inner" title="Preview" style={{ marginTop: 16 }} extra={
-          <Space>
-            <Tag color="blue">Total: {preview.rows.length}</Tag>
-            <Tag color="green">Create: {preview.rows.filter(r => !r.errors.length && r.action === 'create').length}</Tag>
-            <Tag color="gold">Merge: {preview.rows.filter(r => !r.errors.length && r.action === 'merge').length}</Tag>
-            <Tag color="red">Errors: {preview.rows.filter(r => r.errors.length).length}</Tag>
-          </Space>
+          <Segmented
+            value={rowFilter}
+            onChange={setRowFilter}
+            options={[
+              { value: 'all',    label: <span>Total <b>{counts.all}</b></span> },
+              { value: 'create', label: <span>Create <b style={{ color: '#16a34a' }}>{counts.create}</b></span> },
+              { value: 'merge',  label: <span>Merge <b style={{ color: '#d97706' }}>{counts.merge}</b></span> },
+              { value: 'errors', label: <span>Errors <b style={{ color: '#dc2626' }}>{counts.errors}</b></span> },
+            ]}
+          />
         }>
           <Table
             size="small"
             rowKey="rowIdx"
-            dataSource={preview.rows}
+            dataSource={filteredRows}
             columns={previewColumns}
             rowSelection={rowSelection}
             pagination={{ pageSize: 10 }}
             scroll={{ x: 700 }}
+            locale={{ emptyText: `No "${rowFilter}" rows` }}
           />
         </Card>
       )}
