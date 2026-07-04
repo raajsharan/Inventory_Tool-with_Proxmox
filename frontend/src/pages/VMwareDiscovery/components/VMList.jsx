@@ -65,8 +65,27 @@ export default function VMList({ hostId }) {
     },
     { title: 'Hostname',    dataIndex: 'hostname',       key: 'hostname', ellipsis: true },
     {
-      title: 'IP Addresses', dataIndex: 'ips', key: 'ips',
-      render: ips => Array.isArray(ips) ? ips.filter(ip => ip !== 'Not Available').join(', ') || '—' : ips || '—',
+      title: 'IP Addresses', dataIndex: 'ips', key: 'ips', width: 200,
+      render: ips => {
+        const list = Array.isArray(ips) ? ips.filter(ip => ip && ip !== 'Not Available') : [];
+        if (!list.length) return <span style={{ color: '#bfbfbf' }}>—</span>;
+        const primary = list.filter(ip => /^192\.168\./.test(ip));
+        const rest    = list.filter(ip => !/^192\.168\./.test(ip));
+        const shown   = primary.length ? primary : list.slice(0, 1);
+        const more    = primary.length ? rest    : list.slice(1);
+        return (
+          <Space direction="vertical" size={2}>
+            {shown.map(ip => (
+              <Tag key={ip} style={{ fontFamily: 'monospace', fontSize: 11, margin: 0 }}>{ip}</Tag>
+            ))}
+            {more.length > 0 && (
+              <Tooltip title={<span style={{ whiteSpace: 'pre' }}>{more.join('\n')}</span>}>
+                <Tag style={{ cursor: 'pointer', margin: 0 }}>+{more.length} more</Tag>
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'MAC Address(es)', dataIndex: 'macs', key: 'macs', width: 200,

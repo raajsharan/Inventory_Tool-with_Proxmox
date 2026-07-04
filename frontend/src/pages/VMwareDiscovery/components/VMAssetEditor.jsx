@@ -147,19 +147,27 @@ export default function VMAssetEditor() {
             </Tooltip>
           );
         }
+        const primary = list.filter(({ ip }) => /^192\.168\./.test(ip));
+        const rest    = list.filter(({ ip }) => !/^192\.168\./.test(ip));
+        const shown   = primary.length ? primary : list.slice(0, 1);
+        const more    = primary.length ? rest    : list.slice(1);
         return (
           <Space direction="vertical" size={2}>
-            {list.slice(0, 2).map(({ ip, src }) => (
+            {shown.map(({ ip, src }) => (
               <Tag
                 key={ip}
                 color={src === 'mac' ? 'success' : undefined}
-                style={{ fontFamily: 'monospace', fontSize: 11 }}
+                style={{ fontFamily: 'monospace', fontSize: 11, margin: 0 }}
                 title={src === 'mac' ? 'IP from MAC Lookup mapping' : 'IP from VMware'}
               >
                 {ip}
               </Tag>
             ))}
-            {list.length > 2 && <Text type="secondary" style={{ fontSize: 11 }}>+{list.length - 2} more</Text>}
+            {more.length > 0 && (
+              <Tooltip title={<span style={{ whiteSpace: 'pre' }}>{more.map(({ ip }) => ip).join('\n')}</span>}>
+                <Tag style={{ cursor: 'pointer', margin: 0 }}>+{more.length} more</Tag>
+              </Tooltip>
+            )}
           </Space>
         );
       },

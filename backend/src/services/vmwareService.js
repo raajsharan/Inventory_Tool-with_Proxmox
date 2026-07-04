@@ -231,10 +231,13 @@ async function discoverWithSession(hostname, port, sessionId, verifySSL) {
       );
       if (Array.isArray(vmsOnHost)) {
         for (const v of vmsOnHost) {
-          if (v.vm) vmToHost[v.vm] = { name: h.name, ip: 'Not Available' };
+          // h.name is the ESXi hostname/IP registered in vCenter
+          if (v.vm) vmToHost[v.vm] = { name: h.name, ip: h.name };
         }
       }
-    } catch { /* skip */ }
+    } catch (err) {
+      console.warn(`[vmware] could not list VMs for ESXi host ${h.name} (${h.host}):`, err.message);
+    }
   }
 
   // 3. Get full VM list
