@@ -132,6 +132,7 @@ export default function AppLayout() {
       can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,          label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
       can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,              label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
       can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
+      can('admin/imports')          && { key: '/admin/db-import',         icon: <DatabaseOutlined />,          label: <Link to="/admin/db-import">DB Import</Link> },
       can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },
       can('admin/nav-order')            && { key: '/admin/nav-order',          icon: <MenuOutlined />,              label: <Link to="/admin/nav-order">Menu Order</Link> },
       can('admin/user-page-control')    && { key: '/admin/user-page-control',  icon: <SafetyCertificateOutlined />, label: <Link to="/admin/user-page-control">User Page Control</Link> },

@@ -282,4 +282,80 @@ async function apply(buffer, { table, cols, verifyByIp, selectedRowIdxs, createF
   };
 }
 
-module.exports = { preview, apply, parseSheet };
+// Accepts pre-parsed rows [{rowIdx, data}] — used by DB import (skips file parsing)
+async function previewRows(mappedRows, { table, cols, verifyByIp }) {
+  const out = [];
+  for (const r of mappedRows) {
+    const d = r.data;
+    const errors = [];
+    if (!d.vm_name)    errors.push('VM Name is required');
+    if (!d.ip_address) errors.push('IP Address is required');
+    if (d.ip_address && !IP_RE.test(String(d.ip_address).trim())) errors.push('Invalid IP Address');
+
+    let action = 'create';
+    let existing = null;
+    let diffs = [];
+    let updates = {};
+
+    if (verifyByIp && d.ip_address && !errors.length) {
+      existing = await findByIp(table, d.ip_address);
+      if (existing) {
+        action = 'merge';
+        const res = diffFillOnlyEmpty(existing, d, cols);
+        updates = res.updates;
+        diffs   = res.diffs;
+      }
+    }
+
+    out.push({
+      rowIdx: r.rowIdx,
+      data: d,
+      action,
+      existingId: existing?.id || null,
+      existingSnapshot: existing
+        ? Object.fromEntries(cols.filter(c => existing[c] !== undefined).map(c => [c, existing[c]]))
+        : null,
+      diffs,
+      updates,
+      errors,
+    });
+  }
+  return { rows: out };
+}
+
+async function applyRows(mappedRows, { table, cols, verifyByIp, selectedRowIdxs, createFn, updateRowDirect }, user) {
+  const prev = await previewRows(mappedRows, { table, cols, verifyByIp });
+  const sel  = selectedRowIdxs?.length ? new Set(selectedRowIdxs.map(Number)) : null;
+  const successes = [];
+  const failures  = [];
+  for (const r of prev.rows) {
+    if (sel && !sel.has(r.rowIdx)) continue;
+    if (r.errors.length) { failures.push({ row: r.rowIdx, errors: r.errors, data: r.data }); continue; }
+    try {
+      if (r.action === 'merge' && r.existingId) {
+        if (!Object.keys(r.updates).length) {
+          successes.push({ row: r.rowIdx, id: r.existingId, action: 'noop' }); continue;
+        }
+        await updateRowDirect(r.existingId, r.updates, user?.id);
+        successes.push({ row: r.rowIdx, id: r.existingId, action: 'merged', filled: Object.keys(r.updates) });
+      } else {
+        const payload = { ...r.data };
+        if (payload.asset_password !== undefined) payload.assetPassword = payload.asset_password;
+        const created = await createFn(payload, user?.id);
+        successes.push({ row: r.rowIdx, id: created.id, action: 'created' });
+      }
+    } catch (e) {
+      failures.push({ row: r.rowIdx, errors: [e.message], details: e.details, data: r.data });
+    }
+  }
+  return {
+    total: prev.rows.length,
+    selected: sel ? sel.size : prev.rows.length,
+    success: successes.length,
+    failed:  failures.length,
+    successes,
+    failures,
+  };
+}
+
+module.exports = { preview, apply, parseSheet, previewRows, applyRows };

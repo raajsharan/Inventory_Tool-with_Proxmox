@@ -47,6 +47,7 @@ import SoftwareStatus from './pages/SoftwareStatus/index.jsx';
 import NessusStatus from './pages/NessusStatus/index.jsx';
 import NessusInstallConfig from './pages/Admin/NessusInstallConfig.jsx';
 import TenableReport from './pages/TenableReport/index.jsx';
+import DbImport from './pages/Admin/DbImport.jsx';
 
 export default function App() {
   return (
@@ -102,6 +103,7 @@ export default function App() {
         <Route path="/admin/inventory-fields/:pageKey" element={<InventoryFields />} />
         <Route path="/admin/audit" element={<AuditLogs />} />
         <Route path="/admin/imports" element={<ImportHistory />} />
+        <Route path="/admin/db-import" element={<DbImport />} />
         <Route path="/admin/backup" element={<AdminBackup />} />
         <Route path="/admin/branding" element={<AdminBranding />} />
         <Route path="/admin/recycle-bin" element={<RecycleBin />} />
