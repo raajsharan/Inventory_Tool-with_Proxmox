@@ -38,7 +38,7 @@ function makePool(creds) {
     port:     Number(creds.port) || 5432,
     database: creds.database,
     user:     creds.user,
-    password: creds.password,
+    password: String(creds.password ?? ''),
     ssl:      creds.ssl ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: 10000,
     max: 2,
