@@ -1,4 +1,4 @@
-const { Pool } = require('pg');
+const pg = require('pg');
 
 const COLUMN_ALIASES = {
   vm_name:               ['vm name', 'vmname', 'name', 'hostname (vm)', 'vm_name'],
@@ -32,43 +32,39 @@ function normalize(s) {
   return String(s || '').replace(/[_\-\s]+/g, ' ').trim().toLowerCase();
 }
 
-function makePool(creds) {
-  // pg's val() uses a truthy check: empty string '' is falsy and falls through
-  // to defaults.password=null, which causes SASL/SCRAM to throw "must be a string".
-  // Always pass a non-empty string or omit (undefined) to let pg use its own defaults.
-  const password = (creds.password !== null && creds.password !== undefined && creds.password !== '')
-    ? String(creds.password)
-    : undefined;
-
-  const pwInfo = password !== undefined ? `"[${password.length} chars]"` : 'omitted';
-  console.log(`[dbImport] makePool host=${creds.host} user=${creds.user} db=${creds.database} password=${pwInfo}`);
-
-  const config = {
-    host:     creds.host,
-    port:     Number(creds.port) || 5432,
-    database: creds.database,
-    user:     creds.user,
-    ssl:      creds.ssl ? { rejectUnauthorized: false } : false,
-    connectionTimeoutMillis: 10000,
-    max: 2,
-  };
-  if (password !== undefined) {
-    config.password = password;
-  }
-  return new Pool(config);
-}
-
 async function withClient(creds, fn) {
-  const pool = makePool(creds);
+  // pg's val() uses a truthy check so '' is falsy → falls through to null default →
+  // SASL throws "client password must be a string".
+  // Fix: bypass val() entirely by patching client.password after construction.
+  const password = (creds.password != null && creds.password !== '') ? String(creds.password) : null;
+
+  console.log(`[dbImport] withClient host=${creds.host} user=${creds.user} db=${creds.database} pwType=${typeof password} pwLen=${password !== null ? password.length : 'null'}`);
+
+  const client = new pg.Client({
+    host:                    creds.host,
+    port:                    Number(creds.port) || 5432,
+    database:                creds.database,
+    user:                    creds.user,
+    ssl:                     creds.ssl ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 10000,
+  });
+
+  // Patch password directly onto client instance and its connectionParameters,
+  // bypassing pg's internal val() truthy-check that drops empty/falsy passwords.
+  if (password !== null) {
+    Object.defineProperty(client, 'password', {
+      configurable: true, enumerable: false, writable: true, value: password,
+    });
+    Object.defineProperty(client.connectionParameters, 'password', {
+      configurable: true, enumerable: false, writable: true, value: password,
+    });
+  }
+
+  await client.connect();
   try {
-    const client = await pool.connect();
-    try {
-      return await fn(client);
-    } finally {
-      client.release();
-    }
+    return await fn(client);
   } finally {
-    await pool.end();
+    await client.end();
   }
 }
 

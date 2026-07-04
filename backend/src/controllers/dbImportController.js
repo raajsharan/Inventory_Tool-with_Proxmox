@@ -11,7 +11,9 @@ const CONFIGS = {
 };
 
 function creds(body) {
-  return { host: body.host, port: body.port, database: body.database, user: body.user, password: body.password, ssl: body.ssl };
+  const pw = body.password;
+  console.log(`[dbImport] creds() password type=${typeof pw} truthy=${Boolean(pw)} len=${pw != null ? String(pw).length : 'null/undef'}`);
+  return { host: body.host, port: body.port, database: body.database, user: body.user, password: pw, ssl: body.ssl };
 }
 
 async function testConnection(req, res, next) {
