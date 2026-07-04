@@ -18,16 +18,25 @@ async function testConnection(req, res, next) {
   try {
     const result = await dbSvc.testConnection(creds(req.body));
     res.json(result);
-  } catch (e) { next(e); }
+  } catch (e) {
+    // Surface DB-level errors (auth failure, connection refused, etc.) as 400
+    const err = new Error(e.message || 'Connection failed');
+    err.status = 400;
+    next(err);
+  }
 }
 
 async function fetchColumns(req, res, next) {
   try {
     const { table, query } = req.body;
-    const result   = await dbSvc.fetchColumns(creds(req.body), { table, query });
+    const result    = await dbSvc.fetchColumns(creds(req.body), { table, query });
     const suggested = dbSvc.suggestMapping(result.columns);
     res.json({ ...result, suggested });
-  } catch (e) { next(e); }
+  } catch (e) {
+    const err = new Error(e.message || 'Failed to fetch columns');
+    err.status = 400;
+    next(err);
+  }
 }
 
 async function preview(req, res, next) {

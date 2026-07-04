@@ -41,6 +41,7 @@ export default function DbImport() {
 
   // Step 1 — connection
   const [connForm]                    = Form.useForm();
+  const [savedCreds, setSavedCreds]   = useState(null); // persisted after successful test
   const [tables, setTables]           = useState([]);
 
   // Step 2 — source
@@ -64,10 +65,13 @@ export default function DbImport() {
   // Step 5 — result
   const [result, setResult]           = useState(null);
 
-  function creds() {
+  function readCreds() {
     const v = connForm.getFieldsValue();
     return { host: v.host, port: v.port, database: v.database, user: v.user, password: v.password, ssl: v.ssl || false };
   }
+
+  // Returns saved creds (reliable after step 1); falls back to form values
+  function creds() { return savedCreds || readCreds(); }
 
   // ── Step 1: Test connection ──────────────────────────────────────────────
   async function onTestConnection() {
@@ -76,7 +80,9 @@ export default function DbImport() {
     } catch { return; }
     setLoading(true);
     try {
-      const { data } = await api.post('/db-import/test', creds());
+      const c = readCreds();
+      const { data } = await api.post('/db-import/test', c);
+      setSavedCreds(c);                         // persist creds for later steps
       setTables(data.tables || []);
       message.success(`Connected — ${data.tables.length} table(s) found`);
       setCurrent(1);
@@ -103,7 +109,8 @@ export default function DbImport() {
       setColumnMap(data.suggested || {});
       setCurrent(2);
     } catch (e) {
-      message.error(e.response?.data?.error || e.message || 'Failed to fetch columns');
+      const msg = e.response?.data?.error || e.message || 'Failed to fetch columns';
+      message.error({ content: msg, duration: 8 });
     } finally { setLoading(false); }
   }
 
@@ -516,7 +523,7 @@ export default function DbImport() {
               onClick={() => {
                 setCurrent(0); setPreviewRows([]); setResult(null);
                 setColumns([]); setSample([]); setTables([]);
-                setColumnMap({}); setSuggested({});
+                setColumnMap({}); setSuggested({}); setSavedCreds(null);
               }}
             >
               Start New Import
