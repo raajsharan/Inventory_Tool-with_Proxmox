@@ -33,16 +33,29 @@ function normalize(s) {
 }
 
 function makePool(creds) {
-  return new Pool({
+  // pg's val() uses a truthy check: empty string '' is falsy and falls through
+  // to defaults.password=null, which causes SASL/SCRAM to throw "must be a string".
+  // Always pass a non-empty string or omit (undefined) to let pg use its own defaults.
+  const password = (creds.password !== null && creds.password !== undefined && creds.password !== '')
+    ? String(creds.password)
+    : undefined;
+
+  const pwInfo = password !== undefined ? `"[${password.length} chars]"` : 'omitted';
+  console.log(`[dbImport] makePool host=${creds.host} user=${creds.user} db=${creds.database} password=${pwInfo}`);
+
+  const config = {
     host:     creds.host,
     port:     Number(creds.port) || 5432,
     database: creds.database,
     user:     creds.user,
-    password: String(creds.password ?? ''),
     ssl:      creds.ssl ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: 10000,
     max: 2,
-  });
+  };
+  if (password !== undefined) {
+    config.password = password;
+  }
+  return new Pool(config);
 }
 
 async function withClient(creds, fn) {
