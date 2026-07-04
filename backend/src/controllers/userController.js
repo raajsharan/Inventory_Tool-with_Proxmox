@@ -4,24 +4,18 @@ const ApiError = require('../utils/ApiError');
 const customRolesSvc = require('../services/customRolesService');
 
 const SYSTEM_VISIBLE = ['admin', 'asset_manager', 'viewer'];
-const SYSTEM_ALL     = ['superadmin', ...SYSTEM_VISIBLE];
 
-// Build the live allowed-role list (system + custom) for the request's privilege level
-async function getAllowedRoles(isSuperUser) {
+async function getAllowedRoles() {
   const custom = await customRolesSvc.listCustom().then(rows => rows.map(r => r.name));
-  return isSuperUser
-    ? [...SYSTEM_ALL, ...custom]
-    : [...SYSTEM_VISIBLE, ...custom];
+  return [...SYSTEM_VISIBLE, ...custom];
 }
-
-function isSuper(req) { return req.user?.role === 'superadmin'; }
 
 async function list(req, res, next) {
   try {
-    const whereSql = isSuper(req) ? '' : `WHERE role <> 'superadmin'`;
     const { rows } = await db.query(
       `SELECT id, email, full_name, role, is_active, last_login_at, created_at
-         FROM users ${whereSql}
+         FROM users
+        WHERE role <> 'superadmin'
         ORDER BY created_at DESC`
     );
     res.json({ items: rows });
@@ -32,7 +26,7 @@ async function create(req, res, next) {
   try {
     const { email, fullName, password, role } = req.body;
     if (!email || !password || !fullName || !role) throw new ApiError(400, 'Missing fields');
-    const allowed = await getAllowedRoles(isSuper(req));
+    const allowed = await getAllowedRoles(); // superadmin is never a createable role
     if (!allowed.includes(role)) throw new ApiError(400, 'Invalid role');
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
@@ -54,16 +48,12 @@ async function targetIsSuperadmin(id) {
 
 async function update(req, res, next) {
   try {
-    if (!isSuper(req) && await targetIsSuperadmin(req.params.id)) {
-      // Hide the superadmin row from non-superadmins entirely.
+    if (await targetIsSuperadmin(req.params.id)) {
       throw new ApiError(404, 'User not found');
     }
     const { fullName, role, isActive, password } = req.body;
     if (role !== undefined) {
-      if (role === 'superadmin' && !isSuper(req)) {
-        throw new ApiError(403, 'Only superadmin can assign the superadmin role');
-      }
-      const allowed = await getAllowedRoles(isSuper(req));
+      const allowed = await getAllowedRoles(); // superadmin role is never assignable via API
       if (!allowed.includes(role)) throw new ApiError(400, 'Invalid role');
     }
     const sets = [];
@@ -89,7 +79,7 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    if (!isSuper(req) && await targetIsSuperadmin(req.params.id)) {
+    if (await targetIsSuperadmin(req.params.id)) {
       throw new ApiError(404, 'User not found');
     }
     const { rowCount } = await db.query(`DELETE FROM users WHERE id = $1`, [req.params.id]);
