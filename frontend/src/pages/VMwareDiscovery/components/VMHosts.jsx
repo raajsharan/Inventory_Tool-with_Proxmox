@@ -1,0 +1,225 @@
+import { useEffect, useState } from 'react';
+import {
+  Table, Button, Modal, Form, Input, InputNumber, Switch, Space,
+  Tag, App, Tooltip, Popconfirm, Card, Typography,
+} from 'antd';
+import {
+  PlusOutlined, EditOutlined, DeleteOutlined,
+  PlayCircleOutlined, ApiOutlined, CheckCircleOutlined,
+} from '@ant-design/icons';
+import api from '../../../api/client';
+import { useAuth } from '../../../context/AuthContext.jsx';
+
+const { Text } = Typography;
+
+function statusTag(host) {
+  if (host.is_running) return <Tag color="processing">Running</Tag>;
+  if (host.last_discovery_at) return <Tag color="success">Idle</Tag>;
+  return <Tag color="default">Never Run</Tag>;
+}
+
+export default function VMHosts({ onDiscoveryStarted }) {
+  const { user } = useAuth();
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
+  const { message } = App.useApp();
+
+  const [hosts, setHosts]       = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [modalOpen, setModal]   = useState(false);
+  const [editing, setEditing]   = useState(null);
+  const [testResult, setTest]   = useState({});
+  const [testing, setTesting]   = useState({});
+  const [form] = Form.useForm();
+
+  const load = () => {
+    setLoading(true);
+    api.get('/vmware/hosts').then(r => setHosts(r.data.hosts || [])).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  function openAdd() {
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue({ port: 443, verifySSL: false, intervalMinutes: 60, schedulerEnabled: false });
+    setModal(true);
+  }
+
+  function openEdit(record) {
+    setEditing(record);
+    form.setFieldsValue({
+      host:             record.host,
+      username:         record.username,
+      password:         '',
+      port:             record.port,
+      verifySSL:        record.verify_ssl,
+      intervalMinutes:  record.interval_minutes,
+      schedulerEnabled: record.scheduler_enabled,
+    });
+    setModal(true);
+  }
+
+  async function onSave() {
+    const values = await form.validateFields();
+    try {
+      if (editing) {
+        await api.put(`/vmware/hosts/${editing.id}`, values);
+        message.success(`Updated ${editing.host}`);
+      } else {
+        await api.post('/vmware/hosts', values);
+        message.success(`Added ${values.host}`);
+      }
+      setModal(false);
+      load();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to save');
+    }
+  }
+
+  async function onDelete(id) {
+    try {
+      await api.delete(`/vmware/hosts/${id}`);
+      message.success('Host removed');
+      load();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to delete');
+    }
+  }
+
+  async function onRunNow(record) {
+    try {
+      await api.post(`/vmware/hosts/${record.id}/run`);
+      message.success(`Discovery triggered for ${record.host}`);
+      onDiscoveryStarted?.();
+      setTimeout(load, 2000);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to trigger');
+    }
+  }
+
+  async function onTest(record) {
+    setTesting(t => ({ ...t, [record.id]: true }));
+    setTest(t => ({ ...t, [record.id]: null }));
+    try {
+      const r = await api.post(`/vmware/hosts/${record.id}/test`);
+      setTest(t => ({ ...t, [record.id]: r.data }));
+    } catch {
+      setTest(t => ({ ...t, [record.id]: { ok: false, error: 'Request failed' } }));
+    } finally {
+      setTesting(t => ({ ...t, [record.id]: false }));
+    }
+  }
+
+  const columns = [
+    { title: 'Host', dataIndex: 'host', key: 'host' },
+    { title: 'Username', dataIndex: 'username', key: 'username' },
+    { title: 'Port', dataIndex: 'port', key: 'port', width: 70 },
+    {
+      title: 'Status', key: 'status',
+      render: (_, r) => statusTag(r),
+    },
+    {
+      title: 'Last Discovery', dataIndex: 'last_discovery_at', key: 'last_discovery_at',
+      render: v => v ? new Date(v).toLocaleString() : '—',
+    },
+    {
+      title: 'VM Count', dataIndex: 'last_vm_count', key: 'last_vm_count', width: 90,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Scheduler', key: 'sched',
+      render: (_, r) => r.scheduler_enabled
+        ? <Tag color="blue">Every {r.interval_minutes}m</Tag>
+        : <Tag color="default">Off</Tag>,
+    },
+    {
+      title: 'Test', key: 'test',
+      render: (_, r) => (
+        <Space size="small">
+          <Button
+            size="small"
+            icon={<ApiOutlined />}
+            loading={testing[r.id]}
+            onClick={() => onTest(r)}
+          >Test</Button>
+          {testResult[r.id] && (
+            testResult[r.id].ok
+              ? <Tooltip title={`${testResult[r.id].vmCount} VMs`}><CheckCircleOutlined style={{ color: '#52c41a' }} /></Tooltip>
+              : <Tooltip title={testResult[r.id].error}><Text type="danger" style={{ fontSize: 12 }}>Fail</Text></Tooltip>
+          )}
+        </Space>
+      ),
+    },
+    isAdmin && {
+      title: 'Actions', key: 'actions',
+      render: (_, r) => (
+        <Space>
+          <Tooltip title="Run Discovery Now">
+            <Button size="small" icon={<PlayCircleOutlined />} disabled={r.is_running} onClick={() => onRunNow(r)} />
+          </Tooltip>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+          <Popconfirm title="Delete this host?" onConfirm={() => onDelete(r.id)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ].filter(Boolean);
+
+  return (
+    <Card
+      size="small"
+      title="vCenter / ESXi Hosts"
+      extra={isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Host</Button>}
+    >
+      <Table
+        size="small"
+        rowKey="id"
+        loading={loading}
+        dataSource={hosts}
+        columns={columns}
+        pagination={false}
+      />
+
+      <Modal
+        title={editing ? `Edit ${editing.host}` : 'Add vCenter / ESXi Host'}
+        open={modalOpen}
+        onOk={onSave}
+        onCancel={() => setModal(false)}
+        okText="Save"
+        width={520}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item name="host" label="Host / IP" rules={[{ required: true }]}>
+            <Input placeholder="vcenter.corp.com" disabled={!!editing} />
+          </Form.Item>
+          <Form.Item name="username" label="Username" rules={[{ required: true }]}>
+            <Input placeholder="administrator@vsphere.local" />
+          </Form.Item>
+          <Form.Item name="password" label="Password" rules={[{ required: !editing }]}>
+            <Input.Password placeholder={editing ? 'Leave blank to keep current' : 'Password'} />
+          </Form.Item>
+          <Space style={{ width: '100%' }}>
+            <Form.Item name="port" label="Port" style={{ width: 120 }}>
+              <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="verifySSL" label="Verify SSL" valuePropName="checked" style={{ paddingTop: 24 }}>
+              <Switch />
+            </Form.Item>
+          </Space>
+          <Space style={{ width: '100%' }}>
+            <Form.Item name="intervalMinutes" label="Discovery Interval (minutes)" style={{ width: 220 }}>
+              <InputNumber min={5} max={1440} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="schedulerEnabled" label="Auto Schedule" valuePropName="checked" style={{ paddingTop: 24 }}>
+              <Switch />
+            </Form.Item>
+          </Space>
+          <Form.Item name="runNow" label="Run discovery immediately" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  );
+}

@@ -5,7 +5,9 @@ const validate = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const c = require('../controllers/authController');
 
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const loginLimiter          = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const changePasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5,
+  keyGenerator: req => req.user?.id || req.ip });
 
 /**
  * @openapi
@@ -32,6 +34,6 @@ router.post(
 
 router.get('/me', authenticate, c.me);
 router.put('/me', authenticate, c.updateProfile);
-router.post('/me/change-password', authenticate, c.changePassword);
+router.post('/me/change-password', authenticate, changePasswordLimiter, c.changePassword);
 
 module.exports = router;

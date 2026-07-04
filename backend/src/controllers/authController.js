@@ -98,8 +98,9 @@ async function updateProfile(req, res, next) {
 async function changePassword(req, res, next) {
   try {
     const { currentPassword, newPassword } = req.body || {};
-    if (!newPassword || newPassword.length < 6) {
-      throw new ApiError(400, 'New password must be at least 6 characters');
+    const pwdRe = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    if (!newPassword || !pwdRe.test(newPassword)) {
+      throw new ApiError(400, 'Password must be at least 8 characters and include uppercase, lowercase, and a number');
     }
     const { rows } = await db.query(`SELECT password_hash FROM users WHERE id = $1`, [req.user.id]);
     if (!rows.length) throw new ApiError(404, 'User not found');

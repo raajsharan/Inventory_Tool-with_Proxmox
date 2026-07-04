@@ -38,4 +38,19 @@ function requirePageAccess(pageKey) {
   };
 }
 
-module.exports = { authenticate, authorize, requirePageAccess };
+// Middleware: ensures user has can_view_passwords permission (superadmin always passes)
+function requirePasswordAccess(req, _res, next) {
+  if (!req.user) return next(new ApiError(401, 'Unauthenticated'));
+  if (req.user.role === 'superadmin') return next();
+  const db = require('../config/db');
+  db.query(`SELECT can_view_passwords FROM users WHERE id = $1`, [req.user.id])
+    .then(({ rows }) => {
+      if (!rows[0]?.can_view_passwords) {
+        return next(new ApiError(403, 'Password viewing not permitted for your account'));
+      }
+      return next();
+    })
+    .catch(next);
+}
+
+module.exports = { authenticate, authorize, requirePageAccess, requirePasswordAccess };

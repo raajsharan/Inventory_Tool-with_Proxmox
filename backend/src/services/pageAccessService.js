@@ -1,7 +1,16 @@
 const db = require('../config/db');
 const fieldVis = require('./fieldVisibilityService');
 
-const ROLES = ['admin', 'asset_manager', 'viewer'];
+const STATIC_ROLE_NAMES = ['admin', 'asset_manager', 'viewer'];
+
+// Returns static roles + any custom roles created by admins
+async function getActiveRoles() {
+  const { rows } = await db.query(`SELECT name FROM custom_roles ORDER BY created_at`);
+  return [...STATIC_ROLE_NAMES, ...rows.map(r => r.name)];
+}
+
+// Keep ROLES exported for backward-compat (static only)
+const ROLES = STATIC_ROLE_NAMES;
 
 // Static (built-in) page registry. Custom-page entries are appended dynamically.
 const STATIC_PAGES = [
@@ -22,6 +31,12 @@ const STATIC_PAGES = [
   { key: 'admin/recycle-bin',     label: 'Recycle Bin',              group: 'Administration' },
   { key: 'admin/imports',         label: 'Import History',           group: 'Administration' },
   { key: 'admin/audit',           label: 'Audit Log',                group: 'Administration' },
+  { key: 'admin/nav-order',          label: 'Menu Order',               group: 'Administration' },
+  { key: 'admin/user-page-control', label: 'User Page Control',        group: 'Administration' },
+  { key: 'admin/roles',             label: 'Role Management',           group: 'Administration' },
+  { key: 'software_status',         label: 'Software Status (ManageEngine)', group: 'General' },
+  { key: 'nessus_status',           label: 'Software Status (Nessus)',       group: 'General' },
+  { key: 'tenable_report',          label: 'Tenable Report',                 group: 'General' },
 ];
 
 async function dynamicCustomPages() {
@@ -46,18 +61,19 @@ async function loadMatrix() {
 }
 
 async function list() {
-  const [pages, matrix] = await Promise.all([listPages(), loadMatrix()]);
-  return { pages, roles: ROLES, matrix };
+  const [pages, matrix, activeRoles] = await Promise.all([listPages(), loadMatrix(), getActiveRoles()]);
+  return { pages, roles: activeRoles, matrix };
 }
 
 async function setMatrix(updates, userId) {
   // updates: [{ page_key, role, allowed }]
   if (!Array.isArray(updates) || !updates.length) return await list();
+  const activeRoles = await getActiveRoles();
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
     for (const u of updates) {
-      if (!u || typeof u.page_key !== 'string' || !ROLES.includes(u.role)) continue;
+      if (!u || typeof u.page_key !== 'string' || !activeRoles.includes(u.role)) continue;
       await client.query(
         `INSERT INTO page_access (page_key, role, allowed, updated_by, updated_at)
          VALUES ($1, $2, $3, $4, NOW())

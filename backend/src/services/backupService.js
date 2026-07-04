@@ -315,6 +315,11 @@ async function restoreTableFromCsv({ table, buffer, mode, userId }) {
   if (!lines.length) throw new ApiError(400, 'CSV file is empty');
 
   const headers = parseCsvLine(lines[0]);
+  // Validate column names to prevent SQL injection via crafted CSV headers
+  const safeColRe = /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/;
+  for (const h of headers) {
+    if (h && !safeColRe.test(h)) throw new ApiError(400, `Invalid column name in CSV: "${h}"`);
+  }
   const rows = lines.slice(1).map(parseCsvLine).map(cols => {
     const obj = {};
     headers.forEach((h, i) => { obj[h] = coerceCsvValue(cols[i] ?? ''); });

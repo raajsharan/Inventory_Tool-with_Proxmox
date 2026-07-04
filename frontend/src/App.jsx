@@ -37,6 +37,16 @@ import AdminBackup from './pages/Admin/Backup.jsx';
 import AdminBranding from './pages/Admin/Branding.jsx';
 import Profile from './pages/Profile.jsx';
 import RecycleBin from './pages/Admin/RecycleBin.jsx';
+import NavOrder from './pages/Admin/NavOrder.jsx';
+import UserPageControl from './pages/Admin/UserPageControl.jsx';
+import Roles from './pages/Admin/Roles.jsx';
+import InstallConfig from './pages/Admin/InstallConfig.jsx';
+import VMwareDiscovery from './pages/VMwareDiscovery/index.jsx';
+import ProxmoxDiscovery from './pages/ProxmoxDiscovery/index.jsx';
+import SoftwareStatus from './pages/SoftwareStatus/index.jsx';
+import NessusStatus from './pages/NessusStatus/index.jsx';
+import NessusInstallConfig from './pages/Admin/NessusInstallConfig.jsx';
+import TenableReport from './pages/TenableReport/index.jsx';
 
 export default function App() {
   return (
@@ -77,6 +87,11 @@ export default function App() {
         <Route path="/custom-pages/:slug/import" element={<CustomPageImport />} />
 
         <Route path="/reports" element={<ReportBuilder />} />
+        <Route path="/software-status"  element={<SoftwareStatus />} />
+        <Route path="/nessus-status"    element={<NessusStatus />} />
+        <Route path="/tenable-report"   element={<TenableReport />} />
+        <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
+        <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
 
         <Route path="/admin/users" element={<Users />} />
         <Route path="/admin/dropdowns" element={<Dropdowns />} />
@@ -90,6 +105,11 @@ export default function App() {
         <Route path="/admin/backup" element={<AdminBackup />} />
         <Route path="/admin/branding" element={<AdminBranding />} />
         <Route path="/admin/recycle-bin" element={<RecycleBin />} />
+        <Route path="/admin/nav-order" element={<NavOrder />} />
+        <Route path="/admin/user-page-control" element={<UserPageControl />} />
+        <Route path="/admin/roles" element={<Roles />} />
+        <Route path="/admin/install-config"        element={<InstallConfig />} />
+        <Route path="/admin/nessus-install-config" element={<NessusInstallConfig />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

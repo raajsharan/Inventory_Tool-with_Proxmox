@@ -1,0 +1,358 @@
+/**
+ * vmwareDbService.js
+ * ------------------
+ * All PostgreSQL operations for VMware discovery data.
+ */
+
+const db       = require('../config/db');
+const crypto   = require('../utils/crypto');
+
+// ---------------------------------------------------------------------------
+// Hosts (credentials)
+// ---------------------------------------------------------------------------
+
+async function listHosts() {
+  const { rows } = await db.query(
+    `SELECT id, host, username, port, verify_ssl, interval_minutes,
+            scheduler_enabled, last_discovery_at, last_vm_count, is_running,
+            created_at, updated_at
+     FROM vmware_hosts ORDER BY host`
+  );
+  return rows;
+}
+
+async function getHostById(id) {
+  const { rows } = await db.query(
+    `SELECT * FROM vmware_hosts WHERE id = $1`, [id]
+  );
+  return rows[0] || null;
+}
+
+async function getHostByName(host) {
+  const { rows } = await db.query(
+    `SELECT * FROM vmware_hosts WHERE host = $1`, [host]
+  );
+  return rows[0] || null;
+}
+
+async function upsertHost({ host, username, password, port, verifySSL, intervalMinutes, schedulerEnabled }) {
+  const encrypted = crypto.encrypt(password);
+  const { rows } = await db.query(
+    `INSERT INTO vmware_hosts
+       (host, username, password_encrypted, port, verify_ssl, interval_minutes, scheduler_enabled)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (host) DO UPDATE SET
+       username           = EXCLUDED.username,
+       password_encrypted = CASE WHEN EXCLUDED.password_encrypted IS NOT NULL
+                                 THEN EXCLUDED.password_encrypted
+                                 ELSE vmware_hosts.password_encrypted END,
+       port               = EXCLUDED.port,
+       verify_ssl         = EXCLUDED.verify_ssl,
+       interval_minutes   = EXCLUDED.interval_minutes,
+       scheduler_enabled  = EXCLUDED.scheduler_enabled,
+       updated_at         = NOW()
+     RETURNING id, host, username, port, verify_ssl, interval_minutes,
+               scheduler_enabled, last_discovery_at, last_vm_count, is_running`,
+    [host, username, encrypted, port, verifySSL, intervalMinutes, schedulerEnabled]
+  );
+  return rows[0];
+}
+
+async function deleteHost(id) {
+  const { rowCount } = await db.query(`DELETE FROM vmware_hosts WHERE id = $1`, [id]);
+  return rowCount > 0;
+}
+
+async function setHostRunning(id, running) {
+  await db.query(`UPDATE vmware_hosts SET is_running = $2 WHERE id = $1`, [id, running]);
+}
+
+async function setLastDiscovery(id, vmCount) {
+  await db.query(
+    `UPDATE vmware_hosts SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE WHERE id = $1`,
+    [id, vmCount]
+  );
+}
+
+function getDecryptedPassword(host) {
+  return crypto.decrypt(host.password_encrypted);
+}
+
+// ---------------------------------------------------------------------------
+// Discovery runs
+// ---------------------------------------------------------------------------
+
+async function startRun(hostId, sourceHost) {
+  const { rows } = await db.query(
+    `INSERT INTO vmware_discovery_runs (host_id, source_host, status)
+     VALUES ($1, $2, 'running') RETURNING id`,
+    [hostId, sourceHost]
+  );
+  return rows[0].id;
+}
+
+async function finishRun(runId, vmCount) {
+  await db.query(
+    `UPDATE vmware_discovery_runs SET status = 'success', vm_count = $2 WHERE id = $1`,
+    [runId, vmCount]
+  );
+}
+
+async function failRun(runId, errorMessage) {
+  await db.query(
+    `UPDATE vmware_discovery_runs SET status = 'error', error_message = $2 WHERE id = $1`,
+    [runId, errorMessage]
+  );
+}
+
+async function getRunHistory(hostId, limit = 20) {
+  const params = [limit];
+  let where = '';
+  if (hostId) { params.unshift(hostId); where = 'WHERE r.host_id = $1'; }
+  const { rows } = await db.query(
+    `SELECT r.id, r.source_host, r.vm_count, r.status, r.error_message, r.run_at,
+            h.host
+     FROM vmware_discovery_runs r
+     JOIN vmware_hosts h ON h.id = r.host_id
+     ${where}
+     ORDER BY r.run_at DESC
+     LIMIT $${params.length}`,
+    params
+  );
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// VM records
+// ---------------------------------------------------------------------------
+
+async function saveVMs(runId, hostId, sourceHost, vms) {
+  if (!vms.length) return;
+  // Bulk insert using a single multi-value query
+  const values = [];
+  const params = [];
+  let i = 1;
+  for (const vm of vms) {
+    values.push(
+      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
+    );
+    params.push(
+      runId, hostId, sourceHost,
+      vm.name, vm.hostname,
+      vm.ips, vm.esxi_host_name, vm.esxi_host_ip,
+      vm.os_type, vm.os_version,
+      vm.macs, vm.created_date, vm.power_state, vm.tools_status,
+      vm.num_cpu, vm.memory_mb,
+      vm.storage_committed_gb, vm.storage_uncommitted_gb,
+      vm.datastores,
+      vm.snapshot_count, vm.snapshot_oldest
+    );
+  }
+  await db.query(
+    `INSERT INTO vmware_discovered_vms
+       (run_id, host_id, source_host,
+        name, hostname,
+        ips, esxi_host_name, esxi_host_ip,
+        os_type, os_version,
+        macs, created_date, power_state, tools_status,
+        num_cpu, memory_mb,
+        storage_committed_gb, storage_uncommitted_gb,
+        datastores,
+        snapshot_count, snapshot_oldest)
+     VALUES ${values.join(',')}`,
+    params
+  );
+}
+
+// Return VMs from the latest successful run per host
+async function getLatestVMs(hostId) {
+  let where = '';
+  const params = [];
+  if (hostId) { params.push(hostId); where = 'AND v.host_id = $1'; }
+
+  const { rows } = await db.query(
+    `WITH latest_runs AS (
+       SELECT DISTINCT ON (host_id)
+              id AS run_id, host_id
+       FROM vmware_discovery_runs
+       WHERE status = 'success'
+       ${where}
+       ORDER BY host_id, run_at DESC
+     )
+     SELECT v.*
+     FROM vmware_discovered_vms v
+     JOIN latest_runs lr ON lr.run_id = v.run_id AND lr.host_id = v.host_id
+     ORDER BY v.source_host, v.name`,
+    params
+  );
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard stats
+// ---------------------------------------------------------------------------
+
+async function getDashboardStats() {
+  const vms = await getLatestVMs();
+  const stats = { total: 0, poweredOn: 0, poweredOff: 0, suspended: 0 };
+  const byHost  = {};
+  const byOS    = {};
+
+  for (const vm of vms) {
+    stats.total++;
+    if (vm.power_state === 'poweredOn')  stats.poweredOn++;
+    else if (vm.power_state === 'poweredOff') stats.poweredOff++;
+    else if (vm.power_state === 'suspended')  stats.suspended++;
+
+    const h = vm.source_host || 'Unknown';
+    if (!byHost[h]) byHost[h] = { host: h, total: 0, poweredOn: 0, poweredOff: 0 };
+    byHost[h].total++;
+    if (vm.power_state === 'poweredOn')  byHost[h].poweredOn++;
+    if (vm.power_state === 'poweredOff') byHost[h].poweredOff++;
+
+    const os = (vm.os_type && vm.os_type !== 'Not Available') ? vm.os_type : 'Unknown';
+    byOS[os] = (byOS[os] || 0) + 1;
+  }
+
+  return {
+    stats,
+    byHost:  Object.values(byHost).sort((a, b) => b.total - a.total),
+    byOS:    Object.entries(byOS).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([os, count]) => ({ os, count })),
+    total:   vms.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Drift detection — compare latest two runs per host
+// ---------------------------------------------------------------------------
+
+async function getDrift() {
+  // Get latest 2 run IDs per host
+  const { rows: runRows } = await db.query(
+    `SELECT DISTINCT ON (host_id)
+            host_id,
+            id       AS current_run_id,
+            run_at   AS current_at,
+            (
+              SELECT id FROM vmware_discovery_runs r2
+              WHERE r2.host_id = r1.host_id AND r2.status = 'success' AND r2.id <> r1.id
+              ORDER BY r2.run_at DESC LIMIT 1
+            ) AS previous_run_id
+     FROM vmware_discovery_runs r1
+     WHERE status = 'success'
+     ORDER BY host_id, run_at DESC`
+  );
+
+  const results = [];
+  for (const run of runRows) {
+    if (!run.previous_run_id) continue;  // need at least 2 runs to diff
+
+    const [{ rows: curr }, { rows: prev }] = await Promise.all([
+      db.query(`SELECT * FROM vmware_discovered_vms WHERE run_id = $1`, [run.current_run_id]),
+      db.query(`SELECT * FROM vmware_discovered_vms WHERE run_id = $1`, [run.previous_run_id]),
+    ]);
+
+    const currByName = Object.fromEntries(curr.map(v => [v.name, v]));
+    const prevByName = Object.fromEntries(prev.map(v => [v.name, v]));
+
+    const added   = curr.filter(v => !prevByName[v.name]);
+    const removed = prev.filter(v => !currByName[v.name]);
+    const changed = curr.filter((v) => {
+      const p = prevByName[v.name];
+      if (!p) return false;
+      return (
+        v.power_state !== p.power_state ||
+        JSON.stringify(v.ips) !== JSON.stringify(p.ips)
+      );
+    }).map((v) => ({
+      ...v,
+      prev_power_state: prevByName[v.name].power_state,
+      prev_ips:         prevByName[v.name].ips,
+    }));
+
+    results.push({
+      host:          curr[0]?.source_host || run.host_id,
+      current_at:    run.current_at,
+      added, removed, changed,
+      summary: { added: added.length, removed: removed.length, changed: changed.length },
+    });
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// ESXi topology
+// ---------------------------------------------------------------------------
+
+async function getESXiTopology() {
+  const vms = await getLatestVMs();
+  const topology = {};  // vcenter → { esxiKey → stats }
+
+  for (const vm of vms) {
+    const vcenter = vm.source_host || 'Unknown';
+    if (!topology[vcenter]) topology[vcenter] = {};
+
+    const esxiName = vm.esxi_host_name || 'Not Available';
+    const esxiIp   = vm.esxi_host_ip   || 'Not Available';
+    const key      = `${esxiName}|${esxiIp}`;
+
+    if (!topology[vcenter][key]) {
+      topology[vcenter][key] = {
+        esxi_name: esxiName, esxi_ip: esxiIp, vcenter,
+        vm_count: 0, powered_on: 0, powered_off: 0, suspended: 0,
+      };
+    }
+    const s = topology[vcenter][key];
+    s.vm_count++;
+    if (vm.power_state === 'poweredOn')  s.powered_on++;
+    if (vm.power_state === 'poweredOff') s.powered_off++;
+    if (vm.power_state === 'suspended')  s.suspended++;
+  }
+
+  return Object.entries(topology).sort(([a], [b]) => a.localeCompare(b)).map(([vcenter, esxiMap]) => ({
+    vcenter,
+    esxi_hosts: Object.values(esxiMap).sort((a, b) => a.esxi_name.localeCompare(b.esxi_name)),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Stale VMs
+// ---------------------------------------------------------------------------
+
+async function getStaleVMs() {
+  const vms = await getLatestVMs();
+  const driftData = await getDrift();
+
+  const removedVMs = driftData.flatMap(d => d.removed);
+  const noNetwork  = vms.filter(v => v.power_state === 'poweredOn' && (!v.ips || v.ips.join('') === 'Not Available'));
+  const poweredOff = vms.filter(v => v.power_state === 'poweredOff');
+
+  return { removed: removedVMs, noNetwork, poweredOff, total: vms.length };
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot report
+// ---------------------------------------------------------------------------
+
+async function getSnapshotVMs() {
+  const vms = await getLatestVMs();
+  return vms
+    .filter(v => v.snapshot_count > 0)
+    .map(v => ({
+      name:          v.name,
+      source_host:   v.source_host,
+      esxi_host:     v.esxi_host_name,
+      power_state:   v.power_state,
+      count:         v.snapshot_count,
+      oldest:        v.snapshot_oldest || '—',
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+module.exports = {
+  listHosts, getHostById, getHostByName, upsertHost, deleteHost,
+  setHostRunning, setLastDiscovery, getDecryptedPassword,
+  startRun, finishRun, failRun, getRunHistory,
+  saveVMs, getLatestVMs,
+  getDashboardStats, getDrift, getESXiTopology, getStaleVMs, getSnapshotVMs,
+};

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
-  Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress,
+  Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
 } from 'antd';
 import {
   DatabaseOutlined, SafetyCertificateOutlined, ThunderboltOutlined,
@@ -9,11 +9,12 @@ import {
   ClockCircleOutlined, PauseCircleOutlined, CheckCircleOutlined, PoweroffOutlined,
   CloseCircleOutlined, BlockOutlined,
   BarChartOutlined, CalendarOutlined, FundOutlined, RiseOutlined,
-  EnvironmentOutlined,
+  EnvironmentOutlined, ApartmentOutlined, ClusterOutlined, PlayCircleOutlined,
 } from '@ant-design/icons';
 import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
 import { useAppTheme } from '../context/ThemeContext.jsx';
+import InfrastructureDashboard from '../components/InfrastructureDashboard.jsx';
 
 function StatTile({ icon, value, label, color }) {
   return (
@@ -903,6 +904,65 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
   );
 }
 
+const ME_BUCKET_ORDER = [
+  'Alive But Powered Off', 'Auto', 'Beijing IT Team',
+  'EOL - No Patches', 'Exception', 'Manual', 'Not Applicable', 'On Hold', 'Onboard Pending', 'Other',
+];
+
+function MEComplianceTable({ rows, excludedBuckets = [] }) {
+  const sorted = [...rows].sort(
+    (a, b) => ME_BUCKET_ORDER.indexOf(a.bucket) - ME_BUCKET_ORDER.indexOf(b.bucket),
+  );
+  const totalNo  = sorted.reduce((s, r) => s + (r.no_me  || 0), 0);
+  const totalYes = sorted.reduce((s, r) => s + (r.yes_me || 0), 0);
+  const totalAll = sorted.reduce((s, r) => s + (r.total  || 0), 0);
+
+  const dash = (n) => (n === 0 ? <span style={{ color: '#bbb' }}>—</span> : <strong style={{ color: '#1d4ed8' }}>{n.toLocaleString()}</strong>);
+
+  const thStyle = {
+    background: '#e8eef7', fontWeight: 700, fontSize: 12,
+    padding: '8px 12px', textAlign: 'left', letterSpacing: 0.3,
+    borderBottom: '2px solid #c8d8ef',
+  };
+  const tdStyle = (align = 'left') => ({
+    padding: '7px 12px', borderBottom: '1px solid #f0f0f0',
+    textAlign: align, fontSize: 13,
+  });
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr>
+            <th style={{ ...thStyle, width: '55%' }}>PATCHING TYPE \ MANAGEENGINE INSTALLED</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>NO</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>YES</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => (
+            <tr key={r.bucket} style={{ background: excludedBuckets.includes(r.bucket) ? '#fafafa' : undefined }}>
+              <td style={{ ...tdStyle(), color: excludedBuckets.includes(r.bucket) ? '#aaa' : undefined }}>{r.bucket}</td>
+              <td style={tdStyle('right')}>{dash(r.no_me)}</td>
+              <td style={tdStyle('right')}>{dash(r.yes_me)}</td>
+              <td style={{ ...tdStyle('right'), fontWeight: 600 }}>{(r.total || 0).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: '#f5f7fb', fontWeight: 700 }}>
+            <td style={{ ...tdStyle(), fontWeight: 700 }}>Total</td>
+            <td style={{ ...tdStyle('right'), fontWeight: 700, color: '#1d4ed8' }}>{totalNo.toLocaleString()}</td>
+            <td style={{ ...tdStyle('right'), fontWeight: 700, color: '#1d4ed8' }}>{totalYes.toLocaleString()}</td>
+            <td style={{ ...tdStyle('right'), fontWeight: 700 }}>{totalAll.toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 function WeeklyReportTab({ data, isDark }) {
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
@@ -911,6 +971,8 @@ function WeeklyReportTab({ data, isDark }) {
   const extPatching   = data.extInventoryPatchingStatus || {};
   const locRows  = data.weeklyLocationPatching || [];
   const deptRows = data.weeklyDepartmentPatching || [];
+  const meMslRows = data.meMslBreakdown || [];
+  const meExtRows = data.meExtBreakdown || [];
 
   const mslOverall  = msl.mslNumerator ?? 0;
   const mslOverallD = msl.mslDenominator ?? 0;
@@ -926,6 +988,16 @@ function WeeklyReportTab({ data, isDark }) {
                      + (extPatching.auto_patching ?? 0)   + (extPatching.manual_patching ?? 0);
   const overallPatchD = apTotal + epTotal;
   const overallPatchPct = overallPatchD ? ((overallPatchN / overallPatchD) * 100).toFixed(2) : '0.00';
+
+  // ME compliance: exclude Beijing IT, Not Applicable, Powered Off, EOL from denominator
+  const MSL_EXCL = ['Beijing IT Team', 'Not Applicable', 'Alive But Powered Off', 'EOL - No Patches'];
+  const EXT_EXCL = ['Beijing IT Team', 'Not Applicable', 'Alive But Powered Off', 'EOL - No Patches', 'Exception'];
+  const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
+  const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
+  const meMslYes  = meMslIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
+  const meMslDen  = meMslIncl.reduce((s, r) => s + (r.total  || 0), 0);
+  const meExtYes  = meExtIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
+  const meExtDen  = meExtIncl.reduce((s, r) => s + (r.total  || 0), 0);
 
   return (
     <div>
@@ -952,20 +1024,28 @@ function WeeklyReportTab({ data, isDark }) {
           </Typography.Paragraph>
 
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            <strong>Total Asset Inventory Count is {mslOverall.toLocaleString()}</strong>
+            Total Asset Inventory Count is <strong>{mslOverall.toLocaleString()}</strong>{' '}
+            <Typography.Text type="secondary">(decommissioned excluded)</Typography.Text>
           </Typography.Paragraph>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>From active inventory, pending/follow-ups:</Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            Total decommissioned assets: <strong>{(vmGaps.decommissioned ?? 0).toLocaleString()}</strong>
+          </Typography.Paragraph>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>From active inventory, pending/follow-ups:</Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 4 }}>
-            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
-            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
-            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
-            <li><strong>Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
+            <li>- <strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
+            <li>- Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
+            <li>- <strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
+            <li>- <strong>Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
           </ul>
         </WeeklyReportRow>
 
         <WeeklyReportRow label="Extended Inventory">
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            <strong>Total {(ec.total ?? 0).toLocaleString()} endpoints</strong>
+            <strong>Total {(ec.total ?? 0).toLocaleString()} endpoints</strong>{' '}
+            <Typography.Text type="secondary">(decommissioned excluded)</Typography.Text>
+          </Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>
+            Total decommissioned VMs: <strong>{(ec.decommissioned ?? 0).toLocaleString()}</strong>
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints, password info is received.
@@ -974,9 +1054,9 @@ function WeeklyReportTab({ data, isDark }) {
             Compliance: {(ec.withPassword ?? 0).toLocaleString()} out of {(ec.total ?? 0).toLocaleString()} = {pct(ec.withPassword, ec.total)}%
           </Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 0 }}>
-            <li><strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
-            <li><strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
-            <li><strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
+            <li>- <strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
+            <li>- <strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
+            <li>- <strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
           </ul>
         </WeeklyReportRow>
 
@@ -1022,9 +1102,51 @@ function WeeklyReportTab({ data, isDark }) {
           <WeeklyBreakdownTable rows={deptRows} groupLabel="Department" />
         </Card>
       </div>
+
+      {/* AUTO PATCHING GROUP COUNT STATUS */}
+      <div style={{ marginTop: 32 }}>
+        <Typography.Text underline strong style={{ display: 'block', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          Auto Patching Group Count Status{' '}
+          <Typography.Text type="secondary" style={{ fontWeight: 400, textTransform: 'none', fontSize: 12 }}>
+            (Includes the endpoints in staging state)
+          </Typography.Text>
+        </Typography.Text>
+
+        <Card bodyStyle={{ padding: 20 }} style={{ marginBottom: 20 }}>
+          <Typography.Paragraph style={{ marginBottom: 12 }}>
+            <Typography.Link underline strong>
+              Manage Engine compliance with MSL
+            </Typography.Link>{' '}
+            → {meMslYes.toLocaleString()}/{meMslDen.toLocaleString()} x 100 ={' '}
+            <strong>{meMslDen ? ((meMslYes / meMslDen) * 100).toFixed(2) : '0.00'}%</strong>{' '}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              (*Excludes Bomgar &amp; Beijing Team Managed count, esxi hosts and not applicable vms, powered off VMs EOL VMs)
+            </Typography.Text>
+          </Typography.Paragraph>
+          <MEComplianceTable rows={meMslRows} excludedBuckets={MSL_EXCL} />
+        </Card>
+
+        <Card bodyStyle={{ padding: 20 }}>
+          <Typography.Paragraph style={{ marginBottom: 12 }}>
+            <Typography.Link underline strong>
+              Manage Engine compliance with Extended Inventory
+            </Typography.Link>{' '}
+            → {meExtYes.toLocaleString()}/{meExtDen.toLocaleString()} x 100 ={' '}
+            <strong>{meExtDen ? ((meExtYes / meExtDen) * 100).toFixed(2) : '0.00'}%</strong>{' '}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              (*Excludes ESXi hosts and not applicable vm&apos;s like appliances, Beijing IT managed, exceptions, EOL VMs)
+            </Typography.Text>
+          </Typography.Paragraph>
+          <MEComplianceTable rows={meExtRows} excludedBuckets={EXT_EXCL} />
+        </Card>
+      </div>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Root Dashboard — toggle between Inventory and Infrastructure views
+// ---------------------------------------------------------------------------
 
 export default function Dashboard() {
   const { mode } = useAppTheme() || { mode: 'light' };
@@ -1041,8 +1163,9 @@ export default function Dashboard() {
   };
   const legendStyle = { itemName: { style: { fill: labelColor } } };
 
+  const [view, setView] = useState(() => localStorage.getItem('dashView') || 'inventory');
   const [data, setData] = useState(null);
-  const [err, setErr] = useState('');
+  const [err,  setErr]  = useState('');
 
   useEffect(() => {
     api.get('/dashboard/summary')
@@ -1050,33 +1173,67 @@ export default function Dashboard() {
       .catch(e => setErr(e.response?.data?.error || 'Failed'));
   }, []);
 
-  if (err) return <Alert type="error" message={err} />;
-  if (!data) return <Spin />;
+  function handleViewChange(v) {
+    setView(v);
+    localStorage.setItem('dashView', v);
+  }
 
   return (
     <div>
-      <Tabs
-        defaultActiveKey="exec"
-        items={[
-          {
-            key: 'exec', label: 'Executive Overview',
-            children: <ExecutiveOverview data={data} />,
-          },
-          {
-            key: 'asset', label: 'Asset Inventory',
-            children: <AssetInventoryTab data={data} isDark={isDark} axisStyle={axisStyle}
-                        labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} />,
-          },
-          {
-            key: 'ext', label: 'Extended Inventory',
-            children: <ExtendedInventoryTab data={data} />,
-          },
-          {
-            key: 'weekly', label: 'Weekly Report',
-            children: <WeeklyReportTab data={data} isDark={isDark} />,
-          },
-        ]}
-      />
+      {/* Toggle */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <Space.Compact>
+          <Button
+            type={view === 'inventory' ? 'primary' : 'default'}
+            icon={<DatabaseOutlined />}
+            onClick={() => handleViewChange('inventory')}
+          >
+            Inventory Dashboard
+          </Button>
+          <Button
+            type={view === 'infrastructure' ? 'primary' : 'default'}
+            icon={<ApartmentOutlined />}
+            onClick={() => handleViewChange('infrastructure')}
+          >
+            VMware &amp; Proxmox
+          </Button>
+        </Space.Compact>
+      </div>
+
+      {/* Infrastructure view */}
+      {view === 'infrastructure' && <InfrastructureDashboard />}
+
+      {/* Inventory view */}
+      {view === 'inventory' && (
+        <>
+          {err  && <Alert type="error" message={err} />}
+          {!data && !err && <Spin />}
+          {data && (
+            <Tabs
+              defaultActiveKey="exec"
+              items={[
+                {
+                  key: 'exec', label: 'Executive Overview',
+                  children: <ExecutiveOverview data={data} />,
+                },
+                {
+                  key: 'asset', label: 'Asset Inventory',
+                  children: <AssetInventoryTab data={data} isDark={isDark} axisStyle={axisStyle}
+                              labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} />,
+                },
+                {
+                  key: 'ext', label: 'Extended Inventory',
+                  children: <ExtendedInventoryTab data={data} />,
+                },
+                {
+                  key: 'weekly', label: 'Weekly Report',
+                  children: <WeeklyReportTab data={data} isDark={isDark} />,
+                },
+              ]}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }

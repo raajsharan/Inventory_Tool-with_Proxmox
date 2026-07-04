@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const multer = require('multer');
 const { body, param } = require('express-validator');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, requirePasswordAccess } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const assetCtrl = require('../controllers/assetController');
 const importCtrl = require('../controllers/importController');
@@ -33,7 +33,7 @@ router.post('/smart-import',         authenticate, authorize(...writeRoles),
 
 router.get('/', authenticate, assetCtrl.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, assetCtrl.get);
-router.get('/:id/password', authenticate, authorize(...writeRoles), param('id').isUUID(), validate, assetCtrl.viewPassword);
+router.get('/:id/password', authenticate, authorize(...writeRoles), requirePasswordAccess, param('id').isUUID(), validate, assetCtrl.viewPassword);
 
 const assetBodyValidators = [
   body('vmName').optional().isString().isLength({ min: 1, max: 255 }),

@@ -1,9 +1,18 @@
 const bcrypt = require('bcrypt');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const customRolesSvc = require('../services/customRolesService');
 
-const VISIBLE_ROLES = ['admin', 'asset_manager', 'viewer'];
-const ALL_ROLES = ['superadmin', ...VISIBLE_ROLES];
+const SYSTEM_VISIBLE = ['admin', 'asset_manager', 'viewer'];
+const SYSTEM_ALL     = ['superadmin', ...SYSTEM_VISIBLE];
+
+// Build the live allowed-role list (system + custom) for the request's privilege level
+async function getAllowedRoles(isSuperUser) {
+  const custom = await customRolesSvc.listCustom().then(rows => rows.map(r => r.name));
+  return isSuperUser
+    ? [...SYSTEM_ALL, ...custom]
+    : [...SYSTEM_VISIBLE, ...custom];
+}
 
 function isSuper(req) { return req.user?.role === 'superadmin'; }
 
@@ -23,7 +32,7 @@ async function create(req, res, next) {
   try {
     const { email, fullName, password, role } = req.body;
     if (!email || !password || !fullName || !role) throw new ApiError(400, 'Missing fields');
-    const allowed = isSuper(req) ? ALL_ROLES : VISIBLE_ROLES;
+    const allowed = await getAllowedRoles(isSuper(req));
     if (!allowed.includes(role)) throw new ApiError(400, 'Invalid role');
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
@@ -51,7 +60,10 @@ async function update(req, res, next) {
     }
     const { fullName, role, isActive, password } = req.body;
     if (role !== undefined) {
-      const allowed = isSuper(req) ? ALL_ROLES : VISIBLE_ROLES;
+      if (role === 'superadmin' && !isSuper(req)) {
+        throw new ApiError(403, 'Only superadmin can assign the superadmin role');
+      }
+      const allowed = await getAllowedRoles(isSuper(req));
       if (!allowed.includes(role)) throw new ApiError(400, 'Invalid role');
     }
     const sets = [];

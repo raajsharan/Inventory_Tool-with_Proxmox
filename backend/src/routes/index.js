@@ -23,5 +23,12 @@ router.use('/inventory-fields', authenticate,                                   
 router.use('/backup',           authenticate, requirePageAccess('admin/backup'),            require('./backupRoutes'));
 router.use('/branding',         require('./brandingRoutes'));
 router.use('/recycle-bin',      authenticate, requirePageAccess('admin/recycle-bin'),     require('./recycleBinRoutes'));
+router.use('/vmware',              require('./vmwareRoutes'));
+router.use('/proxmox',             require('./proxmoxRoutes'));
+router.use('/user-page-control',   authenticate, require('./userPageAccessRoutes'));
+router.use('/roles',               require('./customRolesRoutes'));
+router.use('/software-status',     require('./softwareStatusRoutes'));
+router.use('/nessus-status',       require('./nessusStatusRoutes'));
+router.use('/tenable',             require('./tenableRoutes'));
 
 module.exports = router;

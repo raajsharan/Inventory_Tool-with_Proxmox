@@ -33,6 +33,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const [submitting, setSubmitting] = useState(false);
   const [osType, setOsType] = useState();
   const [department, setDepartment] = useState();
+  const idracEnabled = Form.useWatch('idracEnabled', form);
   const [autoTagInfo, setAutoTagInfo] = useState(null);
   const [autoTagLoading, setAutoTagLoading] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
@@ -94,6 +95,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           additionalRemarks: r.data.additional_remarks,
           manageEngineInstalled: r.data.manage_engine_installed,
           tenableInstalled: r.data.tenable_installed,
+          macAddress: r.data.mac_address,
           idracEnabled: r.data.idrac_enabled,
           idracIp: r.data.idrac_ip,
           // Hydrate any admin-added extras under the `extras` namespace.
@@ -191,6 +193,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     ome_status: { xs: 24, md: 6 }, hosted_ip: { xs: 24, md: 6 },
     serial_number: { xs: 24, md: 8 }, asset_username: { xs: 24, md: 8 }, asset_password: { xs: 24, md: 8 },
     asset_tag: { xs: 24, md: 24 }, additional_remarks: { xs: 24, md: 24 },
+    mac_address: { xs: 24, md: 8 },
     manage_engine_installed: { xs: 12, md: 6 }, tenable_installed: { xs: 12, md: 6 },
     idrac_enabled: { xs: 12, md: 6 }, idrac_ip: { xs: 24, md: 6 },
   };
@@ -292,13 +295,41 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       case 'os_type':
         return wrap(
           <Form.Item name="osType" label={labelOf('os_type', 'OS Type')}>
-            <Select allowClear options={opts('os_type')} onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }} />
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Select OS Type"
+              options={opts('os_type')}
+              onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }}
+            />
+          </Form.Item>
+        );
+      case 'mac_address':
+        return wrap(
+          <Form.Item
+            name="macAddress"
+            label={labelOf('mac_address', 'MAC Address')}
+            rules={[{ required: true, message: 'MAC Address is required' }]}
+          >
+            <Input placeholder="e.g. 00:11:22:33:44:55" />
           </Form.Item>
         );
       case 'os_version':
         return wrap(
-          <Form.Item name="osVersion" label={labelOf('os_version', 'OS Version')}>
-            <Select allowClear options={opts('os_version', osType)} />
+          <Form.Item
+            name="osVersion"
+            label={labelOf('os_version', 'OS Version')}
+            extra={!osType ? 'Select an OS Type first to see available versions.' : undefined}
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              disabled={!osType}
+              placeholder={osType ? 'Select OS Version' : 'Select OS Type first'}
+              options={osType ? opts('os_version', osType) : []}
+            />
           </Form.Item>
         );
       case 'assigned_user':
@@ -339,6 +370,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       case 'eol_status':
         return wrap(<Form.Item name="eolStatus" label={labelOf('eol_status', 'EOL Status')}><Select allowClear options={opts('eol_status')} /></Form.Item>);
       case 'ome_status':
+        if (!idracEnabled) return null;
         return wrap(overridableFormItem({
           fieldKey: 'ome_status', name: 'omeStatus',
           label: labelOf('ome_status', 'OME Status'),
@@ -351,6 +383,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           defaultChild: <Input />,
         }));
       case 'serial_number':
+        if (!idracEnabled) return null;
         return wrap(overridableFormItem({
           fieldKey: 'serial_number', name: 'serialNumber',
           label: labelOf('serial_number', 'Serial Number'),
@@ -445,6 +478,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           defaultChild: <Switch />, defaultValuePropName: 'checked',
         }));
       case 'idrac_ip':
+        if (!idracEnabled) return null;
         return wrap(<Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}><Input placeholder="10.x.x.x" /></Form.Item>);
       default:
         return null;

@@ -121,16 +121,31 @@ async function summary(_req, res, next) {
 
     const extComplianceQ = db.query(`
       SELECT
-        COUNT(*)::int                                                  AS total,
-        COUNT(*) FILTER (WHERE asset_password_encrypted IS NOT NULL)::int AS with_password,
-        COUNT(*) FILTER (WHERE manage_engine_installed = TRUE)::int   AS me_installed,
+        COUNT(*) FILTER (
+          WHERE server_status IS NULL
+             OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%')
+        )::int                                                         AS total,
+        COUNT(*) FILTER (
+          WHERE server_status = 'Decommissioned' OR server_status ILIKE 'Decom%'
+        )::int                                                         AS decommissioned,
+        COUNT(*) FILTER (
+          WHERE asset_password_encrypted IS NOT NULL
+            AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        )::int                                                         AS with_password,
+        COUNT(*) FILTER (WHERE manage_engine_installed = TRUE
+          AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        )::int                                                         AS me_installed,
         COUNT(*) FILTER (
           WHERE asset_type ILIKE '%network%' OR asset_type ILIKE '%switch%'
              OR asset_type ILIKE '%printer%' OR asset_type ILIKE '%ups%'
              OR asset_type ILIKE '%router%'  OR asset_type ILIKE '%firewall%'
         )::int                                                         AS me_not_applicable,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int       AS auto_patching,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int     AS manual_patching
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%'
+          AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        )::int                                                         AS auto_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%'
+          AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        )::int                                                         AS manual_patching
       FROM ext_assets;
     `);
 
@@ -258,6 +273,9 @@ async function summary(_req, res, next) {
       SELECT
         COUNT(*)::int AS total,
         COUNT(*) FILTER (
+          WHERE server_status = 'Decommissioned' OR server_status ILIKE 'Decom%'
+        )::int AS decommissioned,
+        COUNT(*) FILTER (
           WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%')
             AND asset_password_encrypted IS NULL
         )::int AS no_password,
@@ -305,6 +323,111 @@ async function summary(_req, res, next) {
     `;
     const weeklyLocationPatchingQ   = db.query(buildWeeklyBreakdown('location'));
     const weeklyDepartmentPatchingQ = db.query(buildWeeklyBreakdown('department'));
+
+    // ---------------------------------------------------------------
+    // ME Compliance breakdown: patching-type bucket × ME installed
+    // MSL side (assets + beijing + physical)
+    // ---------------------------------------------------------------
+    const meMslBreakdownQ = db.query(`
+      WITH inv AS (
+        SELECT 'assets'::text AS src, server_status, patching_type, eol_status,
+               COALESCE(manage_engine_installed, false) AS me
+          FROM assets WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT 'beijing_assets', server_status, patching_type, eol_status,
+               COALESCE(manage_engine_installed, false)
+          FROM beijing_assets WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT 'physical_esxi_servers', server_status, patching_type, eol_status,
+               COALESCE(manage_engine_installed, false)
+          FROM physical_esxi_servers WHERE deleted_at IS NULL
+      ),
+      cat AS (
+        SELECT
+          CASE
+            WHEN src = 'beijing_assets'                                                              THEN 'Beijing IT Team'
+            WHEN server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'             THEN 'Alive But Powered Off'
+            WHEN eol_status = 'EOL'                                                                  THEN 'EOL - No Patches'
+            WHEN eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A')                   THEN 'Not Applicable'
+            WHEN server_status ILIKE 'On Hold%'                                                      THEN 'On Hold'
+            WHEN server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%'                   THEN 'Onboard Pending'
+            WHEN patching_type ILIKE 'Auto%'                                                         THEN 'Auto'
+            WHEN patching_type ILIKE 'Exception%'                                                    THEN 'Exception'
+            WHEN patching_type ILIKE 'Manual%'                                                       THEN 'Manual'
+            ELSE 'Other'
+          END AS bucket,
+          me
+        FROM inv
+      )
+      SELECT
+        bucket,
+        COUNT(*) FILTER (WHERE me = false)::int AS no_me,
+        COUNT(*) FILTER (WHERE me = true)::int  AS yes_me,
+        COUNT(*)::int                            AS total,
+        CASE bucket
+          WHEN 'Alive But Powered Off' THEN 1
+          WHEN 'Auto'                  THEN 2
+          WHEN 'Beijing IT Team'       THEN 3
+          WHEN 'EOL - No Patches'      THEN 4
+          WHEN 'Exception'             THEN 5
+          WHEN 'Manual'                THEN 6
+          WHEN 'Not Applicable'        THEN 7
+          WHEN 'On Hold'               THEN 8
+          WHEN 'Onboard Pending'       THEN 9
+          ELSE 10
+        END AS sort_order
+      FROM cat
+      GROUP BY 1
+      ORDER BY sort_order;
+    `);
+
+    // ---------------------------------------------------------------
+    // ME Compliance breakdown: Extended Inventory (ext_assets)
+    // ---------------------------------------------------------------
+    const meExtBreakdownQ = db.query(`
+      WITH cat AS (
+        SELECT
+          CASE
+            WHEN server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'             THEN 'Alive But Powered Off'
+            WHEN eol_status = 'EOL'                                                                  THEN 'EOL - No Patches'
+            WHEN eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A')
+              OR asset_type ILIKE '%network%' OR asset_type ILIKE '%switch%'
+              OR asset_type ILIKE '%printer%' OR asset_type ILIKE '%ups%'
+              OR asset_type ILIKE '%router%'  OR asset_type ILIKE '%firewall%'                       THEN 'Not Applicable'
+            WHEN server_status ILIKE 'On Hold%'                                                      THEN 'On Hold'
+            WHEN server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%'                   THEN 'Onboard Pending'
+            WHEN department ILIKE '%beijing%' OR business_purpose ILIKE '%beijing%'                  THEN 'Beijing IT Team'
+            WHEN patching_type ILIKE 'Auto%'                                                         THEN 'Auto'
+            WHEN patching_type ILIKE 'Exception%'                                                    THEN 'Exception'
+            WHEN patching_type ILIKE 'Manual%'                                                       THEN 'Manual'
+            ELSE 'Other'
+          END AS bucket,
+          COALESCE(manage_engine_installed, false) AS me
+        FROM ext_assets
+        WHERE server_status IS NULL
+           OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%')
+      )
+      SELECT
+        bucket,
+        COUNT(*) FILTER (WHERE me = false)::int AS no_me,
+        COUNT(*) FILTER (WHERE me = true)::int  AS yes_me,
+        COUNT(*)::int                            AS total,
+        CASE bucket
+          WHEN 'Alive But Powered Off' THEN 1
+          WHEN 'Auto'                  THEN 2
+          WHEN 'Beijing IT Team'       THEN 3
+          WHEN 'EOL - No Patches'      THEN 4
+          WHEN 'Exception'             THEN 5
+          WHEN 'Manual'                THEN 6
+          WHEN 'Not Applicable'        THEN 7
+          WHEN 'On Hold'               THEN 8
+          WHEN 'Onboard Pending'       THEN 9
+          ELSE 10
+        END AS sort_order
+      FROM cat
+      GROUP BY 1
+      ORDER BY sort_order;
+    `);
 
     const extPatchingStatusQ = db.query(`
       SELECT
@@ -359,12 +482,14 @@ async function summary(_req, res, next) {
 
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
-           weeklyLocationPatching, weeklyDepartmentPatching] = await Promise.all([
+           weeklyLocationPatching, weeklyDepartmentPatching,
+           meMslBreakdown, meExtBreakdown] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
+      meMslBreakdownQ, meExtBreakdownQ,
     ]);
 
     const i = inv.rows[0];
@@ -434,6 +559,7 @@ async function summary(_req, res, next) {
 
       extEndpointCompliance: {
         total:           extComp.rows[0].total,
+        decommissioned:  extComp.rows[0].decommissioned,
         withPassword:    extComp.rows[0].with_password,
         meInstalled:     extComp.rows[0].me_installed,
         meNotApplicable: extComp.rows[0].me_not_applicable,
@@ -450,6 +576,8 @@ async function summary(_req, res, next) {
       weeklyVmGaps: weeklyVmGaps.rows[0],
       weeklyLocationPatching:   weeklyLocationPatching.rows,
       weeklyDepartmentPatching: weeklyDepartmentPatching.rows,
+      meMslBreakdown:  meMslBreakdown.rows,
+      meExtBreakdown:  meExtBreakdown.rows,
 
       // Legacy keys kept for backwards compatibility with the old Dashboard.
       total: i.total,

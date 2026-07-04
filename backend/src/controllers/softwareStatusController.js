@@ -1,0 +1,420 @@
+const fs          = require('fs');
+const path        = require('path');
+const db          = require('../config/db');
+const { decrypt } = require('../utils/crypto');
+const { sshVerify, sshRunCommand, sshUploadAndRun, isWindows } = require('../utils/sshVerify');
+const { winrmInstall, psexecInstall, wmiInstall }              = require('../utils/winInstall');
+const ApiError    = require('../utils/ApiError');
+
+function appendLog(logFilePath, ip, level, message) {
+  if (!logFilePath) return;
+  try {
+    const tag  = level === 'SUCCESS' ? '[SUCCESS]' : `[${level || 'INFO'}]`;
+    const line = `${tag} ${ip}: ${message}\n`;
+    fs.appendFileSync(logFilePath, line, 'utf8');
+  } catch {}
+}
+
+const SOURCE_TABLE = {
+  'MSL Assets':      'assets',
+  'Beijing Assets':  'beijing_assets',
+  'Ext. Assets':     'ext_assets',
+  'Physical Servers':'physical_esxi_servers',
+};
+
+// ── shared: resolve credentials for a VM ─────────────────────────────────────
+async function resolveVm(ip_address, source, override_username, override_password) {
+  const table = SOURCE_TABLE[source];
+  if (!table) throw new ApiError(400, 'Unknown source: ' + source);
+
+  const { rows } = await db.query(
+    `SELECT asset_username, asset_password_encrypted, os_type
+       FROM ${table}
+      WHERE ip_address::text = $1
+        AND deleted_at IS NULL
+      LIMIT 1`,
+    [ip_address],
+  );
+  if (!rows.length) throw new ApiError(404, 'VM not found in ' + source);
+
+  const row    = rows[0];
+  const osType = row.os_type || '';
+
+  let username = override_username || row.asset_username || null;
+  let password = override_password || null;
+  if (!password && row.asset_password_encrypted) {
+    try { password = decrypt(row.asset_password_encrypted); } catch {}
+  }
+
+  return { username, password, osType };
+}
+
+// ── GET /software-status ─────────────────────────────────────────────────────
+async function get(req, res, next) {
+  try {
+    const sql = `
+      WITH all_vms AS (
+        SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location,
+               vm_name, os_hostname, ip_address::text AS ip_address,
+               server_status,
+               COALESCE(manage_engine_installed, false) AS me_installed,
+               COALESCE(os_type, '') AS os_type,
+               'MSL Assets' AS source,
+               asset_username
+          FROM assets
+         WHERE deleted_at IS NULL
+           AND (server_status IS NULL
+            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        UNION ALL
+        SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
+               vm_name, os_hostname, ip_address::text, server_status,
+               COALESCE(manage_engine_installed, false), COALESCE(os_type, ''), 'Beijing Assets',
+               asset_username
+          FROM beijing_assets
+         WHERE deleted_at IS NULL
+           AND (server_status IS NULL
+            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        UNION ALL
+        SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
+               vm_name, os_hostname, ip_address::text, server_status,
+               COALESCE(manage_engine_installed, false), COALESCE(os_type, ''), 'Ext. Assets',
+               asset_username
+          FROM ext_assets
+         WHERE deleted_at IS NULL
+           AND (server_status IS NULL
+            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        UNION ALL
+        SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
+               vm_name, os_hostname, ip_address::text, server_status,
+               COALESCE(manage_engine_installed, false), COALESCE(os_type, ''), 'Physical Servers',
+               asset_username
+          FROM physical_esxi_servers
+         WHERE deleted_at IS NULL
+           AND (server_status IS NULL
+            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+      )
+      SELECT location,
+        COUNT(*)::int                                                   AS total,
+        SUM(CASE WHEN me_installed     THEN 1 ELSE 0 END)::int         AS installed,
+        SUM(CASE WHEN NOT me_installed THEN 1 ELSE 0 END)::int         AS not_installed,
+        ROUND(SUM(CASE WHEN me_installed THEN 1 ELSE 0 END)*100.0/NULLIF(COUNT(*),0),1) AS compliance_pct,
+        JSON_AGG(JSON_BUILD_OBJECT(
+          'vm_name',vm_name,'os_hostname',os_hostname,'ip_address',ip_address,
+          'server_status',server_status,'me_installed',me_installed,'os_type',os_type,'source',source,
+          'asset_username',asset_username
+        ) ORDER BY me_installed, vm_name) AS vms
+      FROM all_vms
+      GROUP BY location ORDER BY location
+    `;
+    const { rows } = await db.query(sql);
+    const overall = rows.reduce(
+      (a, r) => { a.total += r.total; a.installed += r.installed; a.not_installed += r.not_installed; return a; },
+      { total: 0, installed: 0, not_installed: 0 },
+    );
+    overall.compliance_pct = overall.total
+      ? Math.round((overall.installed / overall.total) * 1000) / 10 : 0;
+    res.json({ locations: rows, overall });
+  } catch (e) { next(e); }
+}
+
+// ── POST /software-status/verify ─────────────────────────────────────────────
+async function verify(req, res, next) {
+  try {
+    const { ip_address, source, port = 22, override_username, override_password } = req.body;
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+
+    const { username, password, osType } = await resolveVm(ip_address, source, override_username, override_password);
+
+    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
+    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
+
+    const result = await sshVerify({ host: ip_address, port, username, password, osType });
+    result.meta = {
+      credentials_source: (override_username || override_password) ? 'provided' : 'stored',
+      os_type: osType,
+    };
+    res.json(result);
+  } catch (e) { next(e); }
+}
+
+const fileCheck = (p) => { if (!p) return null; try { return fs.existsSync(p); } catch { return false; } };
+
+// ── GET /software-status/install-config ──────────────────────────────────────
+async function getInstallConfig(req, res, next) {
+  try {
+    const { rows } = await db.query(
+      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd,
+              windows_method, windows_file_path, windows_cmd,
+              windows_psexec_path, windows_winrm_port, windows_smb_port,
+              skip_if_installed, log_file_path, updated_at
+         FROM software_install_config WHERE id = 1`,
+    );
+    const row = rows[0] || {};
+    row.linux_file_exists        = fileCheck(row.linux_file_path);
+    row.linux_serverinfo_exists  = fileCheck(row.linux_serverinfo_path);
+    row.windows_file_exists      = fileCheck(row.windows_file_path);
+    row.windows_psexec_exists    = fileCheck(row.windows_psexec_path);
+    row.log_file_exists          = fileCheck(row.log_file_path);
+    res.json(row);
+  } catch (e) { next(e); }
+}
+
+// ── PUT /software-status/install-config ──────────────────────────────────────
+async function saveInstallConfig(req, res, next) {
+  try {
+    const {
+      linux_file_path, linux_serverinfo_path, linux_cmd,
+      windows_method, windows_file_path, windows_cmd,
+      windows_psexec_path, windows_winrm_port, windows_smb_port,
+      skip_if_installed, log_file_path,
+    } = req.body;
+    const { rows } = await db.query(
+      `INSERT INTO software_install_config
+         (id, linux_file_path, linux_serverinfo_path, linux_cmd,
+          windows_method, windows_file_path, windows_cmd,
+          windows_psexec_path, windows_winrm_port, windows_smb_port,
+          skip_if_installed, log_file_path, updated_by, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       ON CONFLICT (id) DO UPDATE
+         SET linux_file_path        = EXCLUDED.linux_file_path,
+             linux_serverinfo_path  = EXCLUDED.linux_serverinfo_path,
+             linux_cmd              = EXCLUDED.linux_cmd,
+             windows_method         = EXCLUDED.windows_method,
+             windows_file_path      = EXCLUDED.windows_file_path,
+             windows_cmd            = EXCLUDED.windows_cmd,
+             windows_psexec_path    = EXCLUDED.windows_psexec_path,
+             windows_winrm_port     = EXCLUDED.windows_winrm_port,
+             windows_smb_port       = EXCLUDED.windows_smb_port,
+             skip_if_installed      = EXCLUDED.skip_if_installed,
+             log_file_path          = EXCLUDED.log_file_path,
+             updated_by             = EXCLUDED.updated_by,
+             updated_at             = NOW()
+       RETURNING linux_file_path, linux_serverinfo_path, linux_cmd,
+                 windows_method, windows_file_path, windows_cmd,
+                 windows_psexec_path, windows_winrm_port, windows_smb_port,
+                 skip_if_installed, log_file_path, updated_at`,
+      [
+        linux_file_path || null, linux_serverinfo_path || null, linux_cmd || null,
+        windows_method || 'auto', windows_file_path || null, windows_cmd || null,
+        windows_psexec_path || null, windows_winrm_port || 5985, windows_smb_port || 445,
+        skip_if_installed === true || skip_if_installed === 'true', log_file_path || null, req.user.id,
+      ],
+    );
+    const row = rows[0];
+    row.linux_file_exists        = fileCheck(row.linux_file_path);
+    row.linux_serverinfo_exists  = fileCheck(row.linux_serverinfo_path);
+    row.windows_file_exists      = fileCheck(row.windows_file_path);
+    row.windows_psexec_exists    = fileCheck(row.windows_psexec_path);
+    row.log_file_exists          = fileCheck(row.log_file_path);
+    res.json(row);
+  } catch (e) { next(e); }
+}
+
+// ── Windows: execute one method ───────────────────────────────────────────────
+async function runWinMethod({ method, host, port, username, password, cfgRow, remoteDir, timeout = 300000 }) {
+  const filePath = cfgRow.windows_file_path;
+  const cmd      = cfgRow.windows_cmd || '';
+
+  if (method === 'winrm') {
+    return winrmInstall({
+      host, username, password,
+      port:    cfgRow.windows_winrm_port || 5985,
+      filePath: filePath || null,
+      remoteDir,
+      command: cmd || (filePath ? `& '{installer}' /Silent` : ''),
+      timeout,
+    });
+  }
+
+  if (method === 'wmi') {
+    return wmiInstall({
+      host, username, password,
+      filePath: filePath || null,
+      remoteDir,
+      smbPort: cfgRow.windows_smb_port || 445,
+      command: cmd || (filePath ? '{installer} /Silent' : ''),
+      timeout,
+    });
+  }
+
+  if (method === 'psexec') {
+    const psexecPath = cfgRow.windows_psexec_path;
+    if (!psexecPath || !fs.existsSync(psexecPath)) {
+      return { connected: false, error: `PsExec not found: ${psexecPath || '(not configured)'}`, output: '', exitCode: null };
+    }
+    return psexecInstall({ host, username, password, psexecPath, filePath, command: cmd, timeout });
+  }
+
+  // ssh or ssh_bash
+  let execCmd = cmd || (filePath ? '{installer} /Silent' : '');
+  if (method === 'ssh_bash') {
+    execCmd = `bash -c '${execCmd.replace(/'/g, "'\\''")}'`;
+  }
+  if (filePath) {
+    return sshUploadAndRun({
+      host, port, username, password, remoteDir,
+      files: [{ localPath: filePath, placeholder: 'installer' }],
+      command: execCmd, timeout,
+    });
+  }
+  return sshRunCommand({ host, port, username, password, command: execCmd, timeout });
+}
+
+// ── POST /software-status/install ─────────────────────────────────────────────
+async function install(req, res, next) {
+  try {
+    const {
+      ip_address, source, port = 22, override_username, override_password,
+      windows_method_override,          // 'ssh' | 'ssh_bash' | 'winrm' | 'psexec' | 'auto' | undefined
+    } = req.body;
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+
+    const { username, password, osType } = await resolveVm(ip_address, source, override_username, override_password);
+
+    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
+    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
+
+    // Load config
+    const { rows: cfg } = await db.query(
+      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd,
+              windows_method, windows_file_path, windows_cmd,
+              windows_psexec_path, windows_winrm_port, windows_smb_port,
+              skip_if_installed, log_file_path
+         FROM software_install_config WHERE id = 1`,
+    );
+    const cfgRow    = cfg[0] || {};
+    const win       = isWindows(osType);
+    const remoteDir = win ? 'C:/Windows/Temp' : '/tmp';
+    const logFile   = cfgRow.log_file_path || null;
+
+    // Skip if agent already installed
+    if (cfgRow.skip_if_installed) {
+      appendLog(logFile, ip_address, 'INFO', 'Checking whether agent is already installed...');
+      try {
+        const vResult = await sshVerify({ host: ip_address, port, username, password, osType, timeout: 14000 });
+        if (vResult.connected && vResult.installed) {
+          appendLog(logFile, ip_address, 'INFO', 'Agent already installed. Skipping deployment.');
+          return res.json({ skipped: true, reason: 'Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
+        }
+      } catch {}
+    }
+
+    // ── Windows ────────────────────────────────────────────────────────────────
+    if (win) {
+      const filePath = cfgRow.windows_file_path;
+      if (filePath && !fs.existsSync(filePath)) {
+        throw new ApiError(422, `Installer not found on server: ${filePath}`);
+      }
+
+      // Resolve which method(s) to try
+      const selectedMethod = windows_method_override || cfgRow.windows_method || 'ssh';
+      const AUTO_ORDER     = ['winrm', 'wmi', 'psexec', 'ssh', 'ssh_bash'];
+      const methodsToTry   = selectedMethod === 'auto' ? AUTO_ORDER : [selectedMethod];
+
+      const tried = [];
+      let lastResult = null;
+
+      for (const method of methodsToTry) {
+        const timeout = selectedMethod === 'auto' ? 45000 : 300000;
+        if (selectedMethod === 'auto') {
+          const portHint = method === 'winrm' ? ` on port ${cfgRow.windows_winrm_port || 5985}` : '';
+          appendLog(logFile, ip_address, 'INFO', `Auto mode trying ${method.toUpperCase()}${portHint}`);
+        }
+        let r;
+        try {
+          r = await runWinMethod({ method, host: ip_address, port, username, password, cfgRow, remoteDir, timeout });
+        } catch (e) {
+          r = { connected: false, error: e.message, output: '', exitCode: null };
+        }
+
+        tried.push({ method, connected: r.connected, exitCode: r.exitCode, error: r.error || null });
+        lastResult = r;
+
+        if (r.connected && r.exitCode === 0) {
+          if (selectedMethod === 'auto') {
+            appendLog(logFile, ip_address, 'INFO',    `Auto mode selected ${method.toUpperCase()}`);
+            appendLog(logFile, ip_address, 'SUCCESS', 'Connection test passed');
+            appendLog(logFile, ip_address, 'INFO',    `Auto mode completed deployment via ${method.toUpperCase()}`);
+          } else {
+            appendLog(logFile, ip_address, 'SUCCESS', `Deployment completed via ${method.toUpperCase()}`);
+          }
+          return res.json({
+            ...r,
+            platform: 'windows', os_type: osType, command: cfgRow.windows_cmd || '',
+            method, tried: tried.length > 1 ? tried : undefined,
+            succeeded_method: selectedMethod === 'auto' ? method : undefined,
+          });
+        }
+        if (r.error) appendLog(logFile, ip_address, 'ERROR', `${method.toUpperCase()} failed: ${r.error}`);
+
+        // If not auto mode, stop after first attempt
+        if (selectedMethod !== 'auto') break;
+      }
+
+      appendLog(logFile, ip_address, 'ERROR', 'All methods exhausted. Deployment failed.');
+      // All attempts exhausted
+      return res.json({
+        ...lastResult,
+        platform: 'windows', os_type: osType, command: cfgRow.windows_cmd || '',
+        method: methodsToTry[methodsToTry.length - 1],
+        tried: tried.length > 1 ? tried : undefined,
+      });
+    }
+
+    // ── Linux ──────────────────────────────────────────────────────────────────
+    const binPath  = cfgRow.linux_file_path;
+    const infoPath = cfgRow.linux_serverinfo_path;
+    const cmd      = cfgRow.linux_cmd || '';
+
+    if (binPath  && !fs.existsSync(binPath))  throw new ApiError(422, `Linux installer not found: ${binPath}`);
+    if (infoPath && !fs.existsSync(infoPath)) throw new ApiError(422, `serverinfo.json not found: ${infoPath}`);
+    if (!binPath && !cmd.trim())              throw new ApiError(422, 'No Linux installer configured.');
+
+    let result;
+    if (binPath) {
+      const files = [{ localPath: binPath, placeholder: 'installer' }];
+      if (infoPath) files.unshift({ localPath: infoPath, placeholder: 'serverinfo' });
+      result = await sshUploadAndRun({
+        host: ip_address, port, username, password, remoteDir, files,
+        command: cmd || 'chmod +x {installer} && sudo {installer} --silent',
+      });
+    } else {
+      result = await sshRunCommand({ host: ip_address, port, username, password, command: cmd });
+    }
+    if (result.exitCode === 0) {
+      appendLog(logFile, ip_address, 'SUCCESS', 'Linux deployment completed');
+    } else {
+      appendLog(logFile, ip_address, 'ERROR', `Linux deployment failed (exit ${result.exitCode ?? 'null'}): ${result.error || ''}`);
+    }
+    result.platform = 'linux';
+    result.os_type  = osType;
+    result.command  = cmd;
+    res.json(result);
+  } catch (e) { next(e); }
+}
+
+// ── GET /software-status/install-log ─────────────────────────────────────────
+async function getInstallLog(req, res, next) {
+  try {
+    const { rows } = await db.query(`SELECT log_file_path FROM software_install_config WHERE id = 1`);
+    const logFilePath = rows[0]?.log_file_path;
+    if (!logFilePath) return res.json({ lines: [], log_file_path: null });
+    if (!fs.existsSync(logFilePath)) return res.json({ lines: [], log_file_path: logFilePath, missing: true });
+    const content = fs.readFileSync(logFilePath, 'utf8');
+    const lines   = content.split('\n').filter(Boolean);
+    res.json({ lines, log_file_path: logFilePath });
+  } catch (e) { next(e); }
+}
+
+// ── DELETE /software-status/install-log ──────────────────────────────────────
+async function clearInstallLog(req, res, next) {
+  try {
+    const { rows } = await db.query(`SELECT log_file_path FROM software_install_config WHERE id = 1`);
+    const logFilePath = rows[0]?.log_file_path;
+    if (!logFilePath) throw new ApiError(400, 'No log file configured');
+    if (fs.existsSync(logFilePath)) fs.writeFileSync(logFilePath, '', 'utf8');
+    res.json({ cleared: true });
+  } catch (e) { next(e); }
+}
+
+module.exports = { get, verify, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog };

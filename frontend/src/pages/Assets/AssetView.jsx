@@ -314,6 +314,7 @@ export default function AssetView({
         <SummaryChip tone="indigo"  label="Asset Type" value={record.asset_type} />
         <SummaryChip tone="cyan"    label="OS"         value={osCombined} />
         <SummaryChip tone="emerald" label="Department" value={record.department} />
+        <SummaryChip tone="slate"   label="Asset Tag"  value={record.asset_tag} />
         <SummaryChip tone="amber"   label="Location"   value={record.location} />
       </Row>
 

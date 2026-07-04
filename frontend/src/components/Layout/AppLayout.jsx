@@ -10,13 +10,19 @@ import {
   HddOutlined, SafetyCertificateOutlined,
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
-  RestOutlined,
+  RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
 import api from '../../api/client';
+import { NAV_STORAGE_KEY, loadNavOrder } from '../../pages/Admin/NavOrder.jsx';
 
 const { Sider, Header, Content, Footer } = Layout;
+
+const DEFAULT_NAV_KEYS = [
+  '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
+  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery',
+];
 
 export default function AppLayout() {
   const { user, logout, canSee, getPageLabel, branding } = useAuth();
@@ -24,9 +30,16 @@ export default function AppLayout() {
   const nav = useNavigate();
   const loc = useLocation();
   const [customPages, setCustomPages] = useState([]);
+  const [navOrder, setNavOrder] = useState(() => loadNavOrder() || DEFAULT_NAV_KEYS);
 
   useEffect(() => {
     api.get('/custom-pages').then(r => setCustomPages(r.data.items || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setNavOrder(loadNavOrder() || DEFAULT_NAV_KEYS);
+    window.addEventListener('navOrderChanged', handler);
+    return () => window.removeEventListener('navOrderChanged', handler);
   }, []);
 
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
@@ -46,42 +59,89 @@ export default function AppLayout() {
     };
   };
 
-  const items = [
-    can('dashboard') && { key: '/dashboard', icon: <DashboardOutlined />, label: <Link to="/dashboard">Dashboard</Link> },
-    inventoryGroup('assets',          'assets',                <DatabaseOutlined />,    'Assets',           '/assets',         'Add Asset'),
-    inventoryGroup('beijing-assets',  'beijing_assets',        <GlobalOutlined />,      'Beijing Assets',   '/beijing-assets', 'Add Asset'),
-    inventoryGroup('ext-assets',      'ext_assets',            <CloudServerOutlined />, 'Ext. Assets',      '/ext-assets',     'Add Asset'),
-    inventoryGroup('physical-esxi',   'physical_esxi_servers', <HddOutlined />,         'Physical & ESXi',  '/physical-esxi',  'Add Server'),
-    ...customPages
-      .filter(p => can(`custom:${p.slug}`))
-      .map((p) => ({
-        key: `custom-${p.slug}`,
-        icon: <AppstoreOutlined />,
-        label: p.name,
-        children: [
-          { key: `/custom-pages/${p.slug}`, icon: <UnorderedListOutlined />, label: <Link to={`/custom-pages/${p.slug}`}>All Records</Link> },
-          canWrite && { key: `/custom-pages/${p.slug}/new`, icon: <PlusOutlined />, label: <Link to={`/custom-pages/${p.slug}/new`}>Add Record</Link> },
-          canWrite && { key: `/custom-pages/${p.slug}/import`, icon: <UploadOutlined />, label: <Link to={`/custom-pages/${p.slug}/import`}>Import</Link> },
-        ].filter(Boolean),
-      })),
-    can('reports') && { key: '/reports', icon: <BarChartOutlined />, label: <Link to="/reports">Report Builder</Link> },
-    isAdmin && {
-      key: 'admin', icon: <SettingOutlined />, label: 'Administration',
-      children: [
-        can('admin/users')            && { key: '/admin/users',             icon: <TeamOutlined />,           label: <Link to="/admin/users">Users</Link> },
-        can('admin/dropdowns')        && { key: '/admin/dropdowns',         icon: <SettingOutlined />,        label: <Link to="/admin/dropdowns">Dropdowns</Link> },
-        can('admin/tag-ranges')       && { key: '/admin/tag-ranges',        icon: <TagsOutlined />,           label: <Link to="/admin/tag-ranges">Tag Ranges</Link> },
-        can('admin/custom-pages')     && { key: '/admin/custom-pages',      icon: <AppstoreAddOutlined />,    label: <Link to="/admin/custom-pages">Custom Pages</Link> },
-        can('admin/field-visibility') && { key: '/admin/field-visibility',  icon: <EyeOutlined />,            label: <Link to="/admin/field-visibility">Field Customization</Link> },
-        can('admin/page-access')      && { key: '/admin/page-access',       icon: <SafetyCertificateOutlined />, label: <Link to="/admin/page-access">Page Access</Link> },
-        can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,  label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
-        can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,       label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
-        can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,           label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
-        can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,        label: <Link to="/admin/imports">Import History</Link> },
-        can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,     label: <Link to="/admin/audit">Audit Log</Link> },
-      ].filter(Boolean),
-    },
-  ].filter(Boolean);
+  const getNavSection = (key) => {
+    switch (key) {
+      case '/dashboard':
+        return can('dashboard')
+          ? [{ key: '/dashboard', icon: <DashboardOutlined />, label: <Link to="/dashboard">Dashboard</Link> }]
+          : [];
+      case 'assets':
+        return [inventoryGroup('assets', 'assets', <DatabaseOutlined />, 'Assets', '/assets', 'Add Asset')].filter(Boolean);
+      case 'beijing-assets':
+        return [inventoryGroup('beijing-assets', 'beijing_assets', <GlobalOutlined />, 'Beijing Assets', '/beijing-assets', 'Add Asset')].filter(Boolean);
+      case 'ext-assets':
+        return [inventoryGroup('ext-assets', 'ext_assets', <CloudServerOutlined />, 'Ext. Assets', '/ext-assets', 'Add Asset')].filter(Boolean);
+      case 'physical-esxi':
+        return [inventoryGroup('physical-esxi', 'physical_esxi_servers', <HddOutlined />, 'Physical & ESXi', '/physical-esxi', 'Add Server')].filter(Boolean);
+      case '__custom__':
+        return customPages
+          .filter(p => can(`custom:${p.slug}`))
+          .map((p) => ({
+            key: `custom-${p.slug}`,
+            icon: <AppstoreOutlined />,
+            label: p.name,
+            children: [
+              { key: `/custom-pages/${p.slug}`, icon: <UnorderedListOutlined />, label: <Link to={`/custom-pages/${p.slug}`}>All Records</Link> },
+              canWrite && { key: `/custom-pages/${p.slug}/new`, icon: <PlusOutlined />, label: <Link to={`/custom-pages/${p.slug}/new`}>Add Record</Link> },
+              canWrite && { key: `/custom-pages/${p.slug}/import`, icon: <UploadOutlined />, label: <Link to={`/custom-pages/${p.slug}/import`}>Import</Link> },
+            ].filter(Boolean),
+          }));
+      case '/reports':
+        return can('reports')
+          ? [{ key: '/reports', icon: <BarChartOutlined />, label: <Link to="/reports">Report Builder</Link> }]
+          : [];
+      case 'software-services': {
+        const meItem      = can('software_status') && { key: '/software-status', icon: <SafetyCertificateOutlined />, label: <Link to="/software-status">ManageEngine Status</Link> };
+        const nessusItem  = can('nessus_status')   && { key: '/nessus-status',   icon: <SafetyCertificateOutlined />, label: <Link to="/nessus-status">Nessus Agent Status</Link> };
+        const tenableItem = can('tenable_report')  && { key: '/tenable-report',  icon: <SafetyCertificateOutlined />, label: <Link to="/tenable-report">Tenable Report</Link> };
+        const children    = [meItem, nessusItem, tenableItem].filter(Boolean);
+        return children.length
+          ? [{ key: 'software-services', icon: <SafetyCertificateOutlined />, label: 'Software Services', children }]
+          : [];
+      }
+      case 'vm-discovery':
+        return [{
+          key: 'vm-discovery', icon: <CloudServerOutlined />, label: 'VM Discovery',
+          children: [
+            { key: '/vmware-discovery',  icon: <ApartmentOutlined />, label: <Link to="/vmware-discovery">VMware Discovery</Link> },
+            { key: '/proxmox-discovery', icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },
+          ],
+        }];
+      default:
+        return [];
+    }
+  };
+
+  // Apply saved order; any key not in saved order appended at end
+  const orderedKeys = [
+    ...navOrder,
+    ...DEFAULT_NAV_KEYS.filter(k => !navOrder.includes(k)),
+  ];
+  const mainItems = orderedKeys.flatMap(k => getNavSection(k));
+
+  const adminItem = isAdmin && {
+    key: 'admin', icon: <SettingOutlined />, label: 'Administration',
+    children: [
+      can('admin/users')            && { key: '/admin/users',             icon: <TeamOutlined />,              label: <Link to="/admin/users">Users</Link> },
+      can('admin/dropdowns')        && { key: '/admin/dropdowns',         icon: <SettingOutlined />,           label: <Link to="/admin/dropdowns">Dropdowns</Link> },
+      can('admin/tag-ranges')       && { key: '/admin/tag-ranges',        icon: <TagsOutlined />,              label: <Link to="/admin/tag-ranges">Tag Ranges</Link> },
+      can('admin/custom-pages')     && { key: '/admin/custom-pages',      icon: <AppstoreAddOutlined />,       label: <Link to="/admin/custom-pages">Custom Pages</Link> },
+      can('admin/field-visibility') && { key: '/admin/field-visibility',  icon: <EyeOutlined />,               label: <Link to="/admin/field-visibility">Field Customization</Link> },
+      can('admin/page-access')      && { key: '/admin/page-access',       icon: <SafetyCertificateOutlined />, label: <Link to="/admin/page-access">Page Access</Link> },
+      can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,     label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
+      can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,          label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
+      can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,              label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
+      can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
+      can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },
+      can('admin/nav-order')            && { key: '/admin/nav-order',          icon: <MenuOutlined />,              label: <Link to="/admin/nav-order">Menu Order</Link> },
+      can('admin/user-page-control')    && { key: '/admin/user-page-control',  icon: <SafetyCertificateOutlined />, label: <Link to="/admin/user-page-control">User Page Control</Link> },
+      can('admin/roles')                && { key: '/admin/roles',              icon: <KeyOutlined />,               label: <Link to="/admin/roles">Role Management</Link> },
+      isAdmin                           && { key: '/admin/install-config',        icon: <CloudDownloadOutlined />,      label: <Link to="/admin/install-config">ME Install Config</Link> },
+      isAdmin                           && { key: '/admin/nessus-install-config', icon: <CloudDownloadOutlined />,      label: <Link to="/admin/nessus-install-config">Nessus Install Config</Link> },
+    ].filter(Boolean),
+  };
+
+  const items = [...mainItems, adminItem].filter(Boolean);
 
   const crumbs = loc.pathname.split('/').filter(Boolean).map((seg, i, arr) => ({
     title: <Link to={'/' + arr.slice(0, i + 1).join('/')}>{seg.replace(/-/g,' ').replace(/^./, c => c.toUpperCase())}</Link>,
@@ -105,11 +165,14 @@ export default function AppLayout() {
           </span>
         </div>
         <Menu
-          key={`menu-${customPages.length}`}
+          key={`menu-${customPages.length}-${navOrder.join(',')}`}
           theme="dark"
           mode="inline"
           selectedKeys={[loc.pathname]}
-          defaultOpenKeys={[]}
+          defaultOpenKeys={[
+            ...['/vmware-discovery', '/proxmox-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
+            ...['/software-status', '/nessus-status', '/tenable-report'].includes(loc.pathname) ? ['software-services'] : [],
+          ]}
           items={items}
         />
       </Sider>

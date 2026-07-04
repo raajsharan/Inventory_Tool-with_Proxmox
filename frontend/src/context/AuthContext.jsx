@@ -17,7 +17,9 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
   const [pageAccess, setPageAccess] = useState({});
-  const [builtinOverrides, setBuiltinOverrides] = useState({}); // page_key -> { name, description, icon }
+  const [userPageAccess, setUserPageAccess] = useState({});   // user-specific overrides
+  const [canViewPasswords, setCanViewPasswords] = useState(false);
+  const [builtinOverrides, setBuiltinOverrides] = useState({});
   const [branding, setBranding] = useState(() => {
     const raw = localStorage.getItem('branding');
     return raw ? JSON.parse(raw) : null;
@@ -38,6 +40,16 @@ export function AuthProvider({ children }) {
       setPageAccess(data.matrix || {});
     } catch {
       setPageAccess({});
+    }
+  }, []);
+
+  const refreshUserPageAccess = useCallback(async () => {
+    try {
+      const { data } = await api.get('/user-page-control/my-access');
+      setUserPageAccess(data.page_access || {});
+      setCanViewPasswords(data.can_view_passwords || false);
+    } catch {
+      setUserPageAccess({});
     }
   }, []);
 
@@ -66,11 +78,14 @@ export function AuthProvider({ children }) {
     if (user) {
       refreshPageAccess();
       refreshBuiltinOverrides();
+      refreshUserPageAccess();
     } else {
       setPageAccess({});
+      setUserPageAccess({});
       setBuiltinOverrides({});
+      setCanViewPasswords(false);
     }
-  }, [user, refreshPageAccess, refreshBuiltinOverrides]);
+  }, [user, refreshPageAccess, refreshBuiltinOverrides, refreshUserPageAccess]);
 
   async function login(email, password) {
     setLoading(true);
@@ -93,11 +108,14 @@ export function AuthProvider({ children }) {
     const role = user?.role;
     if (!role) return false;
     if (role === 'superadmin') return true;
+    // User-specific override takes precedence over role-based setting
+    if (Object.prototype.hasOwnProperty.call(userPageAccess, pageKey)) {
+      return !!userPageAccess[pageKey];
+    }
     const v = pageAccess[`${pageKey}:${role}`];
     return v === undefined ? true : !!v;
   }
 
-  // Resolve the display name for a built-in page, falling back to defaults.
   function getPageLabel(pageKey, fallback) {
     return builtinOverrides[pageKey]?.name || DEFAULT_LABELS[pageKey] || fallback || pageKey;
   }
@@ -115,6 +133,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, login, logout, loading, refreshMe, setUser,
       canSee, pageAccess, refreshPageAccess,
+      userPageAccess, refreshUserPageAccess, canViewPasswords,
       builtinOverrides, refreshBuiltinOverrides, getPageLabel,
       branding, refreshBranding,
     }}>
