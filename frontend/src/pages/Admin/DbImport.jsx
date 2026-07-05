@@ -506,12 +506,18 @@ export default function DbImport() {
               <Table
                 size="small"
                 rowKey="row"
-                pagination={false}
+                pagination={{ pageSize: 20, showTotal: t => `${t} rows` }}
                 dataSource={result.failures}
                 columns={[
                   { title: 'Row', dataIndex: 'row', key: 'row', width: 60 },
-                  { title: 'VM Name', dataIndex: ['data', 'vm_name'], key: 'vm_name' },
-                  { title: 'Errors', dataIndex: 'errors', key: 'errors', render: errs => errs.join('; ') },
+                  { title: 'VM Name',    dataIndex: ['data', 'vm_name'],    key: 'vm_name',    ellipsis: true, width: 180 },
+                  { title: 'IP Address', dataIndex: ['data', 'ip_address'], key: 'ip_address', width: 140 },
+                  {
+                    title: 'Reason', key: 'errors',
+                    render: (_, r) => (
+                      <Text type="danger">{Array.isArray(r.errors) ? r.errors.join('; ') : r.errors}</Text>
+                    ),
+                  },
                 ]}
               />
             </>

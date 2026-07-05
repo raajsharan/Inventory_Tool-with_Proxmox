@@ -1,5 +1,7 @@
 const ExcelJS = require('exceljs');
 const db = require('../config/db');
+const deptSvc  = require('./departmentService');
+const cryptoUtil = require('../utils/crypto');
 
 const COLUMN_ALIASES = {
   vm_name: ['vm name', 'vmname', 'name', 'hostname (vm)'],
@@ -194,9 +196,22 @@ function diffFillOnlyEmpty(existing, incoming, cols) {
   return { updates, diffs };
 }
 
+// If the source DB stored asset_password already encrypted with our key,
+// decrypt it first so mapBody doesn't double-encrypt it.
+function resolveAssetPassword(raw) {
+  if (raw === null || raw === undefined || raw === '') return raw;
+  try {
+    const decrypted = cryptoUtil.decrypt(String(raw));
+    if (decrypted) return decrypted;
+  } catch (_) {}
+  return raw;
+}
+
 async function findByIp(table, ip) {
   if (!ip) return null;
-  const { rows } = await db.query(`SELECT * FROM ${table} WHERE ip_address = $1 LIMIT 1`, [ip]);
+  const { rows } = await db.query(
+    `SELECT * FROM ${table} WHERE ip_address = $1 AND deleted_at IS NULL LIMIT 1`, [ip]
+  );
   return rows[0] || null;
 }
 
@@ -222,6 +237,11 @@ async function preview(buffer, { table, cols, verifyByIp }) {
         const r = diffFillOnlyEmpty(existing, d, cols);
         updates = r.updates;
         diffs = r.diffs;
+      } else {
+        const otherTable = await deptSvc.isValueUsedAnywhere('ip_address', d.ip_address, { excludeTable: table });
+        if (otherTable) {
+          errors.push(`IP already exists in "${otherTable}" inventory — cannot import into "${table}"`);
+        }
       }
     }
 
@@ -264,12 +284,20 @@ async function apply(buffer, { table, cols, verifyByIp, selectedRowIdxs, createF
         successes.push({ row: r.rowIdx, id: r.existingId, action: 'merged', filled: Object.keys(r.updates) });
       } else {
         const payload = { ...r.data };
-        if (payload.asset_password !== undefined) payload.assetPassword = payload.asset_password;
+        if (payload.asset_password !== undefined) {
+          payload.assetPassword = resolveAssetPassword(payload.asset_password);
+          delete payload.asset_password;
+        }
         const created = await createFn(payload, user?.id);
         successes.push({ row: r.rowIdx, id: created.id, action: 'created' });
       }
     } catch (e) {
-      failures.push({ row: r.rowIdx, errors: [e.message], details: e.details, data: r.data });
+      let msg = e.message || 'Failed to save';
+      if (e.status === 409 && e.details) {
+        const detail = Object.values(e.details)[0];
+        if (detail) msg = detail;
+      }
+      failures.push({ row: r.rowIdx, errors: [msg], details: e.details, data: r.data });
     }
   }
   return {
@@ -304,6 +332,12 @@ async function previewRows(mappedRows, { table, cols, verifyByIp }) {
         const res = diffFillOnlyEmpty(existing, d, cols);
         updates = res.updates;
         diffs   = res.diffs;
+      } else {
+        // Check cross-inventory tables — create would fail if IP exists elsewhere
+        const otherTable = await deptSvc.isValueUsedAnywhere('ip_address', d.ip_address, { excludeTable: table });
+        if (otherTable) {
+          errors.push(`IP already exists in "${otherTable}" inventory — cannot import into "${table}"`);
+        }
       }
     }
 
@@ -340,12 +374,21 @@ async function applyRows(mappedRows, { table, cols, verifyByIp, selectedRowIdxs,
         successes.push({ row: r.rowIdx, id: r.existingId, action: 'merged', filled: Object.keys(r.updates) });
       } else {
         const payload = { ...r.data };
-        if (payload.asset_password !== undefined) payload.assetPassword = payload.asset_password;
+        if (payload.asset_password !== undefined) {
+          payload.assetPassword = resolveAssetPassword(payload.asset_password);
+          delete payload.asset_password;
+        }
         const created = await createFn(payload, user?.id);
         successes.push({ row: r.rowIdx, id: created.id, action: 'created' });
       }
     } catch (e) {
-      failures.push({ row: r.rowIdx, errors: [e.message], details: e.details, data: r.data });
+      // Surface the specific duplicate field instead of "Duplicate values"
+      let msg = e.message || 'Failed to save';
+      if (e.status === 409 && e.details) {
+        const detail = Object.values(e.details)[0];
+        if (detail) msg = detail;
+      }
+      failures.push({ row: r.rowIdx, errors: [msg], details: e.details, data: r.data });
     }
   }
   return {
