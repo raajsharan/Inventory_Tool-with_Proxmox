@@ -21,7 +21,7 @@ const COLUMN_ALIASES = {
   hosted_ip:             ['hosted ip', 'hosted_ip'],
   asset_tag:             ['asset tag', 'tag', 'asset_tag'],
   asset_username:        ['asset username', 'username', 'asset_username'],
-  asset_password:        ['asset password', 'password', 'asset_password'],
+  asset_password:        ['asset password', 'password', 'asset_password', 'asset_password_encrypted'],
   additional_remarks:    ['additional remarks', 'remarks', 'notes', 'comments', 'additional_remarks'],
   manage_engine_installed: ['manageengine installed', 'manage engine installed', 'manageengine', 'me', 'manage_engine_installed'],
   tenable_installed:     ['tenable installed', 'tenable', 'tenable_installed'],

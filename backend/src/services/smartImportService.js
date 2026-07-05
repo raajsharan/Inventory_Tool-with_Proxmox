@@ -280,7 +280,12 @@ async function apply(buffer, { table, cols, verifyByIp, selectedRowIdxs, createF
           successes.push({ row: r.rowIdx, id: r.existingId, action: 'noop' });
           continue;
         }
-        await updateRowDirect(r.existingId, r.updates, user?.id);
+        const mergePayload = { ...r.updates };
+        if (mergePayload.asset_password !== undefined) {
+          mergePayload.assetPassword = resolveAssetPassword(mergePayload.asset_password);
+          delete mergePayload.asset_password;
+        }
+        await updateRowDirect(r.existingId, mergePayload, user?.id);
         successes.push({ row: r.rowIdx, id: r.existingId, action: 'merged', filled: Object.keys(r.updates) });
       } else {
         const payload = { ...r.data };
@@ -370,7 +375,12 @@ async function applyRows(mappedRows, { table, cols, verifyByIp, selectedRowIdxs,
         if (!Object.keys(r.updates).length) {
           successes.push({ row: r.rowIdx, id: r.existingId, action: 'noop' }); continue;
         }
-        await updateRowDirect(r.existingId, r.updates, user?.id);
+        const mergePayload = { ...r.updates };
+        if (mergePayload.asset_password !== undefined) {
+          mergePayload.assetPassword = resolveAssetPassword(mergePayload.asset_password);
+          delete mergePayload.asset_password;
+        }
+        await updateRowDirect(r.existingId, mergePayload, user?.id);
         successes.push({ row: r.rowIdx, id: r.existingId, action: 'merged', filled: Object.keys(r.updates) });
       } else {
         const payload = { ...r.data };
