@@ -27,19 +27,17 @@ function mapBody(body) {
   return row;
 }
 
-async function checkDuplicates({ vm_name, ip_address, asset_tag, excludeId }) {
+async function checkDuplicates({ ip_address, asset_tag, excludeId }) {
   const conds = [];
   const params = [];
-  if (vm_name)    { params.push(vm_name);    conds.push(`vm_name = $${params.length}`); }
   if (ip_address) { params.push(ip_address); conds.push(`ip_address = $${params.length}`); }
   if (asset_tag)  { params.push(asset_tag);  conds.push(`asset_tag = $${params.length}`); }
   if (!conds.length) return;
-  let sql = `SELECT vm_name, ip_address, asset_tag FROM assets WHERE (${conds.join(' OR ')})`;
+  let sql = `SELECT ip_address, asset_tag FROM assets WHERE (${conds.join(' OR ')})`;
   if (excludeId) { params.push(excludeId); sql += ` AND id <> $${params.length}`; }
   const { rows } = await db.query(sql, params);
   const dupes = {};
   for (const r of rows) {
-    if (vm_name && r.vm_name === vm_name)       dupes.vm_name = 'duplicate VM name';
     if (ip_address && r.ip_address === ip_address) dupes.ip_address = 'duplicate IP address';
     if (asset_tag && r.asset_tag === asset_tag) dupes.asset_tag = 'duplicate asset tag';
   }
@@ -69,11 +67,7 @@ async function create(body, userId) {
   if (row.ip_address && await deptSvc.isIpUsedAnywhere(row.ip_address)) {
     throw new ApiError(409, 'Duplicate values', { ip_address: 'IP address already used in another inventory' });
   }
-  await checkDuplicates({
-    vm_name: row.vm_name,
-    ip_address: row.ip_address,
-    asset_tag: row.asset_tag,
-  });
+  await checkDuplicates({ ip_address: row.ip_address, asset_tag: row.asset_tag });
   row.created_by = userId;
   row.updated_by = userId;
   const cols = Object.keys(row);
@@ -102,12 +96,7 @@ async function update(id, body, userId) {
   if (row.ip_address && await deptSvc.isIpUsedAnywhere(row.ip_address, { excludeTable: 'assets', excludeId: id })) {
     throw new ApiError(409, 'Duplicate values', { ip_address: 'IP address already used in another inventory' });
   }
-  await checkDuplicates({
-    vm_name: row.vm_name,
-    ip_address: row.ip_address,
-    asset_tag: row.asset_tag,
-    excludeId: id,
-  });
+  await checkDuplicates({ ip_address: row.ip_address, asset_tag: row.asset_tag, excludeId: id });
   row.updated_by = userId;
   const cols = Object.keys(row);
   const vals = Object.values(row);

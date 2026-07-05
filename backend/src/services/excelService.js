@@ -166,13 +166,11 @@ async function importWorkbook(buffer, user) {
     r.idrac_enabled = parseBool(r.idrac_enabled);
 
     const errors = validateRow(r);
-    if (r.vm_name && seenInSheet.vm.has(r.vm_name)) errors.push('duplicate VM Name in file');
     if (r.ip_address && seenInSheet.ip.has(r.ip_address)) errors.push('duplicate IP Address in file');
     if (r.asset_tag && seenInSheet.tag.has(r.asset_tag)) errors.push('duplicate Asset Tag in file');
 
     if (errors.length) { failures.push({ row: i, errors, data: r }); continue; }
 
-    seenInSheet.vm.add(r.vm_name);
     seenInSheet.ip.add(r.ip_address);
     if (r.asset_tag) seenInSheet.tag.add(r.asset_tag);
 

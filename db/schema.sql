@@ -86,7 +86,7 @@ ON CONFLICT (name) DO NOTHING;
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS assets (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    vm_name                  VARCHAR(255) NOT NULL UNIQUE,
+    vm_name                  VARCHAR(255) NOT NULL,
     os_hostname              VARCHAR(255),
     ip_address               VARCHAR(45)  NOT NULL UNIQUE,
     asset_type               VARCHAR(128),
@@ -133,7 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_department    ON assets(department);
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS beijing_assets (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    vm_name                  VARCHAR(255) NOT NULL UNIQUE,
+    vm_name                  VARCHAR(255) NOT NULL,
     os_hostname              VARCHAR(255),
     ip_address               VARCHAR(45)  NOT NULL UNIQUE,
     asset_type               VARCHAR(128),
@@ -177,7 +177,7 @@ CREATE INDEX IF NOT EXISTS idx_beijing_department   ON beijing_assets(department
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ext_assets (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    vm_name                  VARCHAR(255) NOT NULL UNIQUE,
+    vm_name                  VARCHAR(255) NOT NULL,
     os_hostname              VARCHAR(255),
     ip_address               VARCHAR(45)  NOT NULL UNIQUE,
     asset_type               VARCHAR(128),
@@ -222,7 +222,7 @@ CREATE INDEX IF NOT EXISTS idx_ext_department   ON ext_assets(department);
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS physical_esxi_servers (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    vm_name                  VARCHAR(255) NOT NULL UNIQUE,
+    vm_name                  VARCHAR(255) NOT NULL,
     os_hostname              VARCHAR(255),
     ip_address               VARCHAR(45)  NOT NULL UNIQUE,
     asset_type               VARCHAR(128),
@@ -488,16 +488,12 @@ DO $$ BEGIN
   ALTER TABLE physical_esxi_servers DROP CONSTRAINT IF EXISTS physical_esxi_servers_asset_tag_key;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_vm_active                  ON assets(vm_name)                  WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_ip_active                  ON assets(ip_address)               WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_assets_tag_active                 ON assets(asset_tag)                WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_beijing_vm_active                 ON beijing_assets(vm_name)          WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_beijing_ip_active                 ON beijing_assets(ip_address)       WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_beijing_tag_active                ON beijing_assets(asset_tag)        WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_ext_vm_active                     ON ext_assets(vm_name)              WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ext_ip_active                     ON ext_assets(ip_address)           WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ext_tag_active                    ON ext_assets(asset_tag)            WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_vm_active                ON physical_esxi_servers(vm_name)   WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_ip_active                ON physical_esxi_servers(ip_address) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_tag_active               ON physical_esxi_servers(asset_tag) WHERE deleted_at IS NULL AND asset_tag IS NOT NULL;
 
