@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Card, Row, Col, Space, Button, Typography, Tag, Spin, Alert, App, Tooltip, Empty,
+  Modal, Form, Input,
 } from 'antd';
 import {
   ArrowLeftOutlined, EditOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined,
   ReloadOutlined, AppstoreOutlined, TeamOutlined, ThunderboltOutlined,
   SafetyOutlined, HddOutlined, KeyOutlined, FileTextOutlined,
-  DatabaseOutlined, HistoryOutlined, CopyOutlined, BlockOutlined,
+  DatabaseOutlined, HistoryOutlined, CopyOutlined, BlockOutlined, UnlockOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
@@ -79,6 +80,9 @@ function CopyableIp({ ip }) {
 }
 
 function renderValue(field_key, raw, fieldMeta, helpers) {
+  if (field_key === 'asset_password') {
+    return helpers?.passwordCell ?? NA;
+  }
   if (raw === null || raw === undefined || raw === '') return NA;
   if (field_key === 'server_status')      return <StatusTag status={raw} />;
   if (field_key === 'eol_status')         return <EolTag v={raw} />;
@@ -88,9 +92,6 @@ function renderValue(field_key, raw, fieldMeta, helpers) {
   }
   if (field_key === 'manage_engine_installed' || field_key === 'tenable_installed' || field_key === 'idrac_enabled') {
     return <YesNo v={raw} />;
-  }
-  if (field_key === 'asset_password') {
-    return helpers?.passwordCell ?? NA;
   }
   const meta = fieldMeta?.byKey?.[field_key];
   const type = meta?.input_type || meta?.default_type;
@@ -152,6 +153,9 @@ export default function AssetView({
   const [hiddenSet, setHiddenSet] = useState(new Set());
   const [pwdShown, setPwdShown] = useState(null);
   const [pwdLoading, setPwdLoading] = useState(false);
+  const [setpwOpen, setSetpwOpen] = useState(false);
+  const [setpwLoading, setSetpwLoading] = useState(false);
+  const [setpwForm] = Form.useForm();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [auditRows, setAuditRows] = useState([]);
@@ -191,6 +195,20 @@ export default function AssetView({
     } catch (e) {
       message.error(e.response?.data?.error || 'Cannot view password');
     } finally { setPwdLoading(false); }
+  }
+
+  async function onSetPassword({ newPassword }) {
+    setSetpwLoading(true);
+    try {
+      await api.put(`${apiPrefix}/${id}`, { assetPassword: newPassword });
+      message.success('Password saved');
+      setPwdShown(null);
+      setSetpwOpen(false);
+      setpwForm.resetFields();
+      load();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save password');
+    } finally { setSetpwLoading(false); }
   }
 
   async function onDeleteConfirmed(password) {
@@ -247,23 +265,43 @@ export default function AssetView({
   }
   if (!record) return null;
 
-  const passwordCell = record.hasPassword ? (
-    <Space size={4}>
-      <span style={{ fontFamily: 'monospace', minWidth: 70, display: 'inline-block' }}>
-        {pwdShown ?? '••••••••'}
-      </span>
-      {canWrite && (
+  let passwordCell;
+  if (!record.hasPassword) {
+    passwordCell = canWrite ? (
+      <Space size={4}>
+        <Typography.Text type="secondary" style={{ fontFamily: 'monospace' }}>—</Typography.Text>
+        <Tooltip title="Set password">
+          <Button size="small" type="text"
+            icon={<EyeOutlined style={{ color: '#bbb' }} />}
+            onClick={() => { setSetpwOpen(true); setpwForm.resetFields(); }}
+          />
+        </Tooltip>
+      </Space>
+    ) : NA;
+  } else {
+    passwordCell = (
+      <Space size={4}>
+        <span style={{ fontFamily: 'monospace', minWidth: 70, display: 'inline-block' }}>
+          {pwdShown || '••••••••'}
+        </span>
         <Tooltip title={pwdShown ? 'Hide password' : 'Reveal password'}>
-          <Button
-            size="small" type="text"
+          <Button size="small" type="text"
             icon={pwdShown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
             loading={pwdLoading}
             onClick={togglePassword}
           />
         </Tooltip>
-      )}
-    </Space>
-  ) : NA;
+        {canWrite && (
+          <Tooltip title="Change password">
+            <Button size="small" type="text"
+              icon={<UnlockOutlined style={{ color: '#aaa', fontSize: 12 }} />}
+              onClick={() => { setSetpwOpen(true); setpwForm.resetFields(); }}
+            />
+          </Tooltip>
+        )}
+      </Space>
+    );
+  }
 
   const valueFor = (field_key, isExtra) =>
     isExtra ? record.extras?.[field_key] : record[field_key];
@@ -436,6 +474,23 @@ export default function AssetView({
         onCancel={() => setDeleteOpen(false)}
         onConfirm={onDeleteConfirmed}
       />
+
+      <Modal
+        title={`${record.hasPassword ? 'Change' : 'Set'} Password — ${record.vm_name || ''}`}
+        open={setpwOpen}
+        onCancel={() => { setSetpwOpen(false); setpwForm.resetFields(); }}
+        onOk={() => setpwForm.submit()}
+        okText="Save Password"
+        confirmLoading={setpwLoading}
+        destroyOnClose
+      >
+        <Form form={setpwForm} layout="vertical" onFinish={onSetPassword} style={{ marginTop: 12 }}>
+          <Form.Item name="newPassword" label="New Password"
+            rules={[{ required: true, message: 'Please enter a password' }]}>
+            <Input.Password autoComplete="new-password" autoFocus />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

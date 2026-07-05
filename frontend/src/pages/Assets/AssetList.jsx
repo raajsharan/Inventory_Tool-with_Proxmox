@@ -95,6 +95,7 @@ export default function AssetList({
     try {
       await api.put(`${apiPrefix}/${setpwTarget.id}`, { assetPassword: newPassword });
       message.success('Password saved');
+      setRevealed(prev => { const n = { ...prev }; delete n[setpwTarget.id]; return n; });
       setSetpwTarget(null);
       setpwForm.resetFields();
       load();
@@ -189,42 +190,43 @@ export default function AssetList({
     { key: 'asset_username', dataIndex: 'asset_username', width: 150,
       title: labelOf('asset_username', 'Asset Username'), render: cell },
     {
-      key: 'asset_password', width: 190,
+      key: 'asset_password', width: 200,
       title: labelOf('asset_password', 'Asset Password'),
       render: (_, r) => {
-        if (!r.hasPassword) {
-          return canWrite ? (
-            <Tooltip title="Set password">
-              <Button
-                size="small"
-                type="dashed"
-                icon={<UnlockOutlined />}
-                style={{ color: '#aaa', borderColor: '#d9d9d9' }}
-                onClick={() => { setSetpwTarget({ id: r.id, vm_name: r.vm_name }); setpwForm.resetFields(); }}
-              >
-                Set
-              </Button>
-            </Tooltip>
-          ) : <Typography.Text type="secondary">—</Typography.Text>;
-        }
         const shown = revealed[r.id];
+        if (!canWrite) {
+          return r.hasPassword
+            ? <Space size={4}><span style={{ fontFamily: 'monospace' }}>••••••••</span><LockOutlined style={{ color: '#bbb' }} /></Space>
+            : <Typography.Text type="secondary">—</Typography.Text>;
+        }
+        const openSetModal = () => { setSetpwTarget({ id: r.id, vm_name: r.vm_name }); setpwForm.resetFields(); };
+        if (!r.hasPassword) {
+          return (
+            <Space size={4}>
+              <Typography.Text type="secondary" style={{ fontFamily: 'monospace' }}>—</Typography.Text>
+              <Tooltip title="Set password">
+                <Button size="small" type="text" icon={<EyeOutlined style={{ color: '#bbb' }} />}
+                  onClick={openSetModal} />
+              </Tooltip>
+            </Space>
+          );
+        }
         return (
           <Space size={4}>
             <span style={{ fontFamily: 'monospace', minWidth: 70, display: 'inline-block' }}>
-              {shown ?? '••••••••'}
+              {shown || '••••••••'}
             </span>
-            {canWrite && (
-              <Tooltip title={shown ? 'Hide password' : 'Reveal password'}>
-                <Button
-                  size="small"
-                  type="text"
-                  icon={shown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                  loading={!!revealing[r.id]}
-                  onClick={() => togglePassword(r.id, r.hasPassword)}
-                />
-              </Tooltip>
-            )}
-            {!canWrite && <LockOutlined style={{ color: '#999' }} />}
+            <Tooltip title={shown ? 'Hide' : 'Reveal password'}>
+              <Button size="small" type="text"
+                icon={shown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                loading={!!revealing[r.id]}
+                onClick={() => togglePassword(r.id, r.hasPassword)} />
+            </Tooltip>
+            <Tooltip title="Change password">
+              <Button size="small" type="text"
+                icon={<UnlockOutlined style={{ color: '#aaa', fontSize: 12 }} />}
+                onClick={openSetModal} />
+            </Tooltip>
           </Space>
         );
       },
@@ -323,7 +325,7 @@ export default function AssetList({
       />
 
       <Modal
-        title={`Set Password — ${setpwTarget?.vm_name || ''}`}
+        title={`${data.items.find(x => x.id === setpwTarget?.id)?.hasPassword ? 'Change' : 'Set'} Password — ${setpwTarget?.vm_name || ''}`}
         open={!!setpwTarget}
         onCancel={() => { setSetpwTarget(null); setpwForm.resetFields(); }}
         onOk={() => setpwForm.submit()}
