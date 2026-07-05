@@ -19,7 +19,7 @@ export default function AssetList({
   exportFilename = 'assets-export.xlsx',
   pageKey = 'assets',
 }) {
-  const { user, getPageLabel } = useAuth();
+  const { user, getPageLabel, canViewPasswords } = useAuth();
   const effectiveTitle = getPageLabel ? getPageLabel(pageKey, title) : title;
   const { message } = App.useApp();
   const nav = useNavigate();
@@ -41,7 +41,8 @@ export default function AssetList({
   const [setpwLoading, setSetpwLoading] = useState(false);
 
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
-  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
+  const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
+  const canSeePasswords = canWrite || !!canViewPasswords;
 
   async function load() {
     setLoading(true);
@@ -194,14 +195,16 @@ export default function AssetList({
       title: labelOf('asset_password', 'Asset Password'),
       render: (_, r) => {
         const shown = revealed[r.id];
-        if (!canWrite) {
+        const openSetModal = () => { setSetpwTarget({ id: r.id, vm_name: r.vm_name }); setpwForm.resetFields(); };
+
+        if (!canSeePasswords) {
           return r.hasPassword
             ? <Space size={4}><span style={{ fontFamily: 'monospace' }}>••••••••</span><LockOutlined style={{ color: '#bbb' }} /></Space>
             : <Typography.Text type="secondary">—</Typography.Text>;
         }
-        const openSetModal = () => { setSetpwTarget({ id: r.id, vm_name: r.vm_name }); setpwForm.resetFields(); };
+
         if (!r.hasPassword) {
-          return (
+          return canWrite ? (
             <Space size={4}>
               <Typography.Text type="secondary" style={{ fontFamily: 'monospace' }}>—</Typography.Text>
               <Tooltip title="Set password">
@@ -209,8 +212,9 @@ export default function AssetList({
                   onClick={openSetModal} />
               </Tooltip>
             </Space>
-          );
+          ) : <Typography.Text type="secondary">—</Typography.Text>;
         }
+
         return (
           <Space size={4}>
             <span style={{ fontFamily: 'monospace', minWidth: 70, display: 'inline-block' }}>
@@ -222,11 +226,13 @@ export default function AssetList({
                 loading={!!revealing[r.id]}
                 onClick={() => togglePassword(r.id, r.hasPassword)} />
             </Tooltip>
-            <Tooltip title="Change password">
-              <Button size="small" type="text"
-                icon={<UnlockOutlined style={{ color: '#aaa', fontSize: 12 }} />}
-                onClick={openSetModal} />
-            </Tooltip>
+            {canWrite && (
+              <Tooltip title="Change password">
+                <Button size="small" type="text"
+                  icon={<UnlockOutlined style={{ color: '#aaa', fontSize: 12 }} />}
+                  onClick={openSetModal} />
+              </Tooltip>
+            )}
           </Space>
         );
       },

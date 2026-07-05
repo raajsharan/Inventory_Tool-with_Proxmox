@@ -8,7 +8,7 @@ import {
   ArrowLeftOutlined, EditOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined,
   ReloadOutlined, AppstoreOutlined, TeamOutlined, ThunderboltOutlined,
   SafetyOutlined, HddOutlined, KeyOutlined, FileTextOutlined,
-  DatabaseOutlined, HistoryOutlined, CopyOutlined, BlockOutlined, UnlockOutlined,
+  DatabaseOutlined, HistoryOutlined, CopyOutlined, BlockOutlined, UnlockOutlined, LockOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
@@ -142,7 +142,7 @@ export default function AssetView({
 }) {
   const { id } = useParams();
   const nav = useNavigate();
-  const { user, getPageLabel } = useAuth();
+  const { user, getPageLabel, canViewPasswords } = useAuth();
   const { message } = App.useApp();
   const effectiveLabel = getPageLabel ? getPageLabel(pageKey, entityLabel) : entityLabel;
 
@@ -162,8 +162,9 @@ export default function AssetView({
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditUnavailable, setAuditUnavailable] = useState(false);
 
-  const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
-  const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
+  const canWrite       = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
+  const isAdmin        = ['admin', 'superadmin'].includes(user?.role);
+  const canSeePasswords = canWrite || !!canViewPasswords;
 
   async function load() {
     setLoading(true);
@@ -278,6 +279,13 @@ export default function AssetView({
         </Tooltip>
       </Space>
     ) : NA;
+  } else if (!canSeePasswords) {
+    passwordCell = (
+      <Space size={4}>
+        <span style={{ fontFamily: 'monospace' }}>••••••••</span>
+        <LockOutlined style={{ color: '#bbb' }} />
+      </Space>
+    );
   } else {
     passwordCell = (
       <Space size={4}>
