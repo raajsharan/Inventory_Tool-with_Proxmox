@@ -848,19 +848,19 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
     return <span style={{ color, fontWeight: 600 }}>{n.toLocaleString()}</span>;
   };
   const columns = [
-    { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', fixed: 'left', width: 220,
+    { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: '16%',
       render: v => <strong>{v}</strong> },
-    { title: 'Alive But Powered Off', dataIndex: 'alive_powered_off', width: 170, align: 'center', render: v => numCell(v, '#c2410c') },
-    { title: 'Auto',                  dataIndex: 'auto_patching',     width: 90,  align: 'center', render: v => numCell(v, '#15803d') },
-    { title: 'Beijing IT Team',       dataIndex: 'beijing_it',        width: 140, align: 'center', render: v => numCell(v, '#7e22ce') },
-    { title: 'EOL - No Patches',      dataIndex: 'eol',               width: 140, align: 'center', render: v => numCell(v, '#b91c1c') },
-    { title: 'Exception',             dataIndex: 'exception',         width: 110, align: 'center', render: v => numCell(v, '#a16207') },
-    { title: 'Manual',                dataIndex: 'manual_patching',   width: 90,  align: 'center', render: v => numCell(v, '#1d4ed8') },
-    { title: 'On Hold',               dataIndex: 'on_hold',           width: 90,  align: 'center', render: v => numCell(v, '#475569') },
-    { title: 'Onboard Pending',       dataIndex: 'onboard_pending',   width: 140, align: 'center', render: v => numCell(v, '#0e7490') },
-    { title: 'Total',                 dataIndex: 'total',             width: 90,  align: 'center',
+    { title: 'Alive But Powered Off', dataIndex: 'alive_powered_off', align: 'center', render: v => numCell(v, '#c2410c') },
+    { title: 'Auto',                  dataIndex: 'auto_patching',     align: 'center', render: v => numCell(v, '#15803d') },
+    { title: 'Beijing IT Team',       dataIndex: 'beijing_it',        align: 'center', render: v => numCell(v, '#7e22ce') },
+    { title: 'EOL - No Patches',      dataIndex: 'eol',               align: 'center', render: v => numCell(v, '#b91c1c') },
+    { title: 'Exception',             dataIndex: 'exception',         align: 'center', render: v => numCell(v, '#a16207') },
+    { title: 'Manual',                dataIndex: 'manual_patching',   align: 'center', render: v => numCell(v, '#1d4ed8') },
+    { title: 'On Hold',               dataIndex: 'on_hold',           align: 'center', render: v => numCell(v, '#475569') },
+    { title: 'Onboard Pending',       dataIndex: 'onboard_pending',   align: 'center', render: v => numCell(v, '#0e7490') },
+    { title: 'Total',                 dataIndex: 'total',             align: 'center',
       render: v => <strong>{Number(v ?? 0).toLocaleString()}</strong> },
-    { title: 'Percentage',            dataIndex: 'pct',               width: 110, align: 'center',
+    { title: 'Percentage',            dataIndex: 'pct',               align: 'center',
       render: v => <strong>{(v ?? 0).toFixed(2)}%</strong> },
   ];
 
@@ -884,7 +884,7 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
       dataSource={enriched}
       columns={columns}
       pagination={false}
-      scroll={{ x: 'max-content' }}
+      tableLayout="fixed"
       summary={() => (
         <Table.Summary.Row style={{ background: 'rgba(22,119,255,0.06)', fontWeight: 700 }}>
           <Table.Summary.Cell index={0}><strong>Total</strong></Table.Summary.Cell>
