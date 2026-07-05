@@ -8,25 +8,55 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- users
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           VARCHAR(255) UNIQUE NOT NULL,
-    full_name       VARCHAR(255) NOT NULL,
-    password_hash   VARCHAR(255) NOT NULL,
-    role            VARCHAR(32) NOT NULL CHECK (role IN ('superadmin','admin','asset_manager','viewer')),
-    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-    last_login_at   TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email               VARCHAR(255) UNIQUE NOT NULL,
+    full_name           VARCHAR(255) NOT NULL,
+    password_hash       VARCHAR(255) NOT NULL,
+    role                VARCHAR(64) NOT NULL DEFAULT 'viewer',
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    can_view_passwords  BOOLEAN NOT NULL DEFAULT FALSE,
+    last_login_at       TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- For existing deployments: widen the role CHECK to include 'superadmin'.
+-- Drop old role CHECK constraint so custom role names are accepted.
+-- Role validation is enforced at the application layer via customRolesService.
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users
-  ADD CONSTRAINT users_role_check
-  CHECK (role IN ('superadmin','admin','asset_manager','viewer'));
+
+-- Add can_view_passwords for existing deployments.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_passwords BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- ---------------------------------------------------------------------
+-- custom_roles
+--   Admin-created roles that extend the 4 built-in system roles.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS custom_roles (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(64) UNIQUE NOT NULL,
+    label       VARCHAR(128) NOT NULL,
+    description TEXT,
+    created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_custom_roles_name ON custom_roles(name);
+
+-- ---------------------------------------------------------------------
+-- system_role_overrides
+--   Allows admins to rename / re-describe the 4 built-in system roles
+--   without touching code.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS system_role_overrides (
+    name        VARCHAR(64) PRIMARY KEY,
+    label       VARCHAR(128) NOT NULL,
+    description TEXT,
+    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ---------------------------------------------------------------------
 -- dropdown_master
@@ -373,13 +403,28 @@ ON CONFLICT (page_key) DO NOTHING;
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS page_access (
     page_key    VARCHAR(128) NOT NULL,
-    role        VARCHAR(32)  NOT NULL,
+    role        VARCHAR(64)  NOT NULL,
     allowed     BOOLEAN NOT NULL DEFAULT TRUE,
     updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (page_key, role)
 );
 CREATE INDEX IF NOT EXISTS idx_page_access_role ON page_access(role);
+
+-- ---------------------------------------------------------------------
+-- user_page_access
+--   Per-user page-level access overrides. Takes precedence over the
+--   role-based page_access matrix for individual users.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_page_access (
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    page_key    VARCHAR(128) NOT NULL,
+    allowed     BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, page_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_page_access_user ON user_page_access(user_id);
 
 -- ---------------------------------------------------------------------
 -- builtin_page_overrides
