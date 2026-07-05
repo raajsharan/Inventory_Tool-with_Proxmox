@@ -109,6 +109,10 @@ function postProcessRow(r) {
   for (const b of BOOL_COLS) {
     if (r[b] !== undefined && r[b] !== '') r[b] = parseBool(r[b]);
   }
+  // Exports mask stored passwords as bullet dots — never import the mask.
+  if (r.asset_password && /^[•*]+$/.test(String(r.asset_password).trim())) {
+    delete r.asset_password;
+  }
   if (r.eol_status) {
     const key = normalize(r.eol_status).replace(/\s+/g, ' ');
     const mapped = EOL_ALIASES[key] || EOL_ALIASES[key.replace(/\s/g, '')];
@@ -176,6 +180,13 @@ function isEmpty(v) {
   return v === null || v === undefined || v === '' || (typeof v === 'string' && !v.trim());
 }
 
+// ASSET_COLUMNS excludes asset_password (the DB column is
+// asset_password_encrypted, handled by mapBody) — but imports must still be
+// able to carry it, so treat it as an always-importable virtual column.
+function withPassword(cols) {
+  return cols.includes('asset_password') ? cols : [...cols, 'asset_password'];
+}
+
 function diffFillOnlyEmpty(existing, incoming, cols) {
   const updates = {};
   const diffs = [];
@@ -223,6 +234,7 @@ async function findByIp(table, ip) {
 }
 
 async function preview(buffer, { table, cols, verifyByIp }) {
+  cols = withPassword(cols);
   const { rows } = await parseSheet(buffer, cols);
   const out = [];
   for (const r of rows) {
@@ -324,6 +336,7 @@ async function apply(buffer, { table, cols, verifyByIp, selectedRowIdxs, createF
 
 // Accepts pre-parsed rows [{rowIdx, data}] — used by DB import (skips file parsing)
 async function previewRows(mappedRows, { table, cols, verifyByIp }) {
+  cols = withPassword(cols);
   const out = [];
   for (const r of mappedRows) {
     const d = r.data;
