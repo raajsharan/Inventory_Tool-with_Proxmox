@@ -18,8 +18,9 @@ function mapBody(body) {
     if (body[camel] !== undefined)      row[c] = body[camel];
     else if (body[c] !== undefined)     row[c] = body[c];
   }
-  if (body.assetPassword !== undefined || body.asset_password !== undefined) {
-    row.asset_password_encrypted = crypto.encrypt(body.assetPassword ?? body.asset_password);
+  const rawPw = body.assetPassword ?? body.asset_password;
+  if (rawPw !== undefined && rawPw !== null && rawPw !== '') {
+    row.asset_password_encrypted = crypto.encrypt(String(rawPw));
   }
   if (body.extras !== undefined) {
     row.extras = typeof body.extras === 'string' ? body.extras : JSON.stringify(body.extras || {});

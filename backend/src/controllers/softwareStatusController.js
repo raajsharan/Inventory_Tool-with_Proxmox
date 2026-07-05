@@ -63,8 +63,6 @@ async function get(req, res, next) {
                asset_username
           FROM assets
          WHERE deleted_at IS NULL
-           AND (server_status IS NULL
-            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
@@ -72,8 +70,6 @@ async function get(req, res, next) {
                asset_username
           FROM beijing_assets
          WHERE deleted_at IS NULL
-           AND (server_status IS NULL
-            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
@@ -81,8 +77,6 @@ async function get(req, res, next) {
                asset_username
           FROM ext_assets
          WHERE deleted_at IS NULL
-           AND (server_status IS NULL
-            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
@@ -90,8 +84,6 @@ async function get(req, res, next) {
                asset_username
           FROM physical_esxi_servers
          WHERE deleted_at IS NULL
-           AND (server_status IS NULL
-            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
       )
       SELECT location,
         COUNT(*)::int                                                   AS total,

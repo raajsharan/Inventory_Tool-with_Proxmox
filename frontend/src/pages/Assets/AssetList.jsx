@@ -229,6 +229,11 @@ export default function AssetList({
       title={<Typography.Title level={4} style={{ margin: 0 }}>{effectiveTitle}</Typography.Title>}
       extra={
         <Space>
+          {!loading && data.total > 0 && (
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              {data.total} asset{data.total !== 1 ? 's' : ''}
+            </Typography.Text>
+          )}
           <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
           <Button icon={<DownloadOutlined />} onClick={onExport}>Export</Button>
           {canWrite && <Link to={`${basePath}/import`}><Button icon={<UploadOutlined />}>Import</Button></Link>}
