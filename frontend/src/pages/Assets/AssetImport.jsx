@@ -23,7 +23,7 @@ export default function AssetImport({
   const targetLabel = TARGET_LABELS[apiPrefix] || 'Selected List';
 
   const [file, setFile] = useState(null);
-  const [verifyByIp, setVerifyByIp] = useState(false);
+  const [verifyByIp, setVerifyByIp] = useState(true);
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState(null);

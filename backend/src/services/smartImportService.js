@@ -188,6 +188,13 @@ function diffFillOnlyEmpty(existing, incoming, cols) {
           diffs.push({ field: c, from: existing[c], to: incoming[c] });
         }
       }
+    } else if (c === 'asset_password') {
+      // The DB row stores asset_password_encrypted, not asset_password —
+      // only fill when no password is stored yet, never overwrite one.
+      if (isEmpty(existing.asset_password_encrypted)) {
+        updates[c] = incoming[c];
+        diffs.push({ field: c, from: '', to: '••••••••' });
+      }
     } else if (isEmpty(existing[c])) {
       updates[c] = incoming[c];
       diffs.push({ field: c, from: existing[c] ?? '', to: incoming[c] });
