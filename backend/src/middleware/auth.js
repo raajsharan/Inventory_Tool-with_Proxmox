@@ -31,8 +31,8 @@ function requirePageAccess(pageKey) {
       if (!req.user) return next(new ApiError(401, 'Unauthenticated'));
       if (req.user.role === 'superadmin') return next();
       const svc = require('../services/pageAccessService');
-      const ok = await svc.can(req.user.role, pageKey);
-      if (!ok) return next(new ApiError(403, 'Page access denied for your role'));
+      const ok = await svc.canUser(req.user.id, req.user.role, pageKey);
+      if (!ok) return next(new ApiError(403, 'Page access denied for your account'));
       return next();
     } catch (e) { return next(e); }
   };

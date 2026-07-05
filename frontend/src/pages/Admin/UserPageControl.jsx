@@ -39,6 +39,7 @@ const PAGE_SECTIONS = [
       { key: 'admin/field-visibility',   label: 'Field Customization' },
       { key: 'admin/page-access',        label: 'Page Access (Role-based)' },
       { key: 'admin/user-page-control',  label: 'User Page Control' },
+      { key: 'admin/roles',              label: 'Role Management' },
       { key: 'admin/backup',             label: 'Backup / Export & Import' },
       { key: 'admin/branding',           label: 'Branding & Customization' },
       { key: 'admin/recycle-bin',        label: 'Recycle Bin' },

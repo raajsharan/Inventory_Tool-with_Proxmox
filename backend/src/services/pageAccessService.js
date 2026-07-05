@@ -105,6 +105,21 @@ async function can(role, pageKey) {
   return !!rows[0].allowed;
 }
 
+// Per-user check: a user_page_access row takes precedence over the role
+// matrix; falls back to can(role, pageKey) when no override exists.
+async function canUser(userId, role, pageKey) {
+  if (role === 'superadmin') return true;
+  if (!pageKey) return false;
+  if (userId) {
+    const { rows } = await db.query(
+      `SELECT allowed FROM user_page_access WHERE user_id = $1 AND page_key = $2`,
+      [userId, pageKey]
+    );
+    if (rows.length) return !!rows[0].allowed;
+  }
+  return can(role, pageKey);
+}
+
 module.exports = {
   ROLES,
   STATIC_PAGES,
@@ -113,4 +128,5 @@ module.exports = {
   list,
   setMatrix,
   can,
+  canUser,
 };
