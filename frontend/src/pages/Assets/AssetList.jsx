@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Card, Table, Input, Select, Space, Button, Tag, App, Row, Col, Typography, Tooltip,
+  Card, Table, Input, Select, Space, Button, Tag, App, Row, Col, Typography, Tooltip, Modal, Form,
 } from 'antd';
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined,
-  LockOutlined,
+  LockOutlined, UnlockOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -36,6 +36,9 @@ export default function AssetList({
   const [revealed, setRevealed] = useState({}); // id -> decrypted password
   const [revealing, setRevealing] = useState({}); // id -> bool
   const [deleteTarget, setDeleteTarget] = useState(null); // { id, vm_name } awaiting password confirm
+  const [setpwTarget, setSetpwTarget]   = useState(null); // { id, vm_name } for inline set-password modal
+  const [setpwForm]                     = Form.useForm();
+  const [setpwLoading, setSetpwLoading] = useState(false);
 
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
@@ -84,6 +87,22 @@ export default function AssetList({
     const a = document.createElement('a');
     a.href = url; a.download = exportFilename; a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function onSetPassword({ newPassword }) {
+    if (!setpwTarget) return;
+    setSetpwLoading(true);
+    try {
+      await api.put(`${apiPrefix}/${setpwTarget.id}`, { assetPassword: newPassword });
+      message.success('Password saved');
+      setSetpwTarget(null);
+      setpwForm.resetFields();
+      load();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save password');
+    } finally {
+      setSetpwLoading(false);
+    }
   }
 
   async function togglePassword(id, hasPassword) {
@@ -170,10 +189,24 @@ export default function AssetList({
     { key: 'asset_username', dataIndex: 'asset_username', width: 150,
       title: labelOf('asset_username', 'Asset Username'), render: cell },
     {
-      key: 'asset_password', width: 170,
+      key: 'asset_password', width: 190,
       title: labelOf('asset_password', 'Asset Password'),
       render: (_, r) => {
-        if (!r.hasPassword) return <Typography.Text type="secondary">—</Typography.Text>;
+        if (!r.hasPassword) {
+          return canWrite ? (
+            <Tooltip title="Set password">
+              <Button
+                size="small"
+                type="dashed"
+                icon={<UnlockOutlined />}
+                style={{ color: '#aaa', borderColor: '#d9d9d9' }}
+                onClick={() => { setSetpwTarget({ id: r.id, vm_name: r.vm_name }); setpwForm.resetFields(); }}
+              >
+                Set
+              </Button>
+            </Tooltip>
+          ) : <Typography.Text type="secondary">—</Typography.Text>;
+        }
         const shown = revealed[r.id];
         return (
           <Space size={4}>
@@ -288,6 +321,26 @@ export default function AssetList({
         onCancel={() => setDeleteTarget(null)}
         onConfirm={onDeleteConfirmed}
       />
+
+      <Modal
+        title={`Set Password — ${setpwTarget?.vm_name || ''}`}
+        open={!!setpwTarget}
+        onCancel={() => { setSetpwTarget(null); setpwForm.resetFields(); }}
+        onOk={() => setpwForm.submit()}
+        okText="Save Password"
+        confirmLoading={setpwLoading}
+        destroyOnClose
+      >
+        <Form form={setpwForm} layout="vertical" onFinish={onSetPassword} style={{ marginTop: 12 }}>
+          <Form.Item
+            name="newPassword"
+            label="New Password"
+            rules={[{ required: true, message: 'Please enter a password' }]}
+          >
+            <Input.Password autoComplete="new-password" autoFocus />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Card>
   );
 }
