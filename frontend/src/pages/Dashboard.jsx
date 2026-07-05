@@ -840,6 +840,19 @@ function WeeklyReportRow({ label, children }) {
   );
 }
 
+// All possible patching-type columns; only those with at least one non-zero
+// value across the rows are rendered, so the table adapts to the data.
+const BREAKDOWN_METRICS = [
+  { key: 'alive_powered_off', title: 'Alive But Powered Off', color: '#c2410c' },
+  { key: 'auto_patching',     title: 'Auto',                  color: '#15803d' },
+  { key: 'beijing_it',        title: 'Beijing IT Team',       color: '#7e22ce' },
+  { key: 'eol',               title: 'EOL - No Patches',      color: '#b91c1c' },
+  { key: 'exception',         title: 'Exception',             color: '#a16207' },
+  { key: 'manual_patching',   title: 'Manual',                color: '#1d4ed8' },
+  { key: 'on_hold',           title: 'On Hold',               color: '#475569' },
+  { key: 'onboard_pending',   title: 'Onboard Pending',       color: '#0e7490' },
+];
+
 function WeeklyBreakdownTable({ rows, groupLabel }) {
   // Each cell: link-coloured number when > 0, "-" when zero.
   const numCell = (v, color) => {
@@ -847,22 +860,6 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
     if (n === 0) return <span style={{ color: '#94a3b8' }}>-</span>;
     return <span style={{ color, fontWeight: 600 }}>{n.toLocaleString()}</span>;
   };
-  const columns = [
-    { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: '16%',
-      render: v => <strong>{v}</strong> },
-    { title: 'Alive But Powered Off', dataIndex: 'alive_powered_off', align: 'center', render: v => numCell(v, '#c2410c') },
-    { title: 'Auto',                  dataIndex: 'auto_patching',     align: 'center', render: v => numCell(v, '#15803d') },
-    { title: 'Beijing IT Team',       dataIndex: 'beijing_it',        align: 'center', render: v => numCell(v, '#7e22ce') },
-    { title: 'EOL - No Patches',      dataIndex: 'eol',               align: 'center', render: v => numCell(v, '#b91c1c') },
-    { title: 'Exception',             dataIndex: 'exception',         align: 'center', render: v => numCell(v, '#a16207') },
-    { title: 'Manual',                dataIndex: 'manual_patching',   align: 'center', render: v => numCell(v, '#1d4ed8') },
-    { title: 'On Hold',               dataIndex: 'on_hold',           align: 'center', render: v => numCell(v, '#475569') },
-    { title: 'Onboard Pending',       dataIndex: 'onboard_pending',   align: 'center', render: v => numCell(v, '#0e7490') },
-    { title: 'Total',                 dataIndex: 'total',             align: 'center',
-      render: v => <strong>{Number(v ?? 0).toLocaleString()}</strong> },
-    { title: 'Percentage',            dataIndex: 'pct',               align: 'center',
-      render: v => <strong>{(v ?? 0).toFixed(2)}%</strong> },
-  ];
 
   // Percentage = (Total - Alive But Powered Off - EOL) / Total — the
   // fraction of records that are actively in scope for patching.
@@ -877,6 +874,21 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
   const inScopeSum = totalSum - sumKey('alive_powered_off') - sumKey('eol');
   const totalPct = totalSum ? (inScopeSum / totalSum) * 100 : 0;
 
+  // Dynamic columns: drop any metric that is zero/empty for every row.
+  const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0);
+
+  const columns = [
+    { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: '16%',
+      render: v => <strong>{v}</strong> },
+    ...activeMetrics.map(m => ({
+      title: m.title, dataIndex: m.key, align: 'center', render: v => numCell(v, m.color),
+    })),
+    { title: 'Total',      dataIndex: 'total', align: 'center',
+      render: v => <strong>{Number(v ?? 0).toLocaleString()}</strong> },
+    { title: 'Percentage', dataIndex: 'pct',   align: 'center',
+      render: v => <strong>{(v ?? 0).toFixed(2)}%</strong> },
+  ];
+
   return (
     <Table
       rowKey="bucket"
@@ -888,16 +900,16 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
       summary={() => (
         <Table.Summary.Row style={{ background: 'rgba(22,119,255,0.06)', fontWeight: 700 }}>
           <Table.Summary.Cell index={0}><strong>Total</strong></Table.Summary.Cell>
-          {['alive_powered_off','auto_patching','beijing_it','eol','exception','manual_patching','on_hold','onboard_pending'].map((k, i) => {
-            const v = sumKey(k);
+          {activeMetrics.map((m, i) => {
+            const v = sumKey(m.key);
             return (
-              <Table.Summary.Cell key={k} index={i + 1} align="center">
+              <Table.Summary.Cell key={m.key} index={i + 1} align="center">
                 {v === 0 ? <span style={{ color: '#94a3b8' }}>-</span> : <strong>{v.toLocaleString()}</strong>}
               </Table.Summary.Cell>
             );
           })}
-          <Table.Summary.Cell index={9}  align="center"><strong>{totalSum.toLocaleString()}</strong></Table.Summary.Cell>
-          <Table.Summary.Cell index={10} align="center"><strong>{totalPct.toFixed(2)}%</strong></Table.Summary.Cell>
+          <Table.Summary.Cell index={activeMetrics.length + 1} align="center"><strong>{totalSum.toLocaleString()}</strong></Table.Summary.Cell>
+          <Table.Summary.Cell index={activeMetrics.length + 2} align="center"><strong>{totalPct.toFixed(2)}%</strong></Table.Summary.Cell>
         </Table.Summary.Row>
       )}
     />
