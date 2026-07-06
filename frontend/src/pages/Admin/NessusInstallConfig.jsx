@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Button, Card, Checkbox, Col, Descriptions, Divider, Form, Input,
+  Alert, App, Button, Card, Checkbox, Col, Descriptions, Divider, Form, Input,
   InputNumber, Modal, Radio, Row, Space, Spin, Tag, Tooltip, Typography, Segmented,
 } from 'antd';
 import {
@@ -33,6 +33,7 @@ const WIN_CMD_HINTS = {
 
 export default function NessusInstallConfig() {
   const [form]                          = Form.useForm();
+  const { message }                     = App.useApp();
   const [config,      setConfig]        = useState(null);
   const [loading,     setLoading]       = useState(true);
   const [saving,      setSaving]        = useState(false);
@@ -48,7 +49,9 @@ export default function NessusInstallConfig() {
       const { data } = await api.get('/nessus-status/install-config');
       setConfig(data);
       form.setFieldsValue(data);
-    } catch {}
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to load Nessus install configuration');
+    }
     finally { setLoading(false); }
   };
 
@@ -60,7 +63,10 @@ export default function NessusInstallConfig() {
       const { data } = await api.put('/nessus-status/install-config', vals);
       setConfig(data);
       form.setFieldsValue(data);
-    } catch {}
+      message.success('Nessus install configuration saved');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save configuration');
+    }
     finally { setSaving(false); }
   };
 
@@ -81,8 +87,13 @@ export default function NessusInstallConfig() {
       okText: 'Clear Log',
       okButtonProps: { danger: true },
       onOk: async () => {
-        await api.delete('/nessus-status/install-log');
-        setLogLines([]);
+        try {
+          await api.delete('/nessus-status/install-log');
+          setLogLines([]);
+          message.success('Deployment log cleared');
+        } catch (e) {
+          message.error(e.response?.data?.error || 'Failed to clear log');
+        }
       },
     });
   };

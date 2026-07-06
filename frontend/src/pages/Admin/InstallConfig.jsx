@@ -68,7 +68,9 @@ export default function InstallConfig() {
       setConfig(data);
       form.resetFields();
       form.setFieldsValue(data);
-    } catch {}
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to load install configuration');
+    }
     finally { setLoading(false); }
   };
 
@@ -103,10 +105,14 @@ export default function InstallConfig() {
       okText: 'Remove',
       okButtonProps: { danger: true },
       onOk: async () => {
-        await api.delete('/software-status/install-config', { params: { location: scope } });
-        message.success(`Removed "${scope}" configuration`);
-        loadLocations();
-        onScopeChange(DEFAULT_SCOPE);
+        try {
+          await api.delete('/software-status/install-config', { params: { location: scope } });
+          message.success(`Removed "${scope}" configuration`);
+          loadLocations();
+          onScopeChange(DEFAULT_SCOPE);
+        } catch (e) {
+          message.error(e.response?.data?.error || 'Failed to remove configuration');
+        }
       },
     });
   };
@@ -128,8 +134,13 @@ export default function InstallConfig() {
       okText: 'Clear Log',
       okButtonProps: { danger: true },
       onOk: async () => {
-        await api.delete('/software-status/install-log');
-        setLogLines([]);
+        try {
+          await api.delete('/software-status/install-log');
+          setLogLines([]);
+          message.success('Deployment log cleared');
+        } catch (e) {
+          message.error(e.response?.data?.error || 'Failed to clear log');
+        }
       },
     });
   };
