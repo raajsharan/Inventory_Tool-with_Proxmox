@@ -64,15 +64,40 @@ function httpsReq({ hostname, port, path, method, headers, body, verifySSL }) {
   });
 }
 
+// vSphere 6.x wraps every /rest response in { value: ... }; 7.0+ /api returns
+// bare payloads. Unwrap when `value` is the sole key.
+function unwrapValue(parsed) {
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      && Object.keys(parsed).length === 1 && 'value' in parsed) {
+    return parsed.value;
+  }
+  return parsed;
+}
+
 async function apiGet(hostname, port, path, sessionId, verifySSL) {
-  const { status, body } = await httpsReq({
-    hostname, port, path, method: 'GET',
-    headers: { 'vmware-api-session-id': sessionId },
-    verifySSL,
-  });
-  if (status === 401 || status === 403) throw new VMwareAuthError(`Session invalid or unauthorized (${path})`);
-  if (status >= 400) throw new Error(`vSphere API error ${status} on ${path}: ${body.slice(0, 200)}`);
-  try { return JSON.parse(body); } catch { return body; }
+  // 7.0+ uses /api/..., 6.x uses /rest/... — try the given path first, then
+  // fall back to the legacy prefix on 404/405 (e.g. "HTTP method GET is not
+  // supported by this URL" from 6.x vCenters).
+  const paths = path.startsWith('/api/')
+    ? [path, path.replace(/^\/api\//, '/rest/')]
+    : [path];
+
+  let lastErr = null;
+  for (const p of paths) {
+    const { status, body } = await httpsReq({
+      hostname, port, path: p, method: 'GET',
+      headers: { 'vmware-api-session-id': sessionId },
+      verifySSL,
+    });
+    if (status === 401 || status === 403) throw new VMwareAuthError(`Session invalid or unauthorized (${p})`);
+    if (status === 404 || status === 405) {
+      lastErr = new Error(`vSphere API error ${status} on ${p}: ${body.slice(0, 200)}`);
+      continue; // try legacy prefix
+    }
+    if (status >= 400) throw new Error(`vSphere API error ${status} on ${p}: ${body.slice(0, 200)}`);
+    try { return unwrapValue(JSON.parse(body)); } catch { return body; }
+  }
+  throw lastErr || new Error(`vSphere API unreachable on ${path}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,13 +134,16 @@ async function createSession(hostname, port, username, password, verifySSL) {
 }
 
 async function destroySession(hostname, port, sessionId, verifySSL) {
-  try {
-    await httpsReq({
-      hostname, port, path: '/api/session', method: 'DELETE',
-      headers: { 'vmware-api-session-id': sessionId },
-      verifySSL,
-    });
-  } catch { /* best-effort logout */ }
+  for (const path of ['/api/session', '/rest/com/vmware/cis/session']) {
+    try {
+      const { status } = await httpsReq({
+        hostname, port, path, method: 'DELETE',
+        headers: { 'vmware-api-session-id': sessionId },
+        verifySSL,
+      });
+      if (status < 400) return;
+    } catch { /* best-effort logout */ }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -200,8 +228,11 @@ function normalisePowerState(raw) {
 function extractMacs(details) {
   const macs = [];
   if (!details || !details.nics) return macs;
-  for (const nic of Object.values(details.nics)) {
-    if (nic.mac_address) macs.push(nic.mac_address);
+  // 7.0+ /api: nics is an object keyed by nic id.
+  // 6.x /rest: nics is an array of { key, value } pairs.
+  for (const entry of Object.values(details.nics)) {
+    const nic = entry && entry.value && typeof entry.value === 'object' ? entry.value : entry;
+    if (nic && nic.mac_address) macs.push(nic.mac_address);
   }
   return macs;
 }
