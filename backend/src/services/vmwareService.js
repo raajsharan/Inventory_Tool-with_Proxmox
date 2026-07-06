@@ -107,16 +107,41 @@ async function destroySession(hostname, port, sessionId, verifySSL) {
 // VM and host discovery helpers
 // ---------------------------------------------------------------------------
 
+// vSphere 6.x wraps list responses in { value: [...] }; 7.0+ returns bare arrays.
+function unwrapList(r) {
+  if (Array.isArray(r)) return r;
+  if (r && Array.isArray(r.value)) return r.value;
+  return null;
+}
+
 async function listESXiHosts(hostname, port, sessionId, verifySSL) {
   try {
     const hosts = await apiGet(hostname, port, '/api/vcenter/host', sessionId, verifySSL);
-    return Array.isArray(hosts) ? hosts : [];
-  } catch { return []; }
+    return unwrapList(hosts) || [];
+  } catch (err) {
+    console.warn('[vmware] could not list ESXi hosts:', err.message);
+    return [];
+  }
 }
 
 async function listVMs(hostname, port, sessionId, verifySSL) {
   const vms = await apiGet(hostname, port, '/api/vcenter/vm', sessionId, verifySSL);
-  return Array.isArray(vms) ? vms : [];
+  return unwrapList(vms) || [];
+}
+
+// List the VMs placed on one ESXi host. The 7.0+ /api endpoint takes `hosts=`,
+// the legacy 6.x style used `filter.hosts=` — try both so placement mapping
+// works across vSphere versions.
+async function listVMsOnHost(hostname, port, sessionId, hostId, verifySSL) {
+  const enc = encodeURIComponent(hostId);
+  for (const qs of [`hosts=${enc}`, `filter.hosts=${enc}`]) {
+    try {
+      const r = await apiGet(hostname, port, `/api/vcenter/vm?${qs}`, sessionId, verifySSL);
+      const list = unwrapList(r);
+      if (list !== null) return list;
+    } catch { /* try next param style */ }
+  }
+  return null; // both styles failed
 }
 
 async function getVMDetails(hostname, port, sessionId, vmId, verifySSL) {
@@ -223,20 +248,14 @@ async function discoverWithSession(hostname, port, sessionId, verifySSL) {
   // 2. Build host→VM mapping by listing VMs per host (gives ESXi placement)
   const vmToHost = {};
   for (const h of esxiHosts) {
-    try {
-      const vmsOnHost = await apiGet(
-        hostname, port,
-        `/api/vcenter/vm?filter.hosts=${encodeURIComponent(h.host)}`,
-        sessionId, verifySSL,
-      );
-      if (Array.isArray(vmsOnHost)) {
-        for (const v of vmsOnHost) {
-          // h.name is the ESXi hostname/IP registered in vCenter
-          if (v.vm) vmToHost[v.vm] = { name: h.name, ip: h.name };
-        }
-      }
-    } catch (err) {
-      console.warn(`[vmware] could not list VMs for ESXi host ${h.name} (${h.host}):`, err.message);
+    const vmsOnHost = await listVMsOnHost(hostname, port, sessionId, h.host, verifySSL);
+    if (vmsOnHost === null) {
+      console.warn(`[vmware] could not list VMs for ESXi host ${h.name} (${h.host})`);
+      continue;
+    }
+    for (const v of vmsOnHost) {
+      // h.name is the ESXi hostname/IP registered in vCenter
+      if (v.vm) vmToHost[v.vm] = { name: h.name, ip: h.name };
     }
   }
 

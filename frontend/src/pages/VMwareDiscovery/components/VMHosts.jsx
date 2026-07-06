@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
-  PlayCircleOutlined, ApiOutlined, CheckCircleOutlined,
+  PlayCircleOutlined, ApiOutlined, CheckCircleOutlined, ClusterOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -29,11 +29,19 @@ export default function VMHosts({ onDiscoveryStarted }) {
   const [editing, setEditing]   = useState(null);
   const [testResult, setTest]   = useState({});
   const [testing, setTesting]   = useState({});
+  const [topology, setTopology] = useState({});   // vcenter host → esxi_hosts[]
   const [form] = Form.useForm();
 
   const load = () => {
     setLoading(true);
     api.get('/vmware/hosts').then(r => setHosts(r.data.hosts || [])).finally(() => setLoading(false));
+    api.get('/vmware/esxi-topology').then(r => {
+      const map = {};
+      for (const t of r.data.topology || r.data || []) {
+        if (t?.vcenter) map[t.vcenter] = t.esxi_hosts || [];
+      }
+      setTopology(map);
+    }).catch(() => setTopology({}));
   };
 
   useEffect(() => { load(); }, []);
@@ -179,6 +187,41 @@ export default function VMHosts({ onDiscoveryStarted }) {
         dataSource={hosts}
         columns={columns}
         pagination={false}
+        expandable={{
+          rowExpandable: () => true,
+          expandedRowRender: (r) => {
+            const esxi = topology[r.host] || [];
+            if (!esxi.length) {
+              return (
+                <Text type="secondary">
+                  No ESXi placement data yet — run a discovery to populate the ESXi hosts under this vCenter.
+                </Text>
+              );
+            }
+            return (
+              <Table
+                size="small"
+                rowKey={(h) => `${h.esxi_name}|${h.esxi_ip}`}
+                dataSource={esxi}
+                pagination={false}
+                columns={[
+                  {
+                    title: <Space size={6}><ClusterOutlined />ESXi Host</Space>,
+                    dataIndex: 'esxi_name',
+                    render: v => <Text strong>{v}</Text>,
+                  },
+                  { title: 'VMs',        dataIndex: 'vm_count',    width: 90, align: 'center' },
+                  { title: 'Powered On', dataIndex: 'powered_on',  width: 110, align: 'center',
+                    render: v => <Tag color={v > 0 ? 'green' : 'default'}>{v}</Tag> },
+                  { title: 'Powered Off', dataIndex: 'powered_off', width: 110, align: 'center',
+                    render: v => <Tag color={v > 0 ? 'orange' : 'default'}>{v}</Tag> },
+                  { title: 'Suspended',  dataIndex: 'suspended',   width: 100, align: 'center',
+                    render: v => v > 0 ? <Tag color="gold">{v}</Tag> : <Text type="secondary">0</Text> },
+                ]}
+              />
+            );
+          },
+        }}
       />
 
       <Modal
