@@ -102,6 +102,12 @@ async function get(req, res, next) {
           'os_type',os_type,'source',source,'asset_username',asset_username
         ) ORDER BY nessus_installed, vm_name) AS vms
       FROM all_vms
+      -- Hypervisors / appliances cannot take an agent install — not eligible.
+      WHERE os_type NOT ILIKE '%esxi%'
+        AND os_type NOT ILIKE '%vmware%'
+        AND os_type NOT ILIKE '%appliance%'
+        AND os_type NOT ILIKE '%proxmox%'
+        AND REPLACE(REPLACE(os_type, '-', ''), ' ', '') NOT ILIKE '%eveng%'
       GROUP BY location ORDER BY location
     `;
     const { rows } = await db.query(sql);
