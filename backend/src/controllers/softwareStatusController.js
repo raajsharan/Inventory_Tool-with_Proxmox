@@ -172,11 +172,13 @@ function attachFileChecks(row) {
 }
 
 // ── GET /software-status/install-config ──────────────────────────────────────
-//    ?location=X returns that location's override row (empty object if none).
+//    ?location=X            → that location's override row (empty if none)
+//    ?location=X&merged=true → the effective config (override merged over default)
 async function getInstallConfig(req, res, next) {
   try {
     const location = (req.query.location || '').trim();
-    if (location) {
+    const merged   = String(req.query.merged || '') === 'true';
+    if (location && !merged) {
       const locRow = await getLocationConfigRow(location);
       return res.json(attachFileChecks(locRow ? { ...locRow } : { location, exists: false }));
     }
@@ -187,7 +189,12 @@ async function getInstallConfig(req, res, next) {
               skip_if_installed, log_file_path, updated_at
          FROM software_install_config WHERE id = 1`,
     );
-    res.json(attachFileChecks(rows[0] || {}));
+    const globalCfg = rows[0] || {};
+    if (location && merged) {
+      const locRow = await getLocationConfigRow(location);
+      return res.json(attachFileChecks(mergeLocationConfig(globalCfg, locRow)));
+    }
+    res.json(attachFileChecks(globalCfg));
   } catch (e) { next(e); }
 }
 

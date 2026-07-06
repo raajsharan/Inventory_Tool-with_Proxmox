@@ -74,6 +74,7 @@ export default function SoftwareStatus() {
   const [data, setData]                 = useState(null);
   const [loading, setLoading]           = useState(true);
   const [installConfig, setInstallConfig] = useState({});
+  const [locConfigMap, setLocConfigMap] = useState({});   // location → effective merged config
   const [expanded, setExpanded]         = useState([]);
   // per-VM selected install method (Windows only); default = global config method or 'auto'
   const [methodMap, setMethodMap]       = useState({});
@@ -103,9 +104,10 @@ export default function SoftwareStatus() {
     setLoading(true);
     try {
       // Load config separately — its failure must not blank the status data.
-      const [statusRes, cfgRes] = await Promise.allSettled([
+      const [statusRes, cfgRes, locsRes] = await Promise.allSettled([
         api.get('/software-status'),
         api.get('/software-status/install-config'),
+        api.get('/software-status/install-config/locations'),
       ]);
       if (statusRes.status === 'fulfilled') {
         setData(statusRes.value.data);
@@ -114,6 +116,21 @@ export default function SoftwareStatus() {
         message.error(statusRes.reason?.response?.data?.error || 'Failed to load software status');
       }
       setInstallConfig(cfgRes.status === 'fulfilled' ? (cfgRes.value.data || {}) : {});
+
+      // Per-location effective configs (override merged over default) so the
+      // Install button enables for locations with their own installer files.
+      if (locsRes.status === 'fulfilled') {
+        const withOverride = (locsRes.value.data.locations || []).filter(l => l.has_override);
+        const cfgs = await Promise.allSettled(withOverride.map(l =>
+          api.get('/software-status/install-config', { params: { location: l.location, merged: true } })
+            .then(r => [l.location, r.data])
+        ));
+        const map = {};
+        for (const c of cfgs) if (c.status === 'fulfilled') map[c.value[0]] = c.value[1];
+        setLocConfigMap(map);
+      } else {
+        setLocConfigMap({});
+      }
     } finally { setLoading(false); }
   }, []); // eslint-disable-line
 
@@ -123,10 +140,15 @@ export default function SoftwareStatus() {
   const patchMap = (setMap, key, patch) =>
     setMap(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
 
+  // Effective config for a VM — its location override (merged over the
+  // default) when one exists, otherwise the default config.
+  const cfgFor = (vm) => (vm?.location && locConfigMap[vm.location]) || installConfig;
+
   const configReady = (vm) => {
+    const cfg = cfgFor(vm);
     const win = isWindows(vm?.os_type);
-    const fp  = win ? installConfig.windows_file_path : installConfig.linux_file_path;
-    const cmd = win ? installConfig.windows_cmd       : installConfig.linux_cmd;
+    const fp  = win ? cfg.windows_file_path : cfg.linux_file_path;
+    const cmd = win ? cfg.windows_cmd       : cfg.linux_cmd;
     return !!(fp || cmd);
   };
 
@@ -164,7 +186,7 @@ export default function SoftwareStatus() {
   const runInstall = useCallback(async (vm, overrides = {}) => {
     const key    = vmKey(vm);
     const win    = isWindows(vm.os_type);
-    const method = overrides.method || methodMap[key] || installConfig.windows_method || 'auto';
+    const method = overrides.method || methodMap[key] || cfgFor(vm).windows_method || 'auto';
 
     patchMap(setInstallMap, key, { state: 'loading', result: null, method });
     try {
@@ -185,7 +207,7 @@ export default function SoftwareStatus() {
       patchMap(setInstallMap, key, { state: 'done', result: { connected: false, error: err } });
       setInstallDetail({ open: true, vm, result: { connected: false, error: err } });
     }
-  }, [methodMap, installConfig]); // eslint-disable-line
+  }, [methodMap, installConfig, locConfigMap]); // eslint-disable-line
 
   // ── filtered data ────────────────────────────────────────────────────────────
   const locationOptions = useMemo(
@@ -209,11 +231,13 @@ export default function SoftwareStatus() {
           }
           return true;
         });
-        const installed      = vms.filter(v =>  v.me_installed).length;
-        const not_installed  = vms.filter(v => !v.me_installed).length;
-        const total          = vms.length;
+        // Tag each VM with its location so per-location installer configs apply.
+        const locatedVms     = vms.map(v => ({ ...v, location: r.location }));
+        const installed      = locatedVms.filter(v =>  v.me_installed).length;
+        const not_installed  = locatedVms.filter(v => !v.me_installed).length;
+        const total          = locatedVms.length;
         const compliance_pct = total ? Math.round((installed / total) * 1000) / 10 : 0;
-        return { ...r, vms, total, installed, not_installed, compliance_pct };
+        return { ...r, vms: locatedVms, total, installed, not_installed, compliance_pct };
       })
       .filter(r => r.total > 0);
   }, [data, filterLocations, filterStatus, filterSources, search]);
@@ -319,7 +343,7 @@ export default function SoftwareStatus() {
         const is     = installMap[key] || { state: 'idle' };
         const ok     = configReady(vm);
         const win    = isWindows(vm.os_type);
-        const method = methodMap[key] || installConfig.windows_method || 'auto';
+        const method = methodMap[key] || cfgFor(vm).windows_method || 'auto';
 
         if (is.state === 'loading') {
           const label = WIN_METHOD_OPTIONS.find(o => o.value === (is.method || method))?.label || method;
