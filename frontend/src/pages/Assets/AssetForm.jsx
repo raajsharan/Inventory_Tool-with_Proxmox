@@ -170,13 +170,24 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     } catch (e) {
       const err = e.response?.data;
       if (err?.details && typeof err.details === 'object' && !Array.isArray(err.details)) {
+        // { field: 'reason' } shape from duplicate checks
         const fields = Object.entries(err.details).map(([k, v]) => ({
           name: k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
           errors: [v],
         }));
         form.setFields(fields);
+        message.error(err?.error || 'Failed to save');
+      } else if (Array.isArray(err?.details) && err.details.length) {
+        // express-validator shape: [{ path, msg, ... }]
+        const fields = err.details
+          .filter(d => d?.path)
+          .map(d => ({ name: d.path, errors: [d.msg === 'Invalid value' ? 'Invalid or empty value' : d.msg] }));
+        if (fields.length) form.setFields(fields);
+        const first = err.details[0];
+        message.error(`${err?.error || 'Validation failed'}${first?.path ? ` — check "${first.path}"` : ''}`);
+      } else {
+        message.error(err?.error || 'Failed to save');
       }
-      message.error(err?.error || 'Failed to save');
     } finally { setSubmitting(false); }
   }
 
