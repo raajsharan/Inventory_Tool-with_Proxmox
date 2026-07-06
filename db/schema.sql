@@ -610,6 +610,57 @@ CREATE TABLE IF NOT EXISTS backup_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_backup_runs_kind_started ON backup_runs(kind, started_at DESC);
 
+-- ---------------------------------------------------------------------
+-- software_install_config
+--   Single-row config for the ManageEngine agent deploy feature on the
+--   Software Status page. Missing this table makes GET
+--   /software-status/install-config return 500 and blanks the page.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS software_install_config (
+    id                     INTEGER PRIMARY KEY DEFAULT 1,
+    linux_file_path        TEXT,
+    linux_serverinfo_path  TEXT,
+    linux_cmd              TEXT,
+    windows_method         VARCHAR(16) DEFAULT 'ssh',
+    windows_file_path      TEXT,
+    windows_cmd            TEXT,
+    windows_psexec_path    TEXT,
+    windows_winrm_port     INTEGER DEFAULT 5985,
+    windows_smb_port       INTEGER DEFAULT 445,
+    skip_if_installed      BOOLEAN DEFAULT FALSE,
+    log_file_path          TEXT,
+    updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO software_install_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------
+-- nessus_install_config
+--   Single-row config for the Nessus agent deploy feature on the
+--   Nessus Agent Status page.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS nessus_install_config (
+    id                     INTEGER PRIMARY KEY DEFAULT 1,
+    linux_install_method   VARCHAR(16) DEFAULT 'file',
+    linux_file_path        TEXT,
+    linux_cmd              TEXT,
+    windows_method         VARCHAR(16) DEFAULT 'auto',
+    windows_file_path      TEXT,
+    windows_cmd            TEXT,
+    windows_psexec_path    TEXT,
+    windows_winrm_port     INTEGER DEFAULT 5985,
+    windows_smb_port       INTEGER DEFAULT 445,
+    skip_if_installed      BOOLEAN DEFAULT FALSE,
+    log_file_path          TEXT,
+    nessus_server          TEXT,
+    nessus_port            INTEGER DEFAULT 8834,
+    nessus_key             TEXT,
+    nessus_groups          TEXT,
+    updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO nessus_install_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

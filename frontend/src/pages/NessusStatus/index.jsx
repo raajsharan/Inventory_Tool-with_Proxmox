@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Card, Col, Form, Input,
+  Alert, App, Badge, Button, Card, Col, Form, Input,
   InputNumber, Modal, Progress, Row, Select, Space, Spin, Statistic,
   Table, Tag, Tooltip, Typography,
 } from 'antd';
@@ -69,6 +69,7 @@ const vmKey        = (v) => `${v.ip_address}||${v.source}`;
 // ── component ─────────────────────────────────────────────────────────────────
 export default function NessusStatus() {
   const { user } = useAuth();
+  const { message } = App.useApp();
   const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
 
   const [data,          setData]          = useState(null);
@@ -92,15 +93,20 @@ export default function NessusStatus() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: d }, { data: cfg }] = await Promise.all([
+      // Load config separately — its failure must not blank the status data.
+      const [statusRes, cfgRes] = await Promise.allSettled([
         api.get('/nessus-status'),
         api.get('/nessus-status/install-config'),
       ]);
-      setData(d);
-      setInstallConfig(cfg || {});
-    } catch { setData(null); }
-    finally { setLoading(false); }
-  }, []);
+      if (statusRes.status === 'fulfilled') {
+        setData(statusRes.value.data);
+      } else {
+        setData(null);
+        message.error(statusRes.reason?.response?.data?.error || 'Failed to load Nessus status');
+      }
+      setInstallConfig(cfgRes.status === 'fulfilled' ? (cfgRes.value.data || {}) : {});
+    } finally { setLoading(false); }
+  }, []); // eslint-disable-line
 
   useEffect(() => { load(); }, [load]);
 

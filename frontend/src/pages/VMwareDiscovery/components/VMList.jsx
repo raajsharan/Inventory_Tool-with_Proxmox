@@ -102,7 +102,23 @@ export default function VMList({ hostId }) {
         );
       },
     },
-    { title: 'ESXi Host',   dataIndex: 'esxi_host_name', key: 'esxi_host_name', ellipsis: true },
+    {
+      title: 'ESXi Host', dataIndex: 'esxi_host_name', key: 'esxi_host_name', ellipsis: true,
+      render: (name, r) => {
+        const ip = r.esxi_host_ip;
+        if (!name || name === 'Not Available') return name || '—';
+        // Show the IP alongside the name when it adds information.
+        const showIp = ip && ip !== 'Not Available' && ip !== name;
+        return (
+          <span>
+            {name}
+            {showIp && (
+              <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#8c8c8c' }}>{ip}</div>
+            )}
+          </span>
+        );
+      },
+    },
     {
       title: 'Power',       dataIndex: 'power_state',    key: 'power_state',
       render: powerTag,

@@ -7,9 +7,24 @@
  */
 
 const https = require('https');
+const dns = require('dns').promises;
 
 class VMwareAuthError extends Error {}
 class VMwareConnectionError extends Error {}
+
+const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+
+// Resolve an ESXi host's registered name to an IP. If vCenter registered the
+// host by IP already, use it as-is; otherwise try a DNS lookup and fall back
+// to the name when resolution fails.
+async function resolveHostIp(name) {
+  if (!name) return 'Not Available';
+  if (IPV4_RE.test(name)) return name;
+  try {
+    const { address } = await dns.lookup(name, { family: 4 });
+    return address || name;
+  } catch { return name; }
+}
 
 // ---------------------------------------------------------------------------
 // Low-level HTTPS helper
@@ -253,9 +268,11 @@ async function discoverWithSession(hostname, port, sessionId, verifySSL) {
       console.warn(`[vmware] could not list VMs for ESXi host ${h.name} (${h.host})`);
       continue;
     }
+    // h.name is how the host is registered in vCenter (IP or FQDN);
+    // resolve to an actual IP for the esxi_host_ip column.
+    const hostIp = await resolveHostIp(h.name);
     for (const v of vmsOnHost) {
-      // h.name is the ESXi hostname/IP registered in vCenter
-      if (v.vm) vmToHost[v.vm] = { name: h.name, ip: h.name };
+      if (v.vm) vmToHost[v.vm] = { name: h.name, ip: hostIp };
     }
   }
 
