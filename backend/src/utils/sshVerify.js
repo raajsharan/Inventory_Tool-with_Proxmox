@@ -265,6 +265,11 @@ function sshUploadAndRun({ host, port = 22, username, password, files, remoteDir
             for (const [ph, rp] of Object.entries(remotePaths)) {
               cmd = cmd.replace(new RegExp(`\\{${ph}\\}`, 'g'), rp);
             }
+            // Run from the upload directory so commands that reference the
+            // uploaded files by bare filename (without {placeholder}) work.
+            if (baseDir.startsWith('/')) {
+              cmd = `cd ${baseDir} && ${cmd}`;
+            }
             output += `\n[EXEC] ${cmd}\n\n`;
 
             conn.exec(cmd, (execErr, stream) => {
