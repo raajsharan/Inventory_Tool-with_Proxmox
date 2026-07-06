@@ -55,7 +55,11 @@ function httpsReq({ hostname, port, path, method, headers, body, verifySSL }) {
       (res) => {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
-        res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+        res.on('end', () => resolve({
+          status: res.statusCode,
+          body: Buffer.concat(chunks).toString('utf8'),
+          headers: res.headers,
+        }));
       }
     );
     req.on('error', (err) => reject(new VMwareConnectionError(`Cannot reach ${hostname}:${port} — ${err.message}`)));
@@ -401,10 +405,202 @@ async function discoverWithSession(hostname, port, sessionId, verifySSL) {
   return inventory;
 }
 
+// ---------------------------------------------------------------------------
+// SOAP (/sdk) fallback — standalone ESXi hosts have no Automation REST API,
+// only the vSphere Web Services (vim25) SOAP endpoint.
+// ---------------------------------------------------------------------------
+
+const xmlEscape = (s) => String(s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+const xmlUnescape = (s) => String(s)
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+  .replace(/&apos;/g, "'").replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+
+async function soapRequest(hostname, port, verifySSL, innerXml, cookie) {
+  const envelope =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"` +
+    ` xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vim25="urn:vim25">` +
+    `<soapenv:Body>${innerXml}</soapenv:Body></soapenv:Envelope>`;
+  const { status, body, headers } = await httpsReq({
+    hostname, port, path: '/sdk', method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      SOAPAction: 'urn:vim25/6.0',
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    body: envelope,
+    verifySSL,
+  });
+  if (/InvalidLoginFault|InvalidLogin</.test(body)) {
+    throw new VMwareAuthError('Invalid credentials (SOAP login rejected)');
+  }
+  if (status >= 400 && !body.includes('soapenv:Body')) {
+    throw new VMwareConnectionError(`SOAP /sdk error ${status}: ${body.slice(0, 200)}`);
+  }
+  const fault = body.match(/<faultstring>([\s\S]*?)<\/faultstring>/);
+  if (fault) throw new Error(`SOAP fault: ${xmlUnescape(fault[1]).slice(0, 300)}`);
+  return { body, headers };
+}
+
+const soapTag = (body, tag) => {
+  const m = body.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`));
+  return m ? xmlUnescape(m[1]) : null;
+};
+
+async function soapLogin(hostname, port, username, password, verifySSL) {
+  const sc = await soapRequest(hostname, port, verifySSL,
+    `<vim25:RetrieveServiceContent><vim25:_this type="ServiceInstance">ServiceInstance</vim25:_this></vim25:RetrieveServiceContent>`);
+  const refs = {
+    sessionManager:    soapTag(sc.body, 'sessionManager'),
+    propertyCollector: soapTag(sc.body, 'propertyCollector'),
+    rootFolder:        soapTag(sc.body, 'rootFolder'),
+    viewManager:       soapTag(sc.body, 'viewManager'),
+  };
+  if (!refs.sessionManager || !refs.propertyCollector) {
+    throw new VMwareConnectionError('SOAP /sdk did not return a vim25 ServiceContent');
+  }
+  const login = await soapRequest(hostname, port, verifySSL,
+    `<vim25:Login><vim25:_this type="SessionManager">${xmlEscape(refs.sessionManager)}</vim25:_this>` +
+    `<vim25:userName>${xmlEscape(username)}</vim25:userName>` +
+    `<vim25:password>${xmlEscape(password)}</vim25:password></vim25:Login>`);
+  const setCookie = login.headers['set-cookie'];
+  const cookie = Array.isArray(setCookie)
+    ? setCookie.map(c => c.split(';')[0]).join('; ')
+    : (setCookie ? setCookie.split(';')[0] : null);
+  if (!cookie) throw new VMwareConnectionError('SOAP login returned no session cookie');
+  return { cookie, refs };
+}
+
+async function soapRetrieveAll(hostname, port, verifySSL, cookie, refs, objType, pathSets) {
+  const view = await soapRequest(hostname, port, verifySSL,
+    `<vim25:CreateContainerView><vim25:_this type="ViewManager">${xmlEscape(refs.viewManager)}</vim25:_this>` +
+    `<vim25:container type="Folder">${xmlEscape(refs.rootFolder)}</vim25:container>` +
+    `<vim25:type>${objType}</vim25:type><vim25:recursive>true</vim25:recursive></vim25:CreateContainerView>`,
+    cookie);
+  const viewId = soapTag(view.body, 'returnval');
+  if (!viewId) throw new Error(`CreateContainerView(${objType}) returned no view`);
+
+  const paths = pathSets.map(p => `<vim25:pathSet>${p}</vim25:pathSet>`).join('');
+  const spec =
+    `<vim25:specSet>` +
+    `<vim25:propSet><vim25:type>${objType}</vim25:type>${paths}</vim25:propSet>` +
+    `<vim25:objectSet><vim25:obj type="ContainerView">${viewId}</vim25:obj><vim25:skip>true</vim25:skip>` +
+    `<vim25:selectSet xsi:type="vim25:TraversalSpec"><vim25:name>view</vim25:name>` +
+    `<vim25:type>ContainerView</vim25:type><vim25:path>view</vim25:path><vim25:skip>false</vim25:skip>` +
+    `</vim25:selectSet></vim25:objectSet></vim25:specSet><vim25:options/>`;
+
+  let resp = await soapRequest(hostname, port, verifySSL,
+    `<vim25:RetrievePropertiesEx><vim25:_this type="PropertyCollector">${xmlEscape(refs.propertyCollector)}</vim25:_this>${spec}</vim25:RetrievePropertiesEx>`,
+    cookie);
+
+  let xml = resp.body;
+  const objects = [];
+  for (;;) {
+    for (const m of xml.matchAll(/<objects>([\s\S]*?)<\/objects>/g)) {
+      const block = m[1];
+      const props = {};
+      for (const pm of block.matchAll(/<propSet>\s*<name>([^<]+)<\/name>\s*<val[^>]*>([\s\S]*?)<\/val>\s*<\/propSet>/g)) {
+        props[pm[1]] = pm[2];
+      }
+      objects.push(props);
+    }
+    const token = soapTag(xml, 'token');
+    if (!token) break;
+    resp = await soapRequest(hostname, port, verifySSL,
+      `<vim25:ContinueRetrievePropertiesEx><vim25:_this type="PropertyCollector">${xmlEscape(refs.propertyCollector)}</vim25:_this>` +
+      `<vim25:token>${xmlEscape(token)}</vim25:token></vim25:ContinueRetrievePropertiesEx>`,
+      cookie);
+    xml = resp.body;
+  }
+  return objects;
+}
+
+function soapExtractIps(guestNetXml, guestIp) {
+  const ips = new Set();
+  if (guestNetXml) {
+    for (const m of guestNetXml.matchAll(/<ipAddress>([^<]+)<\/ipAddress>/g)) {
+      const ip = m[1].trim();
+      if (ip && !ip.startsWith('fe80') && ip !== '127.0.0.1' && ip !== '::1' && !ip.includes('>')) ips.add(ip);
+    }
+  }
+  if (!ips.size && guestIp) ips.add(guestIp);
+  return ips.size ? [...ips] : ['Not Available'];
+}
+
+async function discoverViaSoap(hostname, port, username, password, verifySSL) {
+  const { cookie, refs } = await soapLogin(hostname, port, username, password, verifySSL);
+  try {
+    // Host name — standalone ESXi has exactly one HostSystem.
+    let esxiName = hostname;
+    try {
+      const hostObjs = await soapRetrieveAll(hostname, port, verifySSL, cookie, refs, 'HostSystem', ['name']);
+      if (hostObjs[0]?.name) esxiName = xmlUnescape(hostObjs[0].name);
+    } catch { /* keep connection host as name */ }
+    const esxiIp = IPV4_RE.test(hostname) ? hostname : await resolveHostIp(esxiName);
+
+    // NOTE: config.createDate only exists on 6.7+ — requesting an unknown
+    // property faults the whole PropertyCollector query on older ESXi.
+    const vms = await soapRetrieveAll(hostname, port, verifySSL, cookie, refs, 'VirtualMachine', [
+      'name', 'guest.hostName', 'guest.ipAddress', 'guest.net', 'guest.toolsRunningStatus',
+      'config.guestId', 'config.guestFullName',
+      'config.hardware.numCPU', 'config.hardware.memoryMB', 'config.hardware.device',
+      'runtime.powerState', 'snapshot.rootSnapshotList', 'summary.storage',
+    ]);
+
+    return vms.map(p => {
+      const macs = [...(p['config.hardware.device'] || '').matchAll(/<macAddress>([^<]+)<\/macAddress>/g)]
+        .map(m => m[1]);
+      const snapTimes = [...(p['snapshot.rootSnapshotList'] || '').matchAll(/<createTime>([^<]+)<\/createTime>/g)]
+        .map(m => new Date(m[1])).filter(d => !isNaN(d));
+      const committed   = Number(soapTag(p['summary.storage'] || '', 'committed'))   || null;
+      const uncommitted = Number(soapTag(p['summary.storage'] || '', 'uncommitted')) || null;
+      const oldest = snapTimes.length ? new Date(Math.min(...snapTimes.map(d => d.getTime()))) : null;
+
+      return {
+        name:                   p.name ? xmlUnescape(p.name) : 'Not Available',
+        hostname:               p['guest.hostName'] ? xmlUnescape(p['guest.hostName']) : 'Not Available',
+        ips:                    soapExtractIps(p['guest.net'], p['guest.ipAddress']),
+        esxi_host_name:         esxiName,
+        esxi_host_ip:           esxiIp,
+        os_type:                p['config.guestId'] || 'Not Available',
+        os_version:             p['config.guestFullName'] ? xmlUnescape(p['config.guestFullName']) : 'Not Available',
+        macs:                   macs.length ? macs : ['Not Available'],
+        created_date:           'Not Available',
+        power_state:            normalisePowerState(p['runtime.powerState']),
+        tools_status:           p['guest.toolsRunningStatus'] === 'guestToolsRunning' ? 'guestToolsRunning' : 'guestToolsNotRunning',
+        num_cpu:                p['config.hardware.numCPU'] ? Number(p['config.hardware.numCPU']) : null,
+        memory_mb:              p['config.hardware.memoryMB'] ? Number(p['config.hardware.memoryMB']) : null,
+        storage_committed_gb:   committed   ? (committed   / 1024 ** 3).toFixed(1) : '',
+        storage_uncommitted_gb: uncommitted ? (uncommitted / 1024 ** 3).toFixed(1) : '',
+        datastores:             [],
+        snapshot_count:         snapTimes.length,
+        snapshot_oldest:        oldest ? oldest.toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '',
+      };
+    });
+  } finally {
+    try {
+      await soapRequest(hostname, port, verifySSL,
+        `<vim25:Logout><vim25:_this type="SessionManager">${xmlEscape(refs.sessionManager)}</vim25:_this></vim25:Logout>`,
+        cookie);
+    } catch { /* best-effort logout */ }
+  }
+}
+
 async function discover(host, port, username, password, verifySSL) {
   let sessionId;
   try {
     sessionId = await createSession(host, port, username, password, verifySSL);
+  } catch (err) {
+    if (err instanceof VMwareAuthError) throw err;
+    // No Automation REST API (standalone ESXi, or very old vCenter) — the
+    // vim25 SOAP endpoint at /sdk is available on both.
+    console.warn(`[vmware] REST session failed on ${host} (${err.message}) — falling back to SOAP /sdk`);
+    return discoverViaSoap(host, port, username, password, verifySSL);
+  }
+  try {
     return await discoverWithSession(host, port, sessionId, verifySSL);
   } finally {
     if (sessionId) await destroySession(host, port, sessionId, verifySSL);
