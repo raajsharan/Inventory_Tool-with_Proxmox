@@ -80,8 +80,6 @@ export default function NessusStatus() {
 
   const [verifyMap,     setVerifyMap]     = useState({});
   const [installMap,    setInstallMap]    = useState({});
-  const [credModal,     setCredModal]     = useState({ open: false, vm: null, action: 'verify' });
-  const [credForm]                        = Form.useForm();
   const [verifyDetail,  setVerifyDetail]  = useState({ open: false, vm: null, result: null });
   const [installDetail, setInstallDetail] = useState({ open: false, vm: null, result: null });
 
@@ -120,36 +118,24 @@ export default function NessusStatus() {
     return !!(fp || cmd);
   };
 
-  // ── endpoint dialog ──────────────────────────────────────────────────────────
-  const openEndpointDialog = useCallback((vm, action) => {
-    const win = isWindows(vm.os_type);
-    credForm.setFieldsValue({
-      displayName: vm.vm_name || vm.os_hostname || '',
-      host:        vm.ip_address || '',
-      osTypeLabel: win ? 'Windows' : 'Linux',
-      port:        22,
-      username:    vm.asset_username || '',
-      password:    '',
-    });
-    setCredModal({ open: true, vm, action, missingCreds: !vm.asset_username });
-  }, [credForm]); // eslint-disable-line
-
   // ── verify ───────────────────────────────────────────────────────────────────
-  const runVerify = useCallback(async (vm, overrides = {}) => {
+  // Credentials come exclusively from the asset record — no manual entry.
+  const missingCredsError = (vm, r) => {
+    const what = !r.has_username ? 'username and password' : 'password';
+    return `No stored ${what} for ${vm.vm_name || vm.ip_address} — update the asset record to enable this action.`;
+  };
+
+  const runVerify = useCallback(async (vm) => {
     const key = vmKey(vm);
     patchMap(setVerifyMap, key, { state: 'loading', result: null });
     try {
       const { data: r } = await api.post('/nessus-status/verify', {
-        ip_address: vm.ip_address, source: vm.source,
-        port: overrides.port || 22,
-        override_username: overrides.username || undefined,
-        override_password: overrides.password || undefined,
+        ip_address: vm.ip_address, source: vm.source, port: 22,
       });
       if (r.needs_credentials) {
-        patchMap(setVerifyMap, key, { state: 'idle' });
-        openEndpointDialog(vm, 'verify');
-        if (r.prefill_username) credForm.setFieldValue('username', r.prefill_username);
-        setCredModal(prev => ({ ...prev, missingCreds: true }));
+        const err = missingCredsError(vm, r);
+        message.warning(err);
+        patchMap(setVerifyMap, key, { state: 'done', result: { connected: false, error: err } });
       } else {
         patchMap(setVerifyMap, key, { state: 'done', result: r });
       }
@@ -159,32 +145,25 @@ export default function NessusStatus() {
         result: { connected: false, error: e.response?.data?.error || e.message },
       });
     }
-  }, [credForm, openEndpointDialog]); // eslint-disable-line
+  }, []); // eslint-disable-line
 
   // ── install ──────────────────────────────────────────────────────────────────
+  // Credentials come exclusively from the asset record — no manual entry.
   const runInstall = useCallback(async (vm, overrides = {}) => {
     const key    = vmKey(vm);
     const win    = isWindows(vm.os_type);
     const method = overrides.method || methodMap[key] || installConfig.windows_method || 'auto';
 
-    if (!win && !overrides.fromDialog) {
-      openEndpointDialog(vm, 'install');
-      return;
-    }
-
     patchMap(setInstallMap, key, { state: 'loading', result: null, method });
     try {
       const { data: r } = await api.post('/nessus-status/install', {
-        ip_address: vm.ip_address, source: vm.source,
-        port: overrides.port || 22,
-        override_username: overrides.username || undefined,
-        override_password: overrides.password || undefined,
+        ip_address: vm.ip_address, source: vm.source, port: 22,
         windows_method_override: win ? method : undefined,
       });
       if (r.needs_credentials) {
-        patchMap(setInstallMap, key, { state: 'idle' });
-        openEndpointDialog(vm, 'install');
-        setCredModal(prev => ({ ...prev, missingCreds: true }));
+        const err = missingCredsError(vm, r);
+        message.warning(err);
+        patchMap(setInstallMap, key, { state: 'done', result: { connected: false, error: err } });
       } else {
         patchMap(setInstallMap, key, { state: 'done', result: r });
         if (!r.skipped) setInstallDetail({ open: true, vm, result: r });
@@ -194,15 +173,7 @@ export default function NessusStatus() {
       patchMap(setInstallMap, key, { state: 'done', result: { connected: false, error: err } });
       setInstallDetail({ open: true, vm, result: { connected: false, error: err } });
     }
-  }, [credForm, methodMap, installConfig, openEndpointDialog]); // eslint-disable-line
-
-  const onCredSubmit = async (vals) => {
-    const { vm, action } = credModal;
-    setCredModal({ open: false, vm: null, action: 'verify' });
-    credForm.resetFields();
-    if (action === 'install') await runInstall(vm, { ...vals, fromDialog: true });
-    else                      await runVerify(vm, vals);
-  };
+  }, [methodMap, installConfig]); // eslint-disable-line
 
   // ── filtered data ─────────────────────────────────────────────────────────────
   const locationOptions = useMemo(
@@ -559,71 +530,6 @@ export default function NessusStatus() {
           </Typography.Text>
         )}
       />
-
-      {/* ── Endpoint dialog ────────────────────────────────────────────── */}
-      <Modal
-        open={credModal.open}
-        title={<Space><ThunderboltOutlined style={{ color: ACCENT }} />Endpoint</Space>}
-        onCancel={() => { setCredModal({ open: false, vm: null, action: 'verify' }); credForm.resetFields(); }}
-        footer={[
-          <Button key="save" type="primary" style={{ background: ACCENT, borderColor: ACCENT }}
-            onClick={() => credForm.submit()}>
-            {credModal.action === 'install' ? 'Install' : 'Save'}
-          </Button>,
-          <Button key="cancel" onClick={() => { setCredModal({ open: false, vm: null, action: 'verify' }); credForm.resetFields(); }}>
-            Cancel
-          </Button>,
-        ]}
-        width={480} destroyOnClose
-      >
-        {credModal.missingCreds && (
-          <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-            message="No SSH credentials stored for this VM — enter them below to proceed." />
-        )}
-        <Form form={credForm} layout="vertical" onFinish={onCredSubmit}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="displayName" label="Display name">
-                <Input disabled style={{ color: '#000', background: '#fff' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="host" label="Host / IP">
-                <Input disabled style={{ color: '#000', background: '#fff' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="osTypeLabel" label="OS type">
-                <Input disabled style={{ color: '#000', background: '#fff' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="port" label="Primary port" initialValue={22}>
-                <InputNumber min={1} max={65535} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="username" label="Username"
-            rules={[{ required: true, message: 'Username is required' }]}
-            extra={!credModal.missingCreds && credModal.vm?.asset_username
-              ? <Typography.Text type="secondary" style={{ fontSize: 11 }}>From asset record</Typography.Text>
-              : null}
-          >
-            <Input autoComplete="off" placeholder="root" />
-          </Form.Item>
-          <Form.Item name="password" label="Password"
-            rules={credModal.missingCreds ? [{ required: true, message: 'Password is required' }] : []}
-            extra={!credModal.missingCreds
-              ? <Typography.Text type="secondary" style={{ fontSize: 11 }}>Leave blank to use the stored password from asset record</Typography.Text>
-              : null}
-          >
-            <Input.Password autoComplete="new-password"
-              placeholder={credModal.missingCreds ? '' : '••••••  (stored)'} />
-          </Form.Item>
-        </Form>
-      </Modal>
 
       {/* ── Verify detail modal ───────────────────────────────────────────── */}
       <Modal

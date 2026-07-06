@@ -138,21 +138,19 @@ async function get(req, res, next) {
 }
 
 // ── POST /software-status/verify ─────────────────────────────────────────────
+//    Credentials always come from the asset record — no manual overrides.
 async function verify(req, res, next) {
   try {
-    const { ip_address, source, port = 22, override_username, override_password } = req.body;
+    const { ip_address, source, port = 22 } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
-    const { username, password, osType } = await resolveVm(ip_address, source, override_username, override_password);
+    const { username, password, osType } = await resolveVm(ip_address, source);
 
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
 
     const result = await sshVerify({ host: ip_address, port, username, password, osType });
-    result.meta = {
-      credentials_source: (override_username || override_password) ? 'provided' : 'stored',
-      os_type: osType,
-    };
+    result.meta = { credentials_source: 'stored', os_type: osType };
     res.json(result);
   } catch (e) { next(e); }
 }
@@ -356,12 +354,13 @@ async function runWinMethod({ method, host, port, username, password, cfgRow, re
 async function install(req, res, next) {
   try {
     const {
-      ip_address, source, port = 22, override_username, override_password,
+      ip_address, source, port = 22,
       windows_method_override,          // 'ssh' | 'ssh_bash' | 'winrm' | 'psexec' | 'auto' | undefined
     } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
-    const { username, password, osType, location } = await resolveVm(ip_address, source, override_username, override_password);
+    // Credentials always come from the asset record — no manual overrides.
+    const { username, password, osType, location } = await resolveVm(ip_address, source);
 
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
