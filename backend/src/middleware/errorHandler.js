@@ -20,6 +20,10 @@ function translatePgError(err) {
       return { status: 400, message: 'A value is too long for its field', details: err.detail };
     case '42P01': // undefined_table
       return { status: 500, message: `Database table missing (${err.message}) — restart the backend to apply schema updates`, details: err.detail };
+    case '42703': // undefined_column
+      return { status: 500, message: `Database column missing (${err.message}) — restart the backend to apply schema updates`, details: err.detail };
+    case '22P02': // invalid_text_representation (e.g. bad uuid/boolean cast)
+      return { status: 400, message: 'A value has the wrong format for its field', details: err.message };
     default:
       return null;
   }

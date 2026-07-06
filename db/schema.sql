@@ -475,6 +475,11 @@ ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64)
 ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
 ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64);
 
+ALTER TABLE assets                 ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
+ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
+ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
+ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
+
 -- ---------------------------------------------------------------------
 -- app_branding (singleton row id=1) and user profile fields.
 -- ---------------------------------------------------------------------

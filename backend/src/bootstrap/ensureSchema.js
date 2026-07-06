@@ -41,6 +41,17 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_user_page_access_user ON user_page_access(user_id)`,
   `ALTER TABLE page_access ALTER COLUMN role TYPE VARCHAR(64)`,
 
+  // ── newer inventory columns some deployments predate (schema.sql ALTERs)
+  ...['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'].flatMap(t => [
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb`,
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS idrac_ip VARCHAR(64)`,
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255)`,
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS idrac_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS asset_password_encrypted TEXT`,
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+    `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id) ON DELETE SET NULL`,
+  ]),
+
   // ── vm_name uniqueness removal (drop_vm_name_unique.sql)
   `ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key`,
   `ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_vm_name_key`,
