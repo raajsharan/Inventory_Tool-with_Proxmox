@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Button, Card, Checkbox, Col, Descriptions, Divider, Form, Input,
-  InputNumber, Modal, Radio, Row, Space, Spin, Tag, Tooltip, Typography,
+  Alert, App, Button, Card, Checkbox, Col, Descriptions, Divider, Form, Input,
+  InputNumber, Modal, Radio, Row, Select, Space, Spin, Tag, Tooltip, Typography,
 } from 'antd';
 import {
   CheckCircleFilled, CloseCircleFilled, CodeOutlined, ClearOutlined,
-  DeleteOutlined, FileTextOutlined, FolderOpenOutlined, InfoCircleOutlined,
-  SaveOutlined, SettingOutlined, ThunderboltOutlined, WindowsOutlined,
+  DeleteOutlined, EnvironmentOutlined, FileTextOutlined, FolderOpenOutlined,
+  InfoCircleOutlined, SaveOutlined, SettingOutlined, ThunderboltOutlined,
+  WindowsOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+
+const DEFAULT_SCOPE = '__default__';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -35,34 +38,77 @@ const WIN_METHODS = [
 
 export default function InstallConfig() {
   const [form] = Form.useForm();
+  const { message } = App.useApp();
   const [config, setConfig]     = useState(null);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [logModal, setLogModal] = useState(false);
   const [logLines, setLogLines] = useState([]);
   const [logLoading, setLogLoading] = useState(false);
+  const [scope, setScope]       = useState(DEFAULT_SCOPE);   // '__default__' or a location name
+  const [locations, setLocations] = useState([]);            // [{location, has_override}]
   const winMethod = Form.useWatch('windows_method', form) || 'ssh';
 
-  const load = async () => {
+  const isLocationScope = scope !== DEFAULT_SCOPE;
+
+  const loadLocations = async () => {
+    try {
+      const { data } = await api.get('/software-status/install-config/locations');
+      setLocations(data.locations || []);
+    } catch { setLocations([]); }
+  };
+
+  const load = async (scopeVal = scope) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/software-status/install-config');
+      const loc = scopeVal !== DEFAULT_SCOPE ? scopeVal : '';
+      const { data } = await api.get('/software-status/install-config', {
+        params: loc ? { location: loc } : {},
+      });
       setConfig(data);
+      form.resetFields();
       form.setFieldsValue(data);
     } catch {}
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => { load(); loadLocations(); }, []); // eslint-disable-line
+
+  const onScopeChange = (v) => {
+    setScope(v);
+    load(v);
+  };
 
   const save = async (vals) => {
     setSaving(true);
     try {
-      const { data } = await api.put('/software-status/install-config', vals);
+      const payload = isLocationScope ? { ...vals, location: scope } : vals;
+      const { data } = await api.put('/software-status/install-config', payload);
       setConfig(data);
       form.setFieldsValue(data);
-    } catch {}
+      message.success(isLocationScope
+        ? `Saved installer configuration for "${scope}"`
+        : 'Saved default installer configuration');
+      loadLocations();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save configuration');
+    }
     finally { setSaving(false); }
+  };
+
+  const removeOverride = () => {
+    Modal.confirm({
+      title: `Remove "${scope}" configuration?`,
+      content: 'VMs in this location will fall back to the Default configuration.',
+      okText: 'Remove',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await api.delete('/software-status/install-config', { params: { location: scope } });
+        message.success(`Removed "${scope}" configuration`);
+        loadLocations();
+        onScopeChange(DEFAULT_SCOPE);
+      },
+    });
   };
 
   const openLog = async () => {
@@ -113,6 +159,49 @@ export default function InstallConfig() {
           </ol>
         }
       />
+
+      {/* Per-location scope selector */}
+      <Card size="small" style={{ marginBottom: 20 }}>
+        <Space wrap align="center">
+          <EnvironmentOutlined style={{ color: '#1677ff' }} />
+          <Text strong>Configuration for:</Text>
+          <Select
+            style={{ minWidth: 260 }}
+            value={scope}
+            onChange={onScopeChange}
+            options={[
+              { value: DEFAULT_SCOPE, label: 'Default (all locations)' },
+              ...locations.map(l => ({
+                value: l.location,
+                label: (
+                  <Space size={6}>
+                    {l.location}
+                    {l.has_override && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>custom</Tag>}
+                  </Space>
+                ),
+              })),
+            ]}
+          />
+          {isLocationScope && (
+            <>
+              {config?.exists === false && !locations.find(l => l.location === scope)?.has_override && (
+                <Tag color="default">no custom config yet — saves as new</Tag>
+              )}
+              {locations.find(l => l.location === scope)?.has_override && (
+                <Button size="small" danger icon={<DeleteOutlined />} onClick={removeOverride}>
+                  Remove override
+                </Button>
+              )}
+            </>
+          )}
+        </Space>
+        {isLocationScope && (
+          <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+            VMs whose Location is <strong>{scope}</strong> deploy with these installer files.
+            Fields left empty inherit the Default configuration.
+          </Text>
+        )}
+      </Card>
 
       <Form form={form} layout="vertical" onFinish={save}>
         <Row gutter={24}>
@@ -342,10 +431,10 @@ export default function InstallConfig() {
           &nbsp;<strong>SSH</strong> uploads via SFTP + exec.
         </Paragraph>
 
-        {/* Deployment options */}
+        {/* Deployment options — global only; locations inherit these */}
         <Card
           title={<Space><SettingOutlined />Deployment Options</Space>}
-          style={{ marginBottom: 20 }}
+          style={{ marginBottom: 20, display: isLocationScope ? 'none' : undefined }}
           size="small"
         >
           <Row gutter={24} align="middle">
@@ -410,9 +499,9 @@ export default function InstallConfig() {
 
         <Space>
           <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving} size="large">
-            Save Configuration
+            {isLocationScope ? `Save for "${scope}"` : 'Save Configuration'}
           </Button>
-          <Button onClick={load} disabled={saving}>
+          <Button onClick={() => load()} disabled={saving}>
             Reset
           </Button>
         </Space>

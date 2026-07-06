@@ -635,6 +635,28 @@ CREATE TABLE IF NOT EXISTS software_install_config (
 INSERT INTO software_install_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
+-- software_install_location_config
+--   Per-location overrides for ManageEngine agent deployment. When a VM
+--   is deployed to, its location's row (if any) is merged over the
+--   global software_install_config — NULL/empty fields inherit the
+--   default. Managed from the Install Configuration page.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS software_install_location_config (
+    location               VARCHAR(255) PRIMARY KEY,
+    linux_file_path        TEXT,
+    linux_serverinfo_path  TEXT,
+    linux_cmd              TEXT,
+    windows_method         VARCHAR(16),
+    windows_file_path      TEXT,
+    windows_cmd            TEXT,
+    windows_psexec_path    TEXT,
+    windows_winrm_port     INTEGER,
+    windows_smb_port       INTEGER,
+    updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------
 -- nessus_install_config
 --   Single-row config for the Nessus agent deploy feature on the
 --   Nessus Agent Status page.

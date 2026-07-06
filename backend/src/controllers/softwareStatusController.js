@@ -28,7 +28,7 @@ async function resolveVm(ip_address, source, override_username, override_passwor
   if (!table) throw new ApiError(400, 'Unknown source: ' + source);
 
   const { rows } = await db.query(
-    `SELECT asset_username, asset_password_encrypted, os_type
+    `SELECT asset_username, asset_password_encrypted, os_type, location
        FROM ${table}
       WHERE ip_address::text = $1
         AND deleted_at IS NULL
@@ -46,7 +46,29 @@ async function resolveVm(ip_address, source, override_username, override_passwor
     try { password = decrypt(row.asset_password_encrypted); } catch {}
   }
 
-  return { username, password, osType };
+  return { username, password, osType, location: (row.location || '').trim() };
+}
+
+// Merge a location override row over the global config — NULL/empty override
+// fields inherit the global value.
+function mergeLocationConfig(globalCfg, locCfg) {
+  if (!locCfg) return { ...globalCfg, config_source: 'default' };
+  const merged = { ...globalCfg };
+  for (const [k, v] of Object.entries(locCfg)) {
+    if (k === 'location' || k === 'updated_by' || k === 'updated_at') continue;
+    if (v !== null && v !== undefined && v !== '') merged[k] = v;
+  }
+  merged.config_source = `location:${locCfg.location}`;
+  return merged;
+}
+
+async function getLocationConfigRow(location) {
+  if (!location) return null;
+  const { rows } = await db.query(
+    `SELECT * FROM software_install_location_config WHERE location = $1`,
+    [location],
+  );
+  return rows[0] || null;
 }
 
 // ── GET /software-status ─────────────────────────────────────────────────────
@@ -131,9 +153,24 @@ async function verify(req, res, next) {
 
 const fileCheck = (p) => { if (!p) return null; try { return fs.existsSync(p); } catch { return false; } };
 
+function attachFileChecks(row) {
+  row.linux_file_exists        = fileCheck(row.linux_file_path);
+  row.linux_serverinfo_exists  = fileCheck(row.linux_serverinfo_path);
+  row.windows_file_exists      = fileCheck(row.windows_file_path);
+  row.windows_psexec_exists    = fileCheck(row.windows_psexec_path);
+  if ('log_file_path' in row) row.log_file_exists = fileCheck(row.log_file_path);
+  return row;
+}
+
 // ── GET /software-status/install-config ──────────────────────────────────────
+//    ?location=X returns that location's override row (empty object if none).
 async function getInstallConfig(req, res, next) {
   try {
+    const location = (req.query.location || '').trim();
+    if (location) {
+      const locRow = await getLocationConfigRow(location);
+      return res.json(attachFileChecks(locRow ? { ...locRow } : { location, exists: false }));
+    }
     const { rows } = await db.query(
       `SELECT linux_file_path, linux_serverinfo_path, linux_cmd,
               windows_method, windows_file_path, windows_cmd,
@@ -141,17 +178,46 @@ async function getInstallConfig(req, res, next) {
               skip_if_installed, log_file_path, updated_at
          FROM software_install_config WHERE id = 1`,
     );
-    const row = rows[0] || {};
-    row.linux_file_exists        = fileCheck(row.linux_file_path);
-    row.linux_serverinfo_exists  = fileCheck(row.linux_serverinfo_path);
-    row.windows_file_exists      = fileCheck(row.windows_file_path);
-    row.windows_psexec_exists    = fileCheck(row.windows_psexec_path);
-    row.log_file_exists          = fileCheck(row.log_file_path);
-    res.json(row);
+    res.json(attachFileChecks(rows[0] || {}));
+  } catch (e) { next(e); }
+}
+
+// ── GET /software-status/install-config/locations ────────────────────────────
+//    All distinct asset locations + which ones have a custom ME config.
+async function getInstallConfigLocations(req, res, next) {
+  try {
+    const [locs, overrides] = await Promise.all([
+      db.query(`
+        SELECT DISTINCT TRIM(location) AS location FROM (
+          SELECT location FROM assets                WHERE deleted_at IS NULL
+          UNION ALL SELECT location FROM beijing_assets        WHERE deleted_at IS NULL
+          UNION ALL SELECT location FROM ext_assets            WHERE deleted_at IS NULL
+          UNION ALL SELECT location FROM physical_esxi_servers WHERE deleted_at IS NULL
+        ) _l WHERE NULLIF(TRIM(location), '') IS NOT NULL
+        ORDER BY 1`),
+      db.query(`SELECT location, updated_at FROM software_install_location_config ORDER BY location`),
+    ]);
+    const overrideSet = new Set(overrides.rows.map(r => r.location));
+    // Include override rows whose location no longer has assets, so they stay manageable.
+    const all = new Set([...locs.rows.map(r => r.location), ...overrideSet]);
+    res.json({
+      locations: [...all].sort().map(l => ({ location: l, has_override: overrideSet.has(l) })),
+    });
+  } catch (e) { next(e); }
+}
+
+// ── DELETE /software-status/install-config?location=X ────────────────────────
+async function deleteLocationConfig(req, res, next) {
+  try {
+    const location = (req.query.location || req.body?.location || '').trim();
+    if (!location) throw new ApiError(400, 'location is required');
+    await db.query(`DELETE FROM software_install_location_config WHERE location = $1`, [location]);
+    res.json({ deleted: true, location });
   } catch (e) { next(e); }
 }
 
 // ── PUT /software-status/install-config ──────────────────────────────────────
+//    body.location set → upsert that location's override row instead.
 async function saveInstallConfig(req, res, next) {
   try {
     const {
@@ -160,6 +226,40 @@ async function saveInstallConfig(req, res, next) {
       windows_psexec_path, windows_winrm_port, windows_smb_port,
       skip_if_installed, log_file_path,
     } = req.body;
+
+    const location = (req.body.location || '').trim();
+    if (location) {
+      const { rows } = await db.query(
+        `INSERT INTO software_install_location_config
+           (location, linux_file_path, linux_serverinfo_path, linux_cmd,
+            windows_method, windows_file_path, windows_cmd,
+            windows_psexec_path, windows_winrm_port, windows_smb_port,
+            updated_by, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+         ON CONFLICT (location) DO UPDATE
+           SET linux_file_path       = EXCLUDED.linux_file_path,
+               linux_serverinfo_path = EXCLUDED.linux_serverinfo_path,
+               linux_cmd             = EXCLUDED.linux_cmd,
+               windows_method        = EXCLUDED.windows_method,
+               windows_file_path     = EXCLUDED.windows_file_path,
+               windows_cmd           = EXCLUDED.windows_cmd,
+               windows_psexec_path   = EXCLUDED.windows_psexec_path,
+               windows_winrm_port    = EXCLUDED.windows_winrm_port,
+               windows_smb_port      = EXCLUDED.windows_smb_port,
+               updated_by            = EXCLUDED.updated_by,
+               updated_at            = NOW()
+         RETURNING *`,
+        [
+          location,
+          linux_file_path || null, linux_serverinfo_path || null, linux_cmd || null,
+          windows_method || null, windows_file_path || null, windows_cmd || null,
+          windows_psexec_path || null,
+          windows_winrm_port || null, windows_smb_port || null,
+          req.user.id,
+        ],
+      );
+      return res.json(attachFileChecks({ ...rows[0] }));
+    }
     const { rows } = await db.query(
       `INSERT INTO software_install_config
          (id, linux_file_path, linux_serverinfo_path, linux_cmd,
@@ -192,13 +292,7 @@ async function saveInstallConfig(req, res, next) {
         skip_if_installed === true || skip_if_installed === 'true', log_file_path || null, req.user.id,
       ],
     );
-    const row = rows[0];
-    row.linux_file_exists        = fileCheck(row.linux_file_path);
-    row.linux_serverinfo_exists  = fileCheck(row.linux_serverinfo_path);
-    row.windows_file_exists      = fileCheck(row.windows_file_path);
-    row.windows_psexec_exists    = fileCheck(row.windows_psexec_path);
-    row.log_file_exists          = fileCheck(row.log_file_path);
-    res.json(row);
+    res.json(attachFileChecks(rows[0]));
   } catch (e) { next(e); }
 }
 
@@ -261,12 +355,12 @@ async function install(req, res, next) {
     } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
-    const { username, password, osType } = await resolveVm(ip_address, source, override_username, override_password);
+    const { username, password, osType, location } = await resolveVm(ip_address, source, override_username, override_password);
 
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
 
-    // Load config
+    // Load config — the VM's location override (if any) merged over the default
     const { rows: cfg } = await db.query(
       `SELECT linux_file_path, linux_serverinfo_path, linux_cmd,
               windows_method, windows_file_path, windows_cmd,
@@ -274,10 +368,12 @@ async function install(req, res, next) {
               skip_if_installed, log_file_path
          FROM software_install_config WHERE id = 1`,
     );
-    const cfgRow    = cfg[0] || {};
+    const locCfg    = await getLocationConfigRow(location);
+    const cfgRow    = mergeLocationConfig(cfg[0] || {}, locCfg);
     const win       = isWindows(osType);
     const remoteDir = win ? 'C:/Windows/Temp' : '/tmp';
     const logFile   = cfgRow.log_file_path || null;
+    if (locCfg) appendLog(logFile, ip_address, 'INFO', `Using "${location}" location installer configuration`);
 
     // Skip if agent already installed
     if (cfgRow.skip_if_installed) {
@@ -409,4 +505,7 @@ async function clearInstallLog(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { get, verify, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog };
+module.exports = {
+  get, verify, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog,
+  getInstallConfigLocations, deleteLocationConfig,
+};
