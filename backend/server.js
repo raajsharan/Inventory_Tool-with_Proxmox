@@ -40,6 +40,12 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 (async () => {
   try {
+    await require('./src/bootstrap/ensureSchema')();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[ensure-schema] failed:', e);
+  }
+  try {
     await require('./src/bootstrap/ensureSuperadmin')();
   } catch (e) {
     // eslint-disable-next-line no-console
