@@ -12,8 +12,10 @@ EnvironmentFile=/opt/inventory/backend/.env
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
-StandardOutput=append:/var/log/inventory/backend.log
-StandardError=append:/var/log/inventory/backend.err.log
+# Log to the journal — file paths crash the unit (status=209/STDOUT) when the
+# directory is missing. Read logs with: journalctl -u inventory-backend
+StandardOutput=journal
+StandardError=journal
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=full
