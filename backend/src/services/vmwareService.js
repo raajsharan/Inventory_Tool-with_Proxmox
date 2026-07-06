@@ -83,13 +83,19 @@ async function apiGet(hostname, port, path, sessionId, verifySSL) {
     : [path];
 
   let lastErr = null;
+  let authErr = null;
   for (const p of paths) {
     const { status, body } = await httpsReq({
       hostname, port, path: p, method: 'GET',
       headers: { 'vmware-api-session-id': sessionId },
       verifySSL,
     });
-    if (status === 401 || status === 403) throw new VMwareAuthError(`Session invalid or unauthorized (${p})`);
+    if (status === 401 || status === 403) {
+      // The session may only be valid for one API generation — try the other
+      // prefix before declaring the session invalid.
+      authErr = new VMwareAuthError(`Session invalid or unauthorized (${p})`);
+      continue;
+    }
     if (status === 404 || status === 405) {
       lastErr = new Error(`vSphere API error ${status} on ${p}: ${body.slice(0, 200)}`);
       continue; // try legacy prefix
@@ -97,40 +103,69 @@ async function apiGet(hostname, port, path, sessionId, verifySSL) {
     if (status >= 400) throw new Error(`vSphere API error ${status} on ${p}: ${body.slice(0, 200)}`);
     try { return unwrapValue(JSON.parse(body)); } catch { return body; }
   }
-  throw lastErr || new Error(`vSphere API unreachable on ${path}`);
+  throw authErr || lastErr || new Error(`vSphere API unreachable on ${path}`);
 }
 
 // ---------------------------------------------------------------------------
 // Session management
 // ---------------------------------------------------------------------------
 
+// A usable vSphere session id is an opaque token — reject HTML pages,
+// objects, or anything else a non-API 2xx response might hand back.
+function extractSessionId(body) {
+  let candidate;
+  try {
+    const parsed = JSON.parse(body);
+    // 7.0+ returns a bare string; 6.x wraps in { value: "..." }
+    candidate = typeof parsed === 'string' ? parsed : parsed?.value;
+  } catch {
+    candidate = String(body || '').replace(/"/g, '').trim();
+  }
+  if (typeof candidate !== 'string') return null;
+  candidate = candidate.trim();
+  if (!/^[A-Za-z0-9._\-+/=]{8,}$/.test(candidate)) return null; // not a token
+  return candidate;
+}
+
 async function createSession(hostname, port, username, password, verifySSL) {
   const creds = Buffer.from(`${username}:${password}`).toString('base64');
 
-  // Try vSphere 7.0+ REST API first
-  for (const path of ['/api/session', '/rest/com/vmware/cis/session']) {
-    const { status, body } = await httpsReq({
-      hostname, port, path, method: 'POST',
-      headers: { Authorization: `Basic ${creds}` },
-      verifySSL,
-    });
+  let sawAuthFailure = false;
+  let lastStatus = null;
+  // cis session works on 6.5 → 8.x; /api/session on 7.0+. Some 6.x web
+  // servers answer /api/session with a 2xx non-API page, so try the
+  // universally valid endpoint first and validate whatever comes back.
+  for (const path of ['/rest/com/vmware/cis/session', '/api/session']) {
+    let resp;
+    try {
+      resp = await httpsReq({
+        hostname, port, path, method: 'POST',
+        headers: { Authorization: `Basic ${creds}` },
+        verifySSL,
+      });
+    } catch (e) {
+      lastStatus = e.message;
+      continue;
+    }
+    const { status, body } = resp;
+    lastStatus = status;
 
-    if (status === 401 || status === 403) {
-      throw new VMwareAuthError(`Invalid credentials for ${username}@${hostname}`);
-    }
-    if (status === 404) continue; // try next path
+    if (status === 401 || status === 403) { sawAuthFailure = true; continue; }
     if (status === 201 || status === 200) {
-      try {
-        const parsed = JSON.parse(body);
-        // 7.0+ returns a bare string; 6.x wraps in { value: "..." }
-        return typeof parsed === 'string' ? parsed : (parsed.value || parsed);
-      } catch {
-        return body.replace(/"/g, '');
-      }
+      const sessionId = extractSessionId(body);
+      if (sessionId) return sessionId;
+      // 2xx but no valid token (HTML page, envelope object…) — try next endpoint
+      continue;
     }
-    throw new VMwareConnectionError(`Failed to authenticate: HTTP ${status}`);
+    // 404/405/5xx — endpoint not available on this version, try next
   }
-  throw new VMwareConnectionError(`Could not reach vSphere API on ${hostname}:${port}`);
+
+  if (sawAuthFailure) {
+    throw new VMwareAuthError(`Invalid credentials for ${username}@${hostname}`);
+  }
+  throw new VMwareConnectionError(
+    `Could not establish a vSphere API session on ${hostname}:${port} (last status: ${lastStatus})`,
+  );
 }
 
 async function destroySession(hostname, port, sessionId, verifySSL) {
