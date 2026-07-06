@@ -7,6 +7,7 @@ const {
   NESSUS_LINUX_CONFIG, NESSUS_WINDOWS_CONFIG,
 } = require('../utils/sshVerify');
 const { winrmInstall, psexecInstall, wmiInstall } = require('../utils/winInstall');
+const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
 
 const NESSUS_CFG_OVERRIDE = {
@@ -128,12 +129,16 @@ async function verify(req, res, next) {
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
     // Credentials always come from the asset record — no manual overrides.
-    const { username, password, osType } = await resolveVm(ip_address, source);
+    const [{ username, password, osType }, pingResult] = await Promise.all([
+      resolveVm(ip_address, source),
+      ping(ip_address),
+    ]);
 
-    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
-    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
+    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
+    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
 
     const result = await sshVerify({ host: ip_address, port, username, password, osType, cfgOverride: NESSUS_CFG_OVERRIDE });
+    result.ping  = pingResult;
     result.meta  = { credentials_source: 'stored', os_type: osType };
     res.json(result);
   } catch (e) { next(e); }

@@ -596,8 +596,21 @@ function VerifyDetail({ vm, result }) {
   const osMeta = getOsMeta(vm?.os_type || result.meta?.os_type);
   const win    = isWindows(vm?.os_type);
 
+  const pingTag = result.ping ? (
+    <Tag color={result.ping.reachable ? 'green' : 'red'}>
+      Ping: {result.ping.reachable
+        ? `reachable${result.ping.time_ms != null ? ` · ${result.ping.time_ms} ms` : ''}`
+        : 'no response'}
+    </Tag>
+  ) : null;
+
   if (!result.connected) {
-    return <Alert type="error" showIcon message="Could not connect" description={result.error} />;
+    return (
+      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        {pingTag && <Space>{pingTag}</Space>}
+        <Alert type="error" showIcon message="Could not connect" description={result.error} />
+      </Space>
+    );
   }
 
   return (
@@ -606,6 +619,7 @@ function VerifyDetail({ vm, result }) {
         <Tag icon={win ? <WindowsOutlined /> : null} color={win ? 'blue' : 'default'}>
           {win ? 'Windows' : 'Linux'} verification
         </Tag>
+        {pingTag}
         {result.meta?.credentials_source && <Tag>credentials: {result.meta.credentials_source}</Tag>}
       </Space>
       <Row gutter={16}>

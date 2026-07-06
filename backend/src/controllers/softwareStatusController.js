@@ -3,6 +3,7 @@ const path        = require('path');
 const db          = require('../config/db');
 const { decrypt } = require('../utils/crypto');
 const { sshVerify, sshRunCommand, sshUploadAndRun, isWindows } = require('../utils/sshVerify');
+const { ping } = require('../utils/ping');
 const { winrmInstall, psexecInstall, wmiInstall }              = require('../utils/winInstall');
 const ApiError    = require('../utils/ApiError');
 
@@ -144,12 +145,16 @@ async function verify(req, res, next) {
     const { ip_address, source, port = 22 } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
-    const { username, password, osType } = await resolveVm(ip_address, source);
+    const [{ username, password, osType }, pingResult] = await Promise.all([
+      resolveVm(ip_address, source),
+      ping(ip_address),
+    ]);
 
-    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
-    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
+    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
+    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
 
     const result = await sshVerify({ host: ip_address, port, username, password, osType });
+    result.ping = pingResult;
     result.meta = { credentials_source: 'stored', os_type: osType };
     res.json(result);
   } catch (e) { next(e); }
