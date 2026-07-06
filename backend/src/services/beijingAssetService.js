@@ -83,20 +83,30 @@ async function create(body, userId) {
 async function update(id, body, userId) {
   const row = mapBody(body);
   if (!Object.keys(row).length) throw new ApiError(400, 'No fields to update');
+  const existingQ = await db.query(`SELECT department, asset_tag, ip_address FROM ${TABLE} WHERE id = $1`, [id]);
+  if (!existingQ.rows.length) throw new ApiError(404, 'Asset not found');
+  const existing = existingQ.rows[0];
   if (row.department !== undefined || row.asset_tag !== undefined) {
-    const existing = await db.query(`SELECT department, asset_tag FROM ${TABLE} WHERE id = $1`, [id]);
-    if (!existing.rows.length) throw new ApiError(404, 'Asset not found');
-    const effDept = row.department !== undefined ? row.department : existing.rows[0].department;
-    const effTag  = row.asset_tag  !== undefined ? row.asset_tag  : existing.rows[0].asset_tag;
+    const effDept = row.department !== undefined ? row.department : existing.department;
+    const effTag  = row.asset_tag  !== undefined ? row.asset_tag  : existing.asset_tag;
     await deptSvc.validateDepartmentTag(effDept, effTag);
   }
-  if (row.asset_tag && await deptSvc.isTagUsedAnywhere(row.asset_tag, { excludeTable: TABLE, excludeId: id })) {
+  // Cross-inventory duplicate checks apply only to CHANGED values —
+  // a record must stay editable even if its existing IP/tag historically
+  // duplicates another inventory.
+  const tagChanged = row.asset_tag  !== undefined && String(row.asset_tag)  !== String(existing.asset_tag ?? '');
+  const ipChanged  = row.ip_address !== undefined && String(row.ip_address) !== String(existing.ip_address ?? '');
+  if (tagChanged && row.asset_tag && await deptSvc.isTagUsedAnywhere(row.asset_tag, { excludeTable: TABLE, excludeId: id })) {
     throw new ApiError(409, 'Duplicate values', { asset_tag: 'asset tag already used in another inventory' });
   }
-  if (row.ip_address && await deptSvc.isIpUsedAnywhere(row.ip_address, { excludeTable: TABLE, excludeId: id })) {
+  if (ipChanged && row.ip_address && await deptSvc.isIpUsedAnywhere(row.ip_address, { excludeTable: TABLE, excludeId: id })) {
     throw new ApiError(409, 'Duplicate values', { ip_address: 'IP address already used in another inventory' });
   }
-  await checkDuplicates({ ip_address: row.ip_address, asset_tag: row.asset_tag, excludeId: id });
+  await checkDuplicates({
+    ip_address: ipChanged  ? row.ip_address : undefined,
+    asset_tag:  tagChanged ? row.asset_tag  : undefined,
+    excludeId: id,
+  });
   row.updated_by = userId;
   const cols = Object.keys(row);
   const vals = Object.values(row);

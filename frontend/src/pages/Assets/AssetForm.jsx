@@ -42,6 +42,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const [fieldMeta, setFieldMeta] = useState({ fields: [], byKey: {} });
   const labelOf = (snakeKey, fallback) => fieldMeta.byKey[snakeKey]?.label || fallback;
   const [meta, setMeta] = useState({ created_by_name: '', created_at: '' });
+  const [originalIp, setOriginalIp] = useState(null); // record's stored IP (edit mode)
 
   const departmentOptions = useMemo(
     () => departments.map(d => ({
@@ -107,6 +108,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
         });
         setOsType(r.data.os_type);
         setDepartment(r.data.department);
+        setOriginalIp(r.data.ip_address || null);
         setMeta({ created_by_name: r.data.created_by_name || '', created_at: r.data.created_at || '' });
       });
     }
@@ -270,6 +272,9 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
               {
                 validator: async (_, value) => {
                   if (!value || !ipRe.test(value)) return;
+                  // Unchanged IP on an existing record is always allowed —
+                  // don't block edits over historical cross-inventory duplicates.
+                  if (mode === 'edit' && originalIp && value === originalIp) return;
                   try {
                     const params = { ip: value };
                     if (mode === 'edit' && id) {
@@ -537,6 +542,13 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       className="inventory-form-card"
     >
       <Form form={form} layout="vertical" onFinish={onFinish} className="inventory-form"
+        scrollToFirstError={{ behavior: 'smooth', block: 'center' }}
+        onFinishFailed={({ errorFields }) => {
+          const first = errorFields?.[0];
+          message.error(first?.errors?.[0]
+            ? `Cannot save — ${first.errors[0]}`
+            : 'Cannot save — please fix the highlighted fields');
+        }}
         initialValues={{ manageEngineInstalled: false, tenableInstalled: false, idracEnabled: false }}>
         {mode === 'edit' && (meta.created_by_name || meta.created_at) && (
           <Alert
