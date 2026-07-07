@@ -25,7 +25,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+app.get('/health', (_req, res) => {
+  const { getVersion } = require('./src/utils/version');
+  const v = getVersion();
+  res.json({ status: 'ok', ts: new Date().toISOString(), commit: v.commit, started_at: v.started_at });
+});
 
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api', routes);
