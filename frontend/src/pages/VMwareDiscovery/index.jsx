@@ -3,7 +3,7 @@ import { Typography, Tabs, Card } from 'antd';
 import {
   DashboardOutlined, UnorderedListOutlined, CloudServerOutlined,
   SwapOutlined, CameraOutlined, HddOutlined, WarningOutlined,
-  AimOutlined, UploadOutlined, FormOutlined,
+  AimOutlined, UploadOutlined, FormOutlined, DiffOutlined,
 } from '@ant-design/icons';
 import VMDashboard    from './components/VMDashboard.jsx';
 import VMList         from './components/VMList.jsx';
@@ -15,6 +15,7 @@ import VMStale        from './components/VMStale.jsx';
 import VMMacLookup    from './components/VMMacLookup.jsx';
 import VMMacUpload    from './components/VMMacUpload.jsx';
 import VMAssetEditor  from './components/VMAssetEditor.jsx';
+import VMReconcile    from './components/VMReconcile.jsx';
 
 const { Title } = Typography;
 
@@ -57,6 +58,11 @@ export default function VMwareDiscovery() {
       key: 'stale',
       label: <span><WarningOutlined /> Stale VMs</span>,
       children: <VMStale />,
+    },
+    {
+      key: 'reconcile',
+      label: <span><DiffOutlined /> Reconcile</span>,
+      children: <VMReconcile />,
     },
     {
       key: 'mac-lookup',

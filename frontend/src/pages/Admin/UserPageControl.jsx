@@ -43,6 +43,7 @@ const PAGE_SECTIONS = [
       { key: 'admin/backup',             label: 'Backup / Export & Import' },
       { key: 'admin/branding',           label: 'Branding & Customization' },
       { key: 'admin/recycle-bin',        label: 'Recycle Bin' },
+      { key: 'admin/data-health',        label: 'Data Health' },
       { key: 'admin/imports',            label: 'Import History' },
       { key: 'admin/audit',              label: 'Audit Log' },
       { key: 'admin/nav-order',          label: 'Menu Order' },

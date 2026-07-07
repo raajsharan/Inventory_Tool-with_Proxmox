@@ -31,5 +31,7 @@ router.use('/software-status',     require('./softwareStatusRoutes'));
 router.use('/nessus-status',       require('./nessusStatusRoutes'));
 router.use('/tenable',             require('./tenableRoutes'));
 router.use('/db-import',           authenticate, requirePageAccess('admin/imports'), require('./dbImportRoutes'));
+router.use('/search',              require('./searchRoutes'));
+router.use('/data-health',         require('./dataHealthRoutes'));
 
 module.exports = router;

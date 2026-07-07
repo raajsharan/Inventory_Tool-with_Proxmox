@@ -11,10 +11,12 @@ import {
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
 import api from '../../api/client';
+import GlobalSearch from '../GlobalSearch.jsx';
 import { NAV_STORAGE_KEY, loadNavOrder } from '../../pages/Admin/NavOrder.jsx';
 
 const { Sider, Header, Content, Footer } = Layout;
@@ -31,9 +33,20 @@ export default function AppLayout() {
   const loc = useLocation();
   const [customPages, setCustomPages] = useState([]);
   const [navOrder, setNavOrder] = useState(() => loadNavOrder() || DEFAULT_NAV_KEYS);
+  const [buildCommit, setBuildCommit] = useState(null);
+  // Sidebar collapse — remembered across sessions.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sider-collapsed') === '1');
+  const toggleSider = (v) => {
+    setCollapsed(v);
+    localStorage.setItem('sider-collapsed', v ? '1' : '0');
+  };
 
   useEffect(() => {
     api.get('/custom-pages').then(r => setCustomPages(r.data.items || [])).catch(() => {});
+    // Which backend build is live — answers "did the deploy take?" at a glance.
+    fetch('/health').then(r => r.json())
+      .then(h => { if (h?.commit && h.commit !== 'unknown') setBuildCommit(h.commit); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -131,6 +144,7 @@ export default function AppLayout() {
       can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,     label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
       can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,          label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
       can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,              label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
+      can('admin/data-health')      && { key: '/admin/data-health',       icon: <HeartOutlined />,             label: <Link to="/admin/data-health">Data Health</Link> },
       can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
       can('admin/imports')          && { key: '/admin/db-import',         icon: <DatabaseOutlined />,          label: <Link to="/admin/db-import">DB Import</Link> },
       can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },
@@ -150,8 +164,28 @@ export default function AppLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={240} breakpoint="lg" collapsedWidth={64} theme="dark">
-        <div className="logo-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Sider
+        width={240}
+        breakpoint="lg"
+        collapsedWidth={64}
+        theme="dark"
+        collapsible
+        collapsed={collapsed}
+        onCollapse={toggleSider}
+        style={{ position: 'relative' }}
+      >
+        {/* Collapsed rail is one big "expand" control — no hover popups;
+            clicking any icon simply opens the sidebar. */}
+        {collapsed && (
+          <div
+            role="button"
+            aria-label="Expand menu"
+            title="Expand menu"
+            style={{ position: 'absolute', inset: 0, zIndex: 10, cursor: 'pointer' }}
+            onClick={() => toggleSider(false)}
+          />
+        )}
+        <div className="logo-title" style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start' }}>
           {branding?.logo_data_url && (
             <span style={{
               width: 28, height: 28, borderRadius: 6, background: 'white',
@@ -161,9 +195,12 @@ export default function AppLayout() {
               <img alt="logo" src={branding.logo_data_url} style={{ maxWidth: '100%', maxHeight: '100%' }} />
             </span>
           )}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {branding?.tool_name || 'INVENTORY · IT'}
-          </span>
+          {!collapsed && (
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {branding?.tool_name || 'INVENTORY · IT'}
+            </span>
+          )}
+          {collapsed && !branding?.logo_data_url && <ClusterOutlined style={{ fontSize: 20 }} />}
         </div>
         <Menu
           key={`menu-${customPages.length}-${navOrder.join(',')}`}
@@ -179,8 +216,19 @@ export default function AppLayout() {
       </Sider>
       <Layout>
         <Header className="app-header">
-          <Breadcrumb items={[{ title: <Link to="/">Home</Link> }, ...crumbs]} />
           <Space size="middle">
+            <Tooltip title={collapsed ? 'Expand menu' : 'Collapse menu'}>
+              <Button
+                size="small"
+                type="text"
+                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={() => toggleSider(!collapsed)}
+              />
+            </Tooltip>
+            <Breadcrumb items={[{ title: <Link to="/">Home</Link> }, ...crumbs]} />
+          </Space>
+          <Space size="middle">
+            <GlobalSearch />
             <Space.Compact>
               <Tooltip title="Decrease font size">
                 <Button size="small" icon={<MinusOutlined />} onClick={decreaseFont} disabled={!canDecrease} />
@@ -229,6 +277,11 @@ export default function AppLayout() {
               .replace(/\{year\}/g, new Date().getFullYear())
               .replace(/\{tool\}/g, branding?.tool_name || 'Inventory IT')
           }} />
+          {buildCommit && (
+            <Typography.Text type="secondary" style={{ marginLeft: 10, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+              build {buildCommit}
+            </Typography.Text>
+          )}
         </Footer>
       </Layout>
     </Layout>

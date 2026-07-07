@@ -31,6 +31,10 @@ router.post('/smart-import/preview', authenticate, authorize(...writeRoles),
 router.post('/smart-import',         authenticate, authorize(...writeRoles),
   upload.single('file'), smartCtrl.makeApply('assets'));
 
+const bulk = require('../controllers/bulkActionsController')(require('../services/assetService'), 'asset');
+router.post('/bulk-update', authenticate, authorize(...writeRoles), bulk.bulkUpdate);
+router.post('/bulk-delete', authenticate, authorize('admin'), bulk.bulkRemove);
+
 router.get('/', authenticate, assetCtrl.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, assetCtrl.get);
 router.get('/:id/password', authenticate, requirePasswordAccess, param('id').isUUID(), validate, assetCtrl.viewPassword);

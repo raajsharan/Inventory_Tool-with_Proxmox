@@ -37,6 +37,7 @@ import AdminBackup from './pages/Admin/Backup.jsx';
 import AdminBranding from './pages/Admin/Branding.jsx';
 import Profile from './pages/Profile.jsx';
 import RecycleBin from './pages/Admin/RecycleBin.jsx';
+import DataHealth from './pages/Admin/DataHealth.jsx';
 import NavOrder from './pages/Admin/NavOrder.jsx';
 import UserPageControl from './pages/Admin/UserPageControl.jsx';
 import Roles from './pages/Admin/Roles.jsx';
@@ -107,6 +108,7 @@ export default function App() {
         <Route path="/admin/backup" element={<AdminBackup />} />
         <Route path="/admin/branding" element={<AdminBranding />} />
         <Route path="/admin/recycle-bin" element={<RecycleBin />} />
+        <Route path="/admin/data-health" element={<DataHealth />} />
         <Route path="/admin/nav-order" element={<NavOrder />} />
         <Route path="/admin/user-page-control" element={<UserPageControl />} />
         <Route path="/admin/roles" element={<Roles />} />

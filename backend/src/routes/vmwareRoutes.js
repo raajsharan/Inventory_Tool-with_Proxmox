@@ -25,6 +25,7 @@ router.get('/vms/export',         authenticate, ctrl.exportCSV);
 router.get('/dashboard',          authenticate, ctrl.getDashboard);
 router.get('/drift',              authenticate, ctrl.getDrift);
 router.get('/esxi-topology',      authenticate, ctrl.getESXiTopology);
+router.get('/reconcile',          authenticate, ctrl.getReconciliation);
 router.get('/stale',              authenticate, ctrl.getStaleVMs);
 router.get('/snapshots',          authenticate, ctrl.getSnapshots);
 router.get('/runs',               authenticate, ctrl.getRunHistory);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card, Table, Input, Select, Space, Button, Tag, App, Row, Col, Typography, Tooltip, Modal, Form,
 } from 'antd';
@@ -23,12 +23,37 @@ export default function AssetList({
   const effectiveTitle = getPageLabel ? getPageLabel(pageKey, title) : title;
   const { message } = App.useApp();
   const nav = useNavigate();
+  // Filters, page and search live in the URL — a round trip to a record's
+  // detail view (or a shared link) restores the exact same table view.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(false);
   const [dropdowns, setDropdowns] = useState({});
-  const [filters, setFilters] = useState({ search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [filters, setFilters] = useState(() => ({
+    search:       searchParams.get('q')      || '',
+    osType:       searchParams.get('os')     || undefined,
+    serverStatus: searchParams.get('status') || undefined,
+    location:     searchParams.get('loc')    || undefined,
+    eolStatus:    searchParams.get('eol')    || undefined,
+  }));
+  const [page, setPage] = useState(() => Number(searchParams.get('page')) || 1);
+  const [pageSize, setPageSize] = useState(() => Number(searchParams.get('size')) || 20);
+
+  const hasFilters = !!(filters.search || filters.osType || filters.serverStatus
+    || filters.location || filters.eolStatus);
+
+  // Mirror the view state into the URL (replace — no history spam).
+  useEffect(() => {
+    const p = {};
+    if (filters.search)       p.q      = filters.search;
+    if (filters.osType)       p.os     = filters.osType;
+    if (filters.serverStatus) p.status = filters.serverStatus;
+    if (filters.location)     p.loc    = filters.location;
+    if (filters.eolStatus)    p.eol    = filters.eolStatus;
+    if (page > 1)             p.page   = String(page);
+    if (pageSize !== 20)      p.size   = String(pageSize);
+    setSearchParams(p, { replace: true });
+  }, [filters, page, pageSize]); // eslint-disable-line
   const [hiddenSet, setHiddenSet] = useState(new Set());
   const isHidden = (k) => hiddenSet.has(k);
   const [fieldLabels, setFieldLabels] = useState({});
@@ -39,19 +64,57 @@ export default function AssetList({
   const [setpwTarget, setSetpwTarget]   = useState(null); // { id, vm_name } for inline set-password modal
   const [setpwForm]                     = Form.useForm();
   const [setpwLoading, setSetpwLoading] = useState(false);
+  const [selectedIds, setSelectedIds]   = useState([]);   // bulk-action selection
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkWorking, setBulkWorking]   = useState(false);
+  const [bulkResetKey, setBulkResetKey] = useState(0);    // remounts the bulk selects after each action
 
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
   const canSeePasswords = canWrite || !!canViewPasswords;
 
-  async function load() {
+  async function load(overrides = {}) {
     setLoading(true);
     try {
-      const params = { page, pageSize, ...filters };
+      const params = { page, pageSize, ...filters, ...overrides };
       const { data } = await api.get(apiPrefix, { params });
       setData(data);
       setRevealed({});
     } finally { setLoading(false); }
+  }
+
+  async function onBulkUpdate(fieldKey, value) {
+    if (value === undefined || value === null) return;
+    setBulkWorking(true);
+    try {
+      const { data: r } = await api.post(`${apiPrefix}/bulk-update`, {
+        ids: selectedIds, fields: { [fieldKey]: value },
+      });
+      if (r.failed) {
+        message.warning(`Updated ${r.success} of ${selectedIds.length} — ${r.failed} failed${r.failures[0]?.error ? ` (${r.failures[0].error})` : ''}`);
+      } else {
+        message.success(`Updated ${r.success} record${r.success !== 1 ? 's' : ''}`);
+      }
+      setSelectedIds([]);
+      setBulkResetKey(k => k + 1);
+      load();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Bulk update failed');
+    } finally { setBulkWorking(false); }
+  }
+
+  async function onBulkDeleteConfirmed(password) {
+    const { data: r } = await api.post(`${apiPrefix}/bulk-delete`, { ids: selectedIds, password });
+    message.success(`Moved ${r.success} record${r.success !== 1 ? 's' : ''} to Recycle Bin${r.failed ? ` — ${r.failed} failed` : ''}`);
+    setBulkDeleteOpen(false);
+    setSelectedIds([]);
+    load();
+  }
+
+  function clearFilters() {
+    setFilters({ search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined });
+    setPage(1);
+    load({ page: 1, search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined });
   }
 
   useEffect(() => { load(); }, [page, pageSize, filters.osType, filters.serverStatus, filters.location, filters.eolStatus]); // eslint-disable-line
@@ -307,11 +370,44 @@ export default function AssetList({
         </Col>
       </Row>
 
+      {canWrite && selectedIds.length > 0 && (
+        <div className="bulk-bar" key={bulkResetKey}>
+          <Space wrap size={10}>
+            <Typography.Text strong>{selectedIds.length} selected</Typography.Text>
+            <Select size="small" style={{ minWidth: 150 }} placeholder="Set status…"
+              options={ddOptions('server_status')} loading={bulkWorking}
+              onChange={(v) => onBulkUpdate('serverStatus', v)} />
+            <Select size="small" style={{ minWidth: 150 }} placeholder="Set location…"
+              options={ddOptions('location')} loading={bulkWorking}
+              onChange={(v) => onBulkUpdate('location', v)} />
+            <Select size="small" style={{ minWidth: 150 }} placeholder="Set EOL status…"
+              options={ddOptions('eol_status')} loading={bulkWorking}
+              onChange={(v) => onBulkUpdate('eolStatus', v)} />
+            {isAdmin && (
+              <Button size="small" danger icon={<DeleteOutlined />}
+                onClick={() => setBulkDeleteOpen(true)} loading={bulkWorking}>
+                Delete selected
+              </Button>
+            )}
+            <Button size="small" type="text" onClick={() => setSelectedIds([])}>
+              Clear selection
+            </Button>
+          </Space>
+        </div>
+      )}
+
       <Table
         rowKey="id"
         loading={loading}
         dataSource={data.items}
         size="small"
+        sticky
+        rowSelection={canWrite ? {
+          selectedRowKeys: selectedIds,
+          onChange: (keys) => setSelectedIds(keys),
+          columnWidth: 44,
+          fixed: true,
+        } : undefined}
         pagination={{
           current: page, pageSize, total: data.total,
           showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100],
@@ -320,6 +416,40 @@ export default function AssetList({
         }}
         scroll={{ x: 'max-content' }}
         columns={visibleColumns}
+        locale={{
+          emptyText: (
+            <div style={{ padding: '36px 0', textAlign: 'center' }}>
+              {hasFilters ? (
+                <>
+                  <Typography.Text type="secondary">
+                    No records match the current filters.
+                  </Typography.Text>
+                  <div style={{ marginTop: 14 }}>
+                    <Button size="small" onClick={clearFilters}>Clear filters</Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Typography.Text type="secondary">
+                    No records yet.
+                  </Typography.Text>
+                  {canWrite && (
+                    <div style={{ marginTop: 14 }}>
+                      <Space>
+                        <Link to={`${basePath}/new`}>
+                          <Button type="primary" size="small" icon={<PlusOutlined />}>Add Asset</Button>
+                        </Link>
+                        <Link to={`${basePath}/import`}>
+                          <Button size="small" icon={<UploadOutlined />}>Import from Excel</Button>
+                        </Link>
+                      </Space>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ),
+        }}
       />
       <PasswordConfirmModal
         open={!!deleteTarget}
@@ -328,6 +458,15 @@ export default function AssetList({
         okText="Delete"
         onCancel={() => setDeleteTarget(null)}
         onConfirm={onDeleteConfirmed}
+      />
+
+      <PasswordConfirmModal
+        open={bulkDeleteOpen}
+        title={`Delete ${selectedIds.length} selected record${selectedIds.length !== 1 ? 's' : ''}?`}
+        message="All selected records move to the Recycle Bin. A superadmin can restore them later."
+        okText={`Delete ${selectedIds.length}`}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={onBulkDeleteConfirmed}
       />
 
       <Modal

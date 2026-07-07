@@ -326,7 +326,6 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           <Form.Item
             name="macAddress"
             label={labelOf('mac_address', 'MAC Address')}
-            rules={[{ required: true, message: 'MAC Address is required' }]}
           >
             <Input placeholder="e.g. 00:11:22:33:44:55" />
           </Form.Item>

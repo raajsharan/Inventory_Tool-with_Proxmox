@@ -29,6 +29,7 @@ const STATIC_PAGES = [
   { key: 'admin/backup',          label: 'Backup / Export & Import', group: 'Administration' },
   { key: 'admin/branding',        label: 'Branding & Customization', group: 'Administration' },
   { key: 'admin/recycle-bin',     label: 'Recycle Bin',              group: 'Administration' },
+  { key: 'admin/data-health',     label: 'Data Health',              group: 'Administration' },
   { key: 'admin/imports',         label: 'Import History',           group: 'Administration' },
   { key: 'admin/audit',           label: 'Audit Log',                group: 'Administration' },
   { key: 'admin/nav-order',          label: 'Menu Order',               group: 'Administration' },

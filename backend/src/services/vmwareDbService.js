@@ -349,10 +349,87 @@ async function getSnapshotVMs() {
     .sort((a, b) => b.count - a.count);
 }
 
+// ---------------------------------------------------------------------------
+// Reconciliation — discovered VMs vs the inventory, matched by IP and MAC.
+// ---------------------------------------------------------------------------
+
+const normMac = (m) => String(m || '').toLowerCase().replace(/[^0-9a-f]/g, '');
+const validIp = (ip) => ip && ip !== 'Not Available' && !String(ip).startsWith('fe80');
+
+async function getReconciliation() {
+  const [discovered, inv] = await Promise.all([
+    getLatestVMs(),
+    db.query(`
+      SELECT id, vm_name, ip_address::text AS ip_address, mac_address, os_type, 'assets' AS source
+        FROM assets WHERE deleted_at IS NULL
+      UNION ALL
+      SELECT id, vm_name, ip_address::text, mac_address, os_type, 'beijing_assets'
+        FROM beijing_assets WHERE deleted_at IS NULL
+      UNION ALL
+      SELECT id, vm_name, ip_address::text, mac_address, os_type, 'ext_assets'
+        FROM ext_assets WHERE deleted_at IS NULL
+      UNION ALL
+      SELECT id, vm_name, ip_address::text, mac_address, os_type, 'physical_esxi_servers'
+        FROM physical_esxi_servers WHERE deleted_at IS NULL
+    `).then(r => r.rows),
+  ]);
+
+  // Index the inventory by IP and by MAC.
+  const invByIp = new Map();
+  const invByMac = new Map();
+  for (const a of inv) {
+    if (validIp(a.ip_address)) invByIp.set(a.ip_address.trim(), a);
+    const mac = normMac(a.mac_address);
+    if (mac.length === 12) invByMac.set(mac, a);
+  }
+
+  const matchedInvIds = new Set();
+  const not_in_inventory = [];
+  for (const vm of discovered) {
+    const ips  = (vm.ips  || []).filter(validIp).map(s => s.trim());
+    const macs = (vm.macs || []).map(normMac).filter(m => m.length === 12);
+    let match = null;
+    let matched_by = null;
+    for (const ip of ips)   { if (invByIp.has(ip))    { match = invByIp.get(ip);   matched_by = 'ip';  break; } }
+    if (!match) for (const m of macs) { if (invByMac.has(m)) { match = invByMac.get(m); matched_by = 'mac'; break; } }
+    if (match) {
+      matchedInvIds.add(`${match.source}:${match.id}`);
+    } else {
+      not_in_inventory.push({
+        id: vm.id, name: vm.name, hostname: vm.hostname,
+        ips, macs: vm.macs || [], os_type: vm.os_type,
+        power_state: vm.power_state, esxi_host_name: vm.esxi_host_name,
+        source_host: vm.source_host,
+      });
+    }
+    void matched_by;
+  }
+
+  // Inventory records never seen by discovery (matched neither IP nor MAC).
+  const discoveredIps  = new Set(discovered.flatMap(v => (v.ips  || []).filter(validIp).map(s => s.trim())));
+  const discoveredMacs = new Set(discovered.flatMap(v => (v.macs || []).map(normMac).filter(m => m.length === 12)));
+  const not_discovered = inv.filter(a => {
+    if (matchedInvIds.has(`${a.source}:${a.id}`)) return false;
+    if (validIp(a.ip_address) && discoveredIps.has(a.ip_address.trim())) return false;
+    const mac = normMac(a.mac_address);
+    if (mac.length === 12 && discoveredMacs.has(mac)) return false;
+    return true;
+  });
+
+  return {
+    discovered_total: discovered.length,
+    inventory_total:  inv.length,
+    matched:          discovered.length - not_in_inventory.length,
+    not_in_inventory,
+    not_discovered:   not_discovered.slice(0, 500),
+    not_discovered_total: not_discovered.length,
+  };
+}
+
 module.exports = {
   listHosts, getHostById, getHostByName, upsertHost, deleteHost,
   setHostRunning, setLastDiscovery, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
-  saveVMs, getLatestVMs,
+  saveVMs, getLatestVMs, getReconciliation,
   getDashboardStats, getDrift, getESXiTopology, getStaleVMs, getSnapshotVMs,
 };

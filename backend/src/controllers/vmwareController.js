@@ -229,6 +229,12 @@ async function getESXiTopology(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function getReconciliation(req, res, next) {
+  try {
+    res.json(await dbSvc.getReconciliation());
+  } catch (e) { next(e); }
+}
+
 async function getStaleVMs(req, res, next) {
   try {
     res.json(await dbSvc.getStaleVMs());
@@ -654,7 +660,7 @@ async function exportAssetEditorCSV(req, res, next) {
 module.exports = {
   listHosts, addHost, updateHost, deleteHost, testHost,
   runDiscovery, runDiscoverySync,
-  listVMs, getDashboard, getDrift, getESXiTopology,
+  listVMs, getDashboard, getDrift, getESXiTopology, getReconciliation,
   getStaleVMs, getSnapshots, getRunHistory, exportCSV,
   // MAC Lookup
   listMacFiles, uploadMacFile, deleteMacFile, clearMacFiles,
