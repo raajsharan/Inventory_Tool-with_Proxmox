@@ -1,3 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+/* Design tokens — ops navy / signal blue / operator green, with the app's
+   existing AntD body stack. Display + mono faces fall back to system fonts
+   when Google Fonts is unreachable (offline deployments). */
+:root {
+  --ink-900: #0B1530;
+  --ink-700: #16255B;
+  --signal:  #2F6FED;
+  --online:  #34D399;
+  --paper:   #F7F9FC;
+  --slate:   #5B6B8C;
+  --line:    #E3E8F2;
+  --font-display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
 html, body, #root { height: 100%; margin: 0; }
 .logo-title {
   color: #fff;
@@ -195,19 +212,27 @@ body[data-theme="dark"] .asset-view-value { color: #e5e7eb; }
 .asset-view-audit-row:last-child { border-bottom: none; }
 body[data-theme="dark"] .asset-view-audit-row { border-bottom-color: #2a2a2a; }
 
-/* Weekly Report breakdown tables — blue header band like the screenshot.
+/* Weekly Report breakdown tables — report-ink header band, mono numerals.
    Columns are evenly distributed (tableLayout: fixed) so the table always
    fits the page width; headers wrap instead of forcing horizontal scroll. */
 .weekly-breakdown-card .ant-table-thead > tr > th {
-  background: #2563eb !important;
-  color: #ffffff !important;
-  border-color: #1d4ed8 !important;
-  font-size: 12px;
-  padding: 8px 6px !important;
+  background: var(--ink-900) !important;
+  color: rgba(255,255,255,0.92) !important;
+  border-color: var(--ink-700) !important;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 9px 6px !important;
   white-space: normal;
   word-break: break-word;
-  line-height: 1.3;
+  line-height: 1.35;
   text-align: center !important;
+}
+.weekly-breakdown-card .ant-table-tbody > tr > td:not(:first-child),
+.weekly-breakdown-card .ant-table-summary > tr > td:not(:first-child) {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
 }
 .weekly-breakdown-card .ant-table-thead > tr > th:first-child {
   text-align: left !important;
@@ -220,7 +245,7 @@ body[data-theme="dark"] .asset-view-audit-row { border-bottom-color: #2a2a2a; }
   word-break: break-word;
 }
 body[data-theme="dark"] .weekly-breakdown-card .ant-table-thead > tr > th {
-  background: #1e40af !important;
+  background: var(--ink-700) !important;
 }
 
 /* Inventory Fields editor — row cards + greenish inputs that stay readable in both themes. */
@@ -383,4 +408,254 @@ body[data-theme="dark"] canvas + div .g2-tooltip-list-item-value { color: #f1f5f
 
 .inventory-form-card .ant-card-head-title {
   font-weight: 700;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Login — living network topology. A full-screen canvas of drifting
+   glowing nodes, links, and packets travelling between them (the
+   subject: a network inventory). Sign-in card floats over it.
+   ════════════════════════════════════════════════════════════════════ */
+.login-stage {
+  position: relative;
+  min-height: 100vh;
+  background: radial-gradient(120% 120% at 20% 0%, #101d45 0%, var(--ink-900) 55%, #060b1d 100%);
+  overflow: hidden;
+}
+.login-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+.login-stage-inner {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 48px 32px;
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  align-items: center;
+  gap: 56px;
+}
+.login-hero { color: #fff; }
+.login-logo {
+  width: 60px; height: 60px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--signal), #1d4fd7);
+  box-shadow: 0 8px 32px rgba(47, 111, 237, 0.45);
+  display: inline-flex; align-items: center; justify-content: center;
+  overflow: hidden; margin-bottom: 26px;
+}
+.login-logo img { max-width: 82%; max-height: 82%; }
+.login-wordmark {
+  font-family: var(--font-display);
+  font-size: clamp(34px, 4.2vw, 52px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -1.2px;
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+.login-wordmark .accent { color: #7AA5FF; }
+.login-tagline {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-bottom: 26px;
+}
+.login-capabilities {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.login-cap {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.6px;
+  color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(122, 165, 255, 0.35);
+  background: rgba(47, 111, 237, 0.12);
+  border-radius: 999px;
+  padding: 5px 14px;
+  backdrop-filter: blur(2px);
+}
+.login-card {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(122, 165, 255, 0.25);
+  border-radius: 16px;
+  padding: 34px 32px 26px;
+  box-shadow:
+    0 24px 80px rgba(3, 8, 24, 0.55),
+    0 0 0 1px rgba(255,255,255,0.04);
+}
+.login-form-title {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 600;
+  color: var(--ink-900);
+  margin: 0 0 4px;
+}
+.login-form-sub {
+  color: var(--slate);
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+.login-card .ant-input-affix-wrapper,
+.login-card .ant-input {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+}
+.login-submit.ant-btn {
+  background: var(--ink-900);
+  border-color: var(--ink-900);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  height: 44px;
+}
+.login-submit.ant-btn:hover { background: var(--ink-700) !important; border-color: var(--ink-700) !important; }
+.login-footer {
+  margin-top: 26px;
+  font-size: 11.5px;
+  color: var(--slate);
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .login-stage-inner {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 36px 20px;
+    align-content: center;
+  }
+  .login-hero { text-align: center; }
+  .login-capabilities { justify-content: center; }
+  .login-card { max-width: 420px; margin: 0 auto; width: 100%; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Weekly Report — document masthead + figures. The tab reads as a formal
+   ops report: eyebrow, week stamp, four compliance figures set large.
+   ════════════════════════════════════════════════════════════════════ */
+.wr-masthead {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--ink-900);
+  border-radius: 8px;
+  padding: 20px 24px 0;
+  margin-bottom: 20px;
+}
+body[data-theme="dark"] .wr-masthead { background: #1c1c1c; border-color: #303030; border-top-color: var(--signal); }
+.wr-masthead-top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+body[data-theme="dark"] .wr-masthead-top { border-bottom-color: #303030; }
+.wr-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: var(--slate);
+  display: block;
+  margin-bottom: 2px;
+}
+.wr-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--ink-900);
+  margin: 0;
+}
+body[data-theme="dark"] .wr-title { color: #f0f0f0; }
+.wr-stamp {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--slate);
+  text-align: right;
+  line-height: 1.7;
+}
+.wr-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.wr-figure {
+  padding: 16px 8px 18px 0;
+}
+.wr-figure + .wr-figure { padding-left: 20px; border-left: 1px solid var(--line); }
+body[data-theme="dark"] .wr-figure + .wr-figure { border-left-color: #303030; }
+.wr-figure-value {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  color: var(--ink-900);
+}
+body[data-theme="dark"] .wr-figure-value { color: #f0f0f0; }
+.wr-figure-value .wr-pct { font-size: 0.55em; font-weight: 600; color: var(--slate); margin-left: 1px; }
+.wr-figure-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-top: 4px;
+}
+.wr-figure-detail {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--slate);
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Print — Ctrl+P produces a clean document: chrome (sidebar, header,
+   footer, tab bar, buttons) hidden, content full-width on white.
+   Built for the Weekly Report, applies sensibly everywhere.
+   ════════════════════════════════════════════════════════════════════ */
+@media print {
+  .ant-layout-sider,
+  .app-header,
+  .ant-layout-footer,
+  .ant-tabs-nav,
+  .ant-btn,
+  .ant-pagination,
+  .ant-alert-close-icon {
+    display: none !important;
+  }
+  .ant-layout, .page-shell {
+    background: #fff !important;
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+  .page-shell > * { animation: none !important; }
+  .wr-masthead { border-radius: 0; break-inside: avoid; }
+  .wr-figures, .weekly-breakdown-card, .ant-card { break-inside: avoid; }
+  .ant-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+  @page { margin: 14mm 12mm; }
+}
+
+/* Drill-through figures keep their text styling as links */
+a.wr-figure { display: block; color: inherit; }
+a.wr-figure:hover .wr-figure-value { color: var(--signal); }
+body[data-theme="dark"] a.wr-figure:hover .wr-figure-value { color: #7AA5FF; }
+
+/* Global search result rows */
+.global-search-row:hover { background: rgba(47, 111, 237, 0.07); }
+body[data-theme="dark"] .global-search-row:hover { background: rgba(47, 111, 237, 0.18); }
+
+/* Bulk-action bar — appears above the table when rows are selected */
+.bulk-bar {
+  background: rgba(47, 111, 237, 0.07);
+  border: 1px solid rgba(47, 111, 237, 0.25);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+}
+body[data-theme="dark"] .bulk-bar {
+  background: rgba(47, 111, 237, 0.15);
+  border-color: rgba(47, 111, 237, 0.4);
 }

@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
 } from 'antd';
@@ -853,7 +854,7 @@ const BREAKDOWN_METRICS = [
   { key: 'onboard_pending',   title: 'Onboard Pending',       color: '#0e7490' },
 ];
 
-function WeeklyBreakdownTable({ rows, groupLabel }) {
+function WeeklyBreakdownTable({ rows, groupLabel, linkFor }) {
   // Each cell: link-coloured number when > 0, "-" when zero.
   const numCell = (v, color) => {
     const n = Number(v ?? 0);
@@ -879,7 +880,12 @@ function WeeklyBreakdownTable({ rows, groupLabel }) {
 
   const columns = [
     { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: '16%',
-      render: v => <strong>{v}</strong> },
+      render: v => {
+        const to = linkFor && v && v !== 'Unknown' ? linkFor(v) : null;
+        return to
+          ? <Link to={to} title={`Open ${v} in Asset Inventory`}><strong>{v}</strong></Link>
+          : <strong>{v}</strong>;
+      } },
     ...activeMetrics.map(m => ({
       title: m.title, dataIndex: m.key, align: 'center', render: v => numCell(v, m.color),
     })),
@@ -975,6 +981,14 @@ function MEComplianceTable({ rows, excludedBuckets = [] }) {
   );
 }
 
+function isoWeek(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+}
+
 function WeeklyReportTab({ data, isDark }) {
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
@@ -1011,11 +1025,45 @@ function WeeklyReportTab({ data, isDark }) {
   const meExtYes  = meExtIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
   const meExtDen  = meExtIncl.reduce((s, r) => s + (r.total  || 0), 0);
 
+  const now = new Date();
+
   return (
     <div>
-      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        Last refreshed: {new Date().toLocaleString()}
-      </Typography.Text>
+      {/* ── Report masthead — the tab reads as a formal ops report ── */}
+      <div className="wr-masthead">
+        <div className="wr-masthead-top">
+          <div>
+            <span className="wr-eyebrow">Weekly Infrastructure Report</span>
+            <h2 className="wr-title">Patch &amp; Agent Compliance</h2>
+          </div>
+          <div className="wr-stamp">
+            W{String(isoWeek(now)).padStart(2, '0')} · {now.getFullYear()}<br />
+            Generated {now.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+        <div className="wr-figures">
+          <Link to="/assets" className="wr-figure" title="Open Asset Inventory">
+            <div className="wr-figure-value">{pct(mslOverall, mslOverallD)}<span className="wr-pct">%</span></div>
+            <div className="wr-figure-label">MSL Compliance</div>
+            <div className="wr-figure-detail">{mslOverall.toLocaleString()} / {mslOverallD.toLocaleString()}</div>
+          </Link>
+          <Link to="/ext-assets" className="wr-figure" title="Open Ext. Asset Inventory">
+            <div className="wr-figure-value">{pct(extNum, extDen)}<span className="wr-pct">%</span></div>
+            <div className="wr-figure-label">Ext. Compliance</div>
+            <div className="wr-figure-detail">{extNum.toLocaleString()} / {extDen.toLocaleString()}</div>
+          </Link>
+          <div className="wr-figure">
+            <div className="wr-figure-value">{pct(combNum, combDen)}<span className="wr-pct">%</span></div>
+            <div className="wr-figure-label">Combined</div>
+            <div className="wr-figure-detail">{combNum.toLocaleString()} / {combDen.toLocaleString()}</div>
+          </div>
+          <div className="wr-figure">
+            <div className="wr-figure-value">{overallPatchPct}<span className="wr-pct">%</span></div>
+            <div className="wr-figure-label">Patch Auto + Manual</div>
+            <div className="wr-figure-detail">{overallPatchN.toLocaleString()} / {overallPatchD.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
 
       <Card bodyStyle={{ padding: '0 20px' }}>
         <WeeklyReportRow label="Asset Inventory">
@@ -1102,7 +1150,8 @@ function WeeklyReportTab({ data, isDark }) {
           Location wise auto/Manual-patching status:
         </Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
-          <WeeklyBreakdownTable rows={locRows} groupLabel="Location" />
+          <WeeklyBreakdownTable rows={locRows} groupLabel="Location"
+            linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`} />
         </Card>
       </div>
 
@@ -1111,7 +1160,8 @@ function WeeklyReportTab({ data, isDark }) {
           Departments Patching Onboarding Status:
         </Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
-          <WeeklyBreakdownTable rows={deptRows} groupLabel="Department" />
+          <WeeklyBreakdownTable rows={deptRows} groupLabel="Department"
+            linkFor={(dept) => `/assets?q=${encodeURIComponent(dept)}`} />
         </Card>
       </div>
 
