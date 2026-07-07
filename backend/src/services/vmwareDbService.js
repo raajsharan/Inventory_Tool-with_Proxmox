@@ -361,16 +361,16 @@ async function getReconciliation() {
     getLatestVMs(),
     db.query(`
       SELECT id, vm_name, ip_address::text AS ip_address, mac_address, os_type, 'assets' AS source
-        FROM assets WHERE deleted_at IS NULL
+        FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       UNION ALL
       SELECT id, vm_name, ip_address::text, mac_address, os_type, 'beijing_assets'
-        FROM beijing_assets WHERE deleted_at IS NULL
+        FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       UNION ALL
       SELECT id, vm_name, ip_address::text, mac_address, os_type, 'ext_assets'
-        FROM ext_assets WHERE deleted_at IS NULL
+        FROM ext_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       UNION ALL
       SELECT id, vm_name, ip_address::text, mac_address, os_type, 'physical_esxi_servers'
-        FROM physical_esxi_servers WHERE deleted_at IS NULL
+        FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
     `).then(r => r.rows),
   ]);
 

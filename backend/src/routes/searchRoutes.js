@@ -14,22 +14,22 @@ router.get('/', authenticate, async (req, res, next) => {
          SELECT id, vm_name, os_hostname, ip_address::text AS ip_address, os_type,
                 'assets' AS source
            FROM assets
-          WHERE deleted_at IS NULL
+          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
             AND (vm_name ILIKE $1 OR os_hostname ILIKE $1 OR ip_address::text ILIKE $1)
          UNION ALL
          SELECT id, vm_name, os_hostname, ip_address::text, os_type, 'beijing_assets'
            FROM beijing_assets
-          WHERE deleted_at IS NULL
+          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
             AND (vm_name ILIKE $1 OR os_hostname ILIKE $1 OR ip_address::text ILIKE $1)
          UNION ALL
          SELECT id, vm_name, os_hostname, ip_address::text, os_type, 'ext_assets'
            FROM ext_assets
-          WHERE deleted_at IS NULL
+          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
             AND (vm_name ILIKE $1 OR os_hostname ILIKE $1 OR ip_address::text ILIKE $1)
          UNION ALL
          SELECT id, vm_name, os_hostname, ip_address::text, os_type, 'physical_esxi_servers'
            FROM physical_esxi_servers
-          WHERE deleted_at IS NULL
+          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
             AND (vm_name ILIKE $1 OR os_hostname ILIKE $1 OR ip_address::text ILIKE $1)
        ) _u
        ORDER BY (vm_name ILIKE $2) DESC, vm_name

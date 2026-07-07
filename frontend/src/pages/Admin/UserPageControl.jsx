@@ -17,6 +17,7 @@ const PAGE_SECTIONS = [
       { key: 'beijing_assets',        label: 'Beijing Assets' },
       { key: 'ext_assets',            label: 'Ext. Assets' },
       { key: 'physical_esxi_servers', label: 'Physical & ESXi Servers' },
+      { key: 'decommissioned',        label: 'Decommissioned' },
       { key: 'reports',               label: 'Report Builder' },
       { key: 'vm-discovery',          label: 'VM Discovery' },
     ],

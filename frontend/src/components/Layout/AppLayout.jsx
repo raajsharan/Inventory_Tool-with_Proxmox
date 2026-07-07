@@ -11,7 +11,7 @@ import {
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -84,8 +84,13 @@ export default function AppLayout() {
         return [inventoryGroup('beijing-assets', 'beijing_assets', <GlobalOutlined />, 'Beijing Assets', '/beijing-assets', 'Add Asset')].filter(Boolean);
       case 'ext-assets':
         return [inventoryGroup('ext-assets', 'ext_assets', <CloudServerOutlined />, 'Ext. Assets', '/ext-assets', 'Add Asset')].filter(Boolean);
-      case 'physical-esxi':
-        return [inventoryGroup('physical-esxi', 'physical_esxi_servers', <HddOutlined />, 'Physical & ESXi', '/physical-esxi', 'Add Server')].filter(Boolean);
+      case 'physical-esxi': {
+        const physical = inventoryGroup('physical-esxi', 'physical_esxi_servers', <HddOutlined />, 'Physical & ESXi', '/physical-esxi', 'Add Server');
+        const decom = can('decommissioned')
+          ? { key: '/decommissioned', icon: <PoweroffOutlined />, label: <Link to="/decommissioned">Decommissioned</Link> }
+          : null;
+        return [physical, decom].filter(Boolean);
+      }
       case '__custom__':
         return customPages
           .filter(p => can(`custom:${p.slug}`))

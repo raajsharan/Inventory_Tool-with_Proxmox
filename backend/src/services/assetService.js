@@ -2,6 +2,7 @@ const db = require('../config/db');
 const crypto = require('../utils/crypto');
 const ApiError = require('../utils/ApiError');
 const deptSvc = require('./departmentService');
+const decomSvc = require('./decommissionService');
 
 const ASSET_COLUMNS = [
   'vm_name','os_hostname','ip_address','asset_type','os_type','os_version',
@@ -34,7 +35,7 @@ async function checkDuplicates({ ip_address, asset_tag, excludeId }) {
   if (ip_address) { params.push(ip_address); conds.push(`ip_address = $${params.length}`); }
   if (asset_tag)  { params.push(asset_tag);  conds.push(`asset_tag = $${params.length}`); }
   if (!conds.length) return;
-  let sql = `SELECT ip_address, asset_tag FROM assets WHERE (${conds.join(' OR ')})`;
+  let sql = `SELECT ip_address, asset_tag FROM assets WHERE (${conds.join(' OR ')}) AND deleted_at IS NULL AND decommissioned_at IS NULL`;
   if (excludeId) { params.push(excludeId); sql += ` AND id <> $${params.length}`; }
   const { rows } = await db.query(sql, params);
   const dupes = {};
@@ -78,13 +79,16 @@ async function create(body, userId) {
     `INSERT INTO assets (${cols.join(',')}) VALUES (${placeholders}) RETURNING *`,
     vals
   );
+  if (row.decommissioned_at) {
+    await decomSvc.logDecommission('assets', rows[0], userId, body.decommissionReason);
+  }
   return scrub(rows[0]);
 }
 
 async function update(id, body, userId) {
   const row = mapBody(body);
   if (!Object.keys(row).length) throw new ApiError(400, 'No fields to update');
-  const existingQ = await db.query(`SELECT department, asset_tag, ip_address FROM assets WHERE id = $1`, [id]);
+  const existingQ = await db.query(`SELECT department, asset_tag, ip_address, decommissioned_at FROM assets WHERE id = $1`, [id]);
   if (!existingQ.rows.length) throw new ApiError(404, 'Asset not found');
   const existing = existingQ.rows[0];
   if (row.department !== undefined || row.asset_tag !== undefined) {
@@ -108,6 +112,31 @@ async function update(id, body, userId) {
     asset_tag:  tagChanged ? row.asset_tag  : undefined,
     excludeId: id,
   });
+  // ── decommission lifecycle ─────────────────────────────────────────
+  let decomEvent = null; // 'decommission' | 'reactivate'
+  if (row.server_status !== undefined) {
+    const nowDecom = decomSvc.isDecomStatus(row.server_status);
+    if (nowDecom && !existing.decommissioned_at) {
+      row.decommissioned_at = new Date();
+      row.decommissioned_by = userId || null;
+      decomEvent = 'decommission';
+    } else if (!nowDecom && existing.decommissioned_at) {
+      // Reactivation — the released IP/tag may have been reused since.
+      const effTag = row.asset_tag  !== undefined ? row.asset_tag  : existing.asset_tag;
+      const effIp  = row.ip_address !== undefined ? row.ip_address : existing.ip_address;
+      if (effTag && await deptSvc.isTagUsedAnywhere(effTag, { excludeTable: 'assets', excludeId: id })) {
+        throw new ApiError(409, 'Cannot reactivate', { asset_tag: `asset tag ${effTag} has been reused by an active record — assign a new tag first` });
+      }
+      if (effIp && await deptSvc.isIpUsedAnywhere(effIp, { excludeTable: 'assets', excludeId: id })) {
+        throw new ApiError(409, 'Cannot reactivate', { ip_address: `IP ${effIp} has been reused by an active record` });
+      }
+      await checkDuplicates({ ip_address: effIp, asset_tag: effTag, excludeId: id });
+      row.decommissioned_at = null;
+      row.decommissioned_by = null;
+      decomEvent = 'reactivate';
+    }
+  }
+
   row.updated_by = userId;
   const cols = Object.keys(row);
   const vals = Object.values(row);
@@ -118,6 +147,11 @@ async function update(id, body, userId) {
     vals
   );
   if (!rows.length) throw new ApiError(404, 'Asset not found');
+  if (decomEvent === 'decommission') {
+    await decomSvc.logDecommission('assets', rows[0], userId, body.decommissionReason);
+  } else if (decomEvent === 'reactivate') {
+    await decomSvc.logReactivation('assets', id, userId);
+  }
   return scrub(rows[0]);
 }
 
@@ -155,7 +189,7 @@ async function viewPassword(id) {
 }
 
 async function list({ search, osType, serverStatus, location, eolStatus, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
-  const where = ['a.deleted_at IS NULL'];
+  const where = ['a.deleted_at IS NULL', 'a.decommissioned_at IS NULL'];
   const params = [];
   if (search) {
     params.push(`%${search}%`);

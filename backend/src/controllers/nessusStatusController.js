@@ -69,28 +69,28 @@ async function get(req, res, next) {
                'MSL Assets' AS source,
                asset_username
           FROM assets
-         WHERE deleted_at IS NULL
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
                COALESCE(tenable_installed, false), COALESCE(os_type, ''), 'Beijing Assets',
                asset_username
           FROM beijing_assets
-         WHERE deleted_at IS NULL
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
                COALESCE(tenable_installed, false), COALESCE(os_type, ''), 'Ext. Assets',
                asset_username
           FROM ext_assets
-         WHERE deleted_at IS NULL
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
                COALESCE(tenable_installed, false), COALESCE(os_type, ''), 'Physical Servers',
                asset_username
           FROM physical_esxi_servers
-         WHERE deleted_at IS NULL
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
       SELECT location,
         COUNT(*)::int                                                              AS total,

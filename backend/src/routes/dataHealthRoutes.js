@@ -5,19 +5,19 @@ const db = require('../config/db');
 const UNION_ACTIVE = `
   SELECT id, vm_name, os_hostname, ip_address::text AS ip_address, location,
          asset_username, asset_password_encrypted, hosted_ip, 'assets' AS source
-    FROM assets WHERE deleted_at IS NULL
+    FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
   UNION ALL
   SELECT id, vm_name, os_hostname, ip_address::text, location,
          asset_username, asset_password_encrypted, hosted_ip, 'beijing_assets'
-    FROM beijing_assets WHERE deleted_at IS NULL
+    FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
   UNION ALL
   SELECT id, vm_name, os_hostname, ip_address::text, location,
          asset_username, asset_password_encrypted, hosted_ip, 'ext_assets'
-    FROM ext_assets WHERE deleted_at IS NULL
+    FROM ext_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
   UNION ALL
   SELECT id, vm_name, os_hostname, ip_address::text, location,
          asset_username, asset_password_encrypted, hosted_ip, 'physical_esxi_servers'
-    FROM physical_esxi_servers WHERE deleted_at IS NULL
+    FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
 `;
 
 // GET /api/data-health — lists the records behind the weekly report's gap

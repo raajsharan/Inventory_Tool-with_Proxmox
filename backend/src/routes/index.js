@@ -33,5 +33,6 @@ router.use('/tenable',             require('./tenableRoutes'));
 router.use('/db-import',           authenticate, requirePageAccess('admin/imports'), require('./dbImportRoutes'));
 router.use('/search',              require('./searchRoutes'));
 router.use('/data-health',         require('./dataHealthRoutes'));
+router.use('/decommissioned',      authenticate, requirePageAccess('decommissioned'), require('./decommissionRoutes'));
 
 module.exports = router;

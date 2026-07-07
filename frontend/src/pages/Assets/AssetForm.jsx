@@ -373,7 +373,27 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           defaultChild: <Input.TextArea rows={2} />,
         }));
       case 'server_status':
-        return wrap(<Form.Item name="serverStatus" label={labelOf('server_status', 'Server Status')}><Select allowClear options={opts('server_status')} /></Form.Item>);
+        return wrap(
+          <>
+            <Form.Item name="serverStatus" label={labelOf('server_status', 'Server Status')}>
+              <Select allowClear options={opts('server_status')} />
+            </Form.Item>
+            {/* Decommission reason — recorded in the permanent decommission report */}
+            <Form.Item noStyle shouldUpdate={(prev, cur) => prev.serverStatus !== cur.serverStatus}>
+              {({ getFieldValue }) =>
+                /^decom/i.test(String(getFieldValue('serverStatus') || '')) ? (
+                  <Form.Item
+                    name="decommissionReason"
+                    label="Decommission reason"
+                    extra="Optional — recorded in the decommission report with your name and date."
+                  >
+                    <Input.TextArea rows={2} placeholder="e.g. Hardware refresh — replaced by BURWPLTG1010" maxLength={500} />
+                  </Form.Item>
+                ) : null
+              }
+            </Form.Item>
+          </>
+        );
       case 'patching_type':
         return wrap(<Form.Item name="patchingType" label={labelOf('patching_type', 'Patching Type')}><Select allowClear options={opts('patching_type')} /></Form.Item>);
       case 'server_patch_type':

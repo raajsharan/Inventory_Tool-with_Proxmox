@@ -19,6 +19,7 @@ const STATIC_PAGES = [
   { key: 'beijing_assets',        label: 'Beijing Assets',           group: 'Inventory' },
   { key: 'ext_assets',            label: 'Ext. Assets',              group: 'Inventory' },
   { key: 'physical_esxi_servers', label: 'Physical & ESXi Servers',  group: 'Inventory' },
+  { key: 'decommissioned',        label: 'Decommissioned',           group: 'Inventory' },
   { key: 'reports',               label: 'Report Builder',           group: 'General' },
   { key: 'admin/users',           label: 'Users',                    group: 'Administration' },
   { key: 'admin/dropdowns',       label: 'Dropdowns',                group: 'Administration' },

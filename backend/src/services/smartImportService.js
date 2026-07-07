@@ -228,7 +228,7 @@ function resolveAssetPassword(raw) {
 async function findByIp(table, ip) {
   if (!ip) return null;
   const { rows } = await db.query(
-    `SELECT * FROM ${table} WHERE ip_address = $1 AND deleted_at IS NULL LIMIT 1`, [ip]
+    `SELECT * FROM ${table} WHERE ip_address = $1 AND deleted_at IS NULL AND decommissioned_at IS NULL LIMIT 1`, [ip]
   );
   return rows[0] || null;
 }
