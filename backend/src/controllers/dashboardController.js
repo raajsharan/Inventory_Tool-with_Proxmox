@@ -119,34 +119,44 @@ async function summary(_req, res, next) {
                   AND eol_status NOT ILIKE 'Not Applic%'));
     `);
 
+    // "in_scope" = countable endpoint: not deleted, not decommissioned
+    // (flag or status), and status is not Not Applicable / Not in Scope.
     const extComplianceQ = db.query(`
+      WITH e AS (
+        SELECT *,
+               (decommissioned_at IS NULL
+                AND (server_status IS NULL OR (
+                      server_status NOT ILIKE 'Decom%'
+                  AND server_status NOT ILIKE 'Not Applic%'
+                  AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
+                  AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
+                ))) AS in_scope
+          FROM ext_assets
+         WHERE deleted_at IS NULL
+      )
       SELECT
+        COUNT(*) FILTER (WHERE in_scope)::int                          AS total,
         COUNT(*) FILTER (
-          WHERE server_status IS NULL
-             OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%')
-        )::int                                                         AS total,
-        COUNT(*) FILTER (
-          WHERE server_status = 'Decommissioned' OR server_status ILIKE 'Decom%'
+          WHERE decommissioned_at IS NOT NULL OR server_status ILIKE 'Decom%'
         )::int                                                         AS decommissioned,
         COUNT(*) FILTER (
-          WHERE asset_password_encrypted IS NOT NULL
-            AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+          WHERE asset_password_encrypted IS NOT NULL AND in_scope
         )::int                                                         AS with_password,
-        COUNT(*) FILTER (WHERE manage_engine_installed = TRUE
-          AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        COUNT(*) FILTER (
+          WHERE manage_engine_installed = TRUE AND in_scope
         )::int                                                         AS me_installed,
         COUNT(*) FILTER (
           WHERE asset_type ILIKE '%network%' OR asset_type ILIKE '%switch%'
              OR asset_type ILIKE '%printer%' OR asset_type ILIKE '%ups%'
              OR asset_type ILIKE '%router%'  OR asset_type ILIKE '%firewall%'
         )::int                                                         AS me_not_applicable,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%'
-          AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        COUNT(*) FILTER (
+          WHERE patching_type ILIKE 'Auto%' AND in_scope
         )::int                                                         AS auto_patching,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%'
-          AND (server_status IS NULL OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
+        COUNT(*) FILTER (
+          WHERE patching_type ILIKE 'Manual%' AND in_scope
         )::int                                                         AS manual_patching
-      FROM ext_assets;
+      FROM e;
     `);
 
     // Name conflicts: ext_assets whose vm_name OR os_hostname collides

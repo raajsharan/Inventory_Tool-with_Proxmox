@@ -1102,7 +1102,7 @@ function WeeklyReportTab({ data, isDark }) {
         <WeeklyReportRow label="Extended Inventory">
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             <strong>Total {(ec.total ?? 0).toLocaleString()} endpoints</strong>{' '}
-            <Typography.Text type="secondary">(decommissioned excluded)</Typography.Text>
+            <Typography.Text type="secondary">(decommissioned, not applicable &amp; not-in-scope excluded)</Typography.Text>
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 8 }}>
             Total decommissioned VMs: <strong>{(ec.decommissioned ?? 0).toLocaleString()}</strong>
