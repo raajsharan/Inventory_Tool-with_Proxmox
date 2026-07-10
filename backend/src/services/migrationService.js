@@ -396,6 +396,29 @@ const SHEET_MAP = {
 
 function hdr(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
+// Known column keys that confirm a row is the real header row
+const KNOWN_HDRS = new Set(['vm', 'host', 'vcenter', 'powerstate', 'cpus', 'memory', 'datacenter', 'cluster', 'migrationstatus']);
+
+function buildHdrMap(ws) {
+  // Try row 1 first; if it doesn't contain any recognised column names, try row 2.
+  // This handles both plain files (headers in row 1) and templated files that have
+  // an instruction note in row 1 with the real headers in row 2.
+  for (const rowNum of [1, 2]) {
+    const row = ws.getRow(rowNum);
+    const map = {};
+    row.eachCell((cell, col) => {
+      const key = hdr(String(cell.value || ''));
+      if (key) map[key] = col;
+    });
+    const hasKnown = Object.keys(map).some(k => KNOWN_HDRS.has(k));
+    if (hasKnown) return { hdrMap: map, dataStartRow: rowNum + 1 };
+  }
+  // Fallback: use row 1 and start data at row 2
+  const map = {};
+  ws.getRow(1).eachCell((cell, col) => { const k = hdr(String(cell.value || '')); if (k) map[k] = col; });
+  return { hdrMap: map, dataStartRow: 2 };
+}
+
 function get(row, idx) {
   if (idx < 0) return null;
   const cell = row.getCell(idx);
@@ -532,12 +555,10 @@ async function previewImport(buffer, projectId = null) {
   for (const ws of wb.worksheets) {
     const sheetEntry = SHEET_MAP[ws.name];
     if (sheetEntry) {
-      const headerRow = ws.getRow(1);
-      const hdrMap = {};
-      headerRow.eachCell((cell, colNumber) => { hdrMap[hdr(String(cell.value || ''))] = colNumber; });
+      const { hdrMap, dataStartRow } = buildHdrMap(ws);
       const rows = [];
       ws.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
+        if (rowNumber < dataStartRow) return;
         const mapped = sheetEntry.mapper(row, hdrMap);
         if (!mapped.vm && !mapped.host) return;
         const preview = { ...mapped };
@@ -550,12 +571,10 @@ async function previewImport(buffer, projectId = null) {
       // check if sheet matches a custom tab label
       const customTab = customTabsByLabel[ws.name.toLowerCase()];
       if (!customTab) continue;
-      const headerRow = ws.getRow(1);
-      const hdrMap = {};
-      headerRow.eachCell((cell, colNumber) => { hdrMap[hdr(String(cell.value || ''))] = colNumber; });
+      const { hdrMap, dataStartRow } = buildHdrMap(ws);
       const rows = [];
       ws.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
+        if (rowNumber < dataStartRow) return;
         const mapped = mapCustomRow(row, hdrMap);
         if (!mapped.vm) return;
         rows.push(mapped);
@@ -585,9 +604,7 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
       if (!sheetEntry) continue;
       const { table, mapper } = sheetEntry;
 
-      const headerRow = ws.getRow(1);
-      const hdrMap = {};
-      headerRow.eachCell((cell, colNumber) => { hdrMap[hdr(String(cell.value || ''))] = colNumber; });
+      const { hdrMap, dataStartRow } = buildHdrMap(ws);
 
       let existingStatuses = {};
       if (preserveStatus) {
@@ -602,7 +619,7 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
 
       const insertedRows = [];
       ws.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
+        if (rowNumber < dataStartRow) return;
         const mapped = mapper(row, hdrMap);
         if (!mapped.vm && !mapped.host) return;
 
@@ -648,9 +665,7 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
       const customTab = customTabsByLabel[ws.name.toLowerCase()];
       if (!customTab) continue;
 
-      const headerRow = ws.getRow(1);
-      const hdrMap = {};
-      headerRow.eachCell((cell, colNumber) => { hdrMap[hdr(String(cell.value || ''))] = colNumber; });
+      const { hdrMap: customHdrMap, dataStartRow: customDataStart } = buildHdrMap(ws);
 
       let existingStatuses = {};
       if (preserveStatus) {
@@ -668,8 +683,8 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
 
       const insertedRows = [];
       ws.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        const mapped = mapCustomRow(row, hdrMap);
+        if (rowNumber < customDataStart) return;
+        const mapped = mapCustomRow(row, customHdrMap);
         if (!mapped.vm) return;
         if (preserveStatus && existingStatuses[mapped.vm]) {
           mapped.migration_status = existingStatuses[mapped.vm];
