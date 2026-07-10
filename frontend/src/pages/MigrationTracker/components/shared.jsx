@@ -277,14 +277,28 @@ export function SummaryCards({ cards }) {
   );
 }
 
+// ── AUTHENTICATED FILE DOWNLOAD HELPER ───────────────────────────────────────
+export function downloadBlob(url, filename) {
+  const token = localStorage.getItem('token');
+  fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.blob();
+    })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(() => {});
+}
+
 // ── CSV DOWNLOAD HELPER ───────────────────────────────────────────────────────
 export function downloadCSV(type, params = {}) {
   const qs = new URLSearchParams(params).toString();
-  const url = `/api/migration/export/${type}${qs ? `?${qs}` : ''}`;
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `migration-${type}.csv`;
-  a.click();
+  downloadBlob(`/api/migration/export/${type}${qs ? `?${qs}` : ''}`, `migration-${type}.csv`);
 }
 
 // ── CELL EMPTY RENDERER ───────────────────────────────────────────────────────

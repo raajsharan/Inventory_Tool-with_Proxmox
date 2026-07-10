@@ -16,6 +16,7 @@ import StandaloneESXiTab   from './components/StandaloneESXiTab.jsx';
 import ImportModal         from './components/ImportModal.jsx';
 import CustomVMsTab        from './components/CustomVMsTab.jsx';
 import { TAB_DEFAULTS }    from './tabColumnRegistry.js';
+import { downloadBlob }   from './components/shared.jsx';
 
 const { Title, Text } = Typography;
 const LS_KEY = 'migration_project_id';
@@ -171,9 +172,10 @@ export default function MigrationTracker() {
           <Space>
             <Button
               icon={<DownloadOutlined />}
-              href={`/api/migration/template${projectId ? `?project_id=${projectId}` : ''}`}
-              download="Migration-Tracker-Template.xlsx"
-              target="_blank"
+              onClick={() => downloadBlob(
+                `/api/migration/template${projectId ? `?project_id=${projectId}` : ''}`,
+                'Migration-Tracker-Template.xlsx'
+              )}
             >
               Download Template
             </Button>
