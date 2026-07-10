@@ -171,8 +171,9 @@ export default function MigrationTracker() {
           <Space>
             <Button
               icon={<DownloadOutlined />}
-              href="/Migration-Tracker-Template.xlsx"
+              href={`/api/migration/template${projectId ? `?project_id=${projectId}` : ''}`}
               download="Migration-Tracker-Template.xlsx"
+              target="_blank"
             >
               Download Template
             </Button>

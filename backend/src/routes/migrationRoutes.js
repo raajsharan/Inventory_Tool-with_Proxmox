@@ -43,6 +43,9 @@ router.patch('/standalone-esxi/:id',     authorize('admin', 'asset_manager'), ct
 router.get('/filter-options/:type',  ctrl.filterOptions);
 router.get('/export/:type',          ctrl.csvExport);
 
+// ── Template download ─────────────────────────────────────────────────────────
+router.get('/template', ctrl.downloadTemplate);
+
 // ── Import (admin only) ───────────────────────────────────────────────────────
 router.post('/import/preview', authorize('admin', 'asset_manager'), ctrl.importPreview);
 router.post('/import/confirm', authorize('admin', 'asset_manager'), ctrl.importConfirm);
