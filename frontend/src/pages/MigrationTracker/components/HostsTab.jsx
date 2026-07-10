@@ -4,7 +4,7 @@ import { DownloadOutlined, WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
-  useMigrTable, SummaryCards, MigrationStatusBadge, StagePill, MaskedField,
+  useMigrTable, SummaryCards, MigrationStatusBadge, MaskedField,
   downloadCSV, cell,
 } from './shared.jsx';
 import FilterToolbar from './FilterToolbar.jsx';
@@ -36,12 +36,13 @@ function ExpiryDate({ value }) {
 // ── Status select (inline edit) ───────────────────────────────────────────────
 const STAGE_VALUES = ['Pending', 'In Progress', 'Completed'];
 
-function StageSelect({ value, onChange }) {
+function StageSelect({ value, onChange, disabled = false }) {
   return (
     <Select
       size="small"
       value={value || 'Pending'}
       onChange={onChange}
+      disabled={disabled}
       style={{ width: 130 }}
       options={STAGE_VALUES.map(v => ({ value: v, label: v }))}
     />
@@ -139,36 +140,24 @@ export default function HostsTab({ projectId, refreshToken = 0 }) {
     { title: 'Powered Off VMs',  dataIndex: 'powered_off_vms',key: 'powered_off_vms',width: 120, render: cell },
     {
       title: 'VMs Vacate',
-      dataIndex: 'vms_vacate', key: 'vms_vacate', width: 130,
-      render: (v, r) => (
-        <StagePill
-          value={v} label=""
-          canEdit={canEdit}
-          onChange={val => patch(r.id, { vms_vacate: val })}
-        />
-      ),
+      dataIndex: 'vms_vacate', key: 'vms_vacate', width: 140,
+      render: (v, r) => canEdit
+        ? <StageSelect value={v} onChange={val => patch(r.id, { vms_vacate: val })} />
+        : <StageSelect value={v} disabled />,
     },
     {
       title: 'Proxmox Install',
-      dataIndex: 'proxmox_install', key: 'proxmox_install', width: 130,
-      render: (v, r) => (
-        <StagePill
-          value={v} label=""
-          canEdit={canEdit}
-          onChange={val => patch(r.id, { proxmox_install: val })}
-        />
-      ),
+      dataIndex: 'proxmox_install', key: 'proxmox_install', width: 140,
+      render: (v, r) => canEdit
+        ? <StageSelect value={v} onChange={val => patch(r.id, { proxmox_install: val })} />
+        : <StageSelect value={v} disabled />,
     },
     {
       title: 'VM Migration Back',
-      dataIndex: 'vm_migration_back', key: 'vm_migration_back', width: 140,
-      render: (v, r) => (
-        <StagePill
-          value={v} label=""
-          canEdit={canEdit}
-          onChange={val => patch(r.id, { vm_migration_back: val })}
-        />
-      ),
+      dataIndex: 'vm_migration_back', key: 'vm_migration_back', width: 145,
+      render: (v, r) => canEdit
+        ? <StageSelect value={v} onChange={val => patch(r.id, { vm_migration_back: val })} />
+        : <StageSelect value={v} disabled />,
     },
   ];
 
