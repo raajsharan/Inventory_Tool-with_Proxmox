@@ -277,10 +277,11 @@ async function downloadTemplate(req, res, next) {
       }
     }
 
+    const buffer = await wb.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Migration-Tracker-Template.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
   } catch (e) { next(e); }
 }
 
