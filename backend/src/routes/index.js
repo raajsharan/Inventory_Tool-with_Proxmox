@@ -35,5 +35,7 @@ router.use('/search',              require('./searchRoutes'));
 router.use('/data-health',         require('./dataHealthRoutes'));
 router.use('/decommissioned',      authenticate, requirePageAccess('decommissioned'), require('./decommissionRoutes'));
 router.use('/compliance-config',   authenticate, require('./complianceConfigRoutes'));
+router.use('/admin/migration-projects', authenticate, require('./migrationProjectRoutes'));
+router.use('/migration',                authenticate, requirePageAccess('migration_tracker'), require('./migrationRoutes'));
 
 module.exports = router;

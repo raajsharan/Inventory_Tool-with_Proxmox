@@ -32,7 +32,8 @@ const STATIC_PAGES = [
   { key: 'admin/recycle-bin',     label: 'Recycle Bin',              group: 'Administration' },
   { key: 'admin/data-health',     label: 'Data Health',              group: 'Administration' },
   { key: 'admin/dashboard-settings', label: 'Dashboard Settings',    group: 'Administration' },
-  { key: 'admin/compliance-config',  label: 'Compliance Config',     group: 'Administration' },
+  { key: 'admin/compliance-config',   label: 'Compliance Config',     group: 'Administration' },
+  { key: 'admin/migration-config',   label: 'Migration Config',      group: 'Administration' },
   { key: 'admin/imports',         label: 'Import History',           group: 'Administration' },
   { key: 'admin/audit',           label: 'Audit Log',                group: 'Administration' },
   { key: 'admin/nav-order',          label: 'Menu Order',               group: 'Administration' },
@@ -41,6 +42,7 @@ const STATIC_PAGES = [
   { key: 'software_status',         label: 'Software Status (ManageEngine)', group: 'General' },
   { key: 'nessus_status',           label: 'Software Status (Nessus)',       group: 'General' },
   { key: 'tenable_report',          label: 'Tenable Report',                 group: 'General' },
+  { key: 'migration_tracker',       label: 'Migration Tracker',              group: 'General' },
 ];
 
 async function dynamicCustomPages() {

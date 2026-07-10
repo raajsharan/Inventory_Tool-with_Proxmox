@@ -39,6 +39,7 @@ import Profile from './pages/Profile.jsx';
 import RecycleBin from './pages/Admin/RecycleBin.jsx';
 import DataHealth from './pages/Admin/DataHealth.jsx';
 import ComplianceConfig from './pages/Admin/ComplianceConfig.jsx';
+import MigrationConfig  from './pages/Admin/MigrationConfig.jsx';
 import Decommissioned from './pages/Decommissioned.jsx';
 import NavOrder from './pages/Admin/NavOrder.jsx';
 import UserPageControl from './pages/Admin/UserPageControl.jsx';
@@ -51,6 +52,7 @@ import NessusStatus from './pages/NessusStatus/index.jsx';
 import NessusInstallConfig from './pages/Admin/NessusInstallConfig.jsx';
 import TenableReport from './pages/TenableReport/index.jsx';
 import DbImport from './pages/Admin/DbImport.jsx';
+import MigrationTracker from './pages/MigrationTracker/index.jsx';
 
 export default function App() {
   return (
@@ -96,6 +98,7 @@ export default function App() {
         <Route path="/tenable-report"   element={<TenableReport />} />
         <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
         <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
+        <Route path="/migration-tracker"  element={<MigrationTracker />} />
 
         <Route path="/admin/users" element={<Users />} />
         <Route path="/admin/dropdowns" element={<Dropdowns />} />
@@ -112,6 +115,7 @@ export default function App() {
         <Route path="/admin/recycle-bin" element={<RecycleBin />} />
         <Route path="/admin/data-health" element={<DataHealth />} />
         <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
+        <Route path="/admin/migration-config"   element={<MigrationConfig />} />
         <Route path="/decommissioned" element={<Decommissioned />} />
         <Route path="/admin/nav-order" element={<NavOrder />} />
         <Route path="/admin/user-page-control" element={<UserPageControl />} />

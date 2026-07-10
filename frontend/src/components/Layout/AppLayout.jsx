@@ -12,6 +12,7 @@ import {
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
+  ProjectOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -23,7 +24,7 @@ const { Sider, Header, Content, Footer } = Layout;
 
 const DEFAULT_NAV_KEYS = [
   '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
-  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery',
+  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', 'migration-tracker',
 ];
 
 export default function AppLayout() {
@@ -125,6 +126,10 @@ export default function AppLayout() {
             { key: '/proxmox-discovery', icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },
           ],
         }];
+      case 'migration-tracker':
+        return can('migration_tracker')
+          ? [{ key: '/migration-tracker', icon: <ControlOutlined />, label: <Link to="/migration-tracker">Migration Tracker</Link> }]
+          : [];
       default:
         return [];
     }
@@ -151,6 +156,7 @@ export default function AppLayout() {
       can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,              label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
       can('admin/data-health')      && { key: '/admin/data-health',       icon: <HeartOutlined />,             label: <Link to="/admin/data-health">Data Health</Link> },
       can('admin/compliance-config')  && { key: '/admin/compliance-config',  icon: <ControlOutlined />,         label: <Link to="/admin/compliance-config">Compliance Config</Link> },
+      can('admin/migration-config')   && { key: '/admin/migration-config',   icon: <ProjectOutlined />,          label: <Link to="/admin/migration-config">Migration Config</Link> },
       can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
       can('admin/imports')          && { key: '/admin/db-import',         icon: <DatabaseOutlined />,          label: <Link to="/admin/db-import">DB Import</Link> },
       can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },
