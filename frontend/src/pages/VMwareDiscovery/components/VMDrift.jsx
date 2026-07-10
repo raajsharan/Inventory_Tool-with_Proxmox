@@ -99,5 +99,5 @@ export default function VMDrift() {
       ),
     }));
 
-  return <Collapse items={items} defaultActiveKey={items.map(i => i.key)} />;
+  return <Collapse items={items} defaultActiveKey={[]} />;
 }

@@ -4,12 +4,14 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
 });
 
-api.interceptors.request.use((cfg) => {
+// ── Auth header ──────────────────────────────────────────────────────────────
+api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
-  return cfg;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
 });
 
+// ── 401 handler ──────────────────────────────────────────────────────────────
 api.interceptors.response.use(
   (r) => r,
   (err) => {
@@ -18,7 +20,6 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       if (!location.pathname.startsWith('/login')) {
-        // Tell the login page why we're here and where to return after sign-in.
         const from = encodeURIComponent(location.pathname + location.search);
         location.href = `/login?${hadSession ? 'expired=1&' : ''}from=${from}`;
       }

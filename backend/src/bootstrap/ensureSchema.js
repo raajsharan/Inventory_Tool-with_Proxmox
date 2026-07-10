@@ -97,6 +97,24 @@ const STATEMENTS = [
   `DROP INDEX IF EXISTS uq_physical_tag_active`,
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_physical_tag_active ON physical_esxi_servers(asset_tag) WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND asset_tag IS NOT NULL`,
 
+  // ── dashboard customization (org-wide, JSONB so new widgets need no DDL)
+  `CREATE TABLE IF NOT EXISTS dashboard_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO dashboard_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+
+  // ── compliance rule config (admin-editable filters for MSL / Ext queries)
+  `CREATE TABLE IF NOT EXISTS compliance_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO compliance_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+
   // ── vm_name uniqueness removal (drop_vm_name_unique.sql)
   `ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key`,
   `ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_vm_name_key`,

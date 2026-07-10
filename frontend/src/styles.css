@@ -659,3 +659,38 @@ body[data-theme="dark"] .bulk-bar {
   background: rgba(47, 111, 237, 0.15);
   border-color: rgba(47, 111, 237, 0.4);
 }
+
+/* Dashboard in-place customize mode */
+.wgt-editable {
+  position: relative;
+  outline: 1.5px dashed rgba(47, 111, 237, 0.55);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+.wgt-tools {
+  position: absolute;
+  top: 6px; right: 6px;
+  z-index: 20;
+  display: flex; gap: 4px;
+  background: #fff;
+  padding: 3px;
+  border-radius: 7px;
+  box-shadow: 0 2px 10px rgba(11, 21, 48, 0.18);
+}
+body[data-theme="dark"] .wgt-tools { background: #1f1f1f; }
+.wgt-ghost {
+  border: 1.5px dashed rgba(148, 163, 184, 0.6);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+/* Editable report lines (dashboard customize mode) */
+.rl-tools {
+  display: inline-flex; gap: 0;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0.55;
+}
+.rl-tools:hover { opacity: 1; }

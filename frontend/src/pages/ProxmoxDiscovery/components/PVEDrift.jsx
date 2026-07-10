@@ -99,7 +99,7 @@ export default function PVEDrift() {
 
   return (
     <div style={{ padding: 16 }}>
-      <Collapse items={panels} defaultActiveKey={data.map(d => d.host)} />
+      <Collapse items={panels} defaultActiveKey={[]} />
     </div>
   );
 }

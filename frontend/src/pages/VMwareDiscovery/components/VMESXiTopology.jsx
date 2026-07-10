@@ -77,7 +77,7 @@ export default function VMESXiTopology() {
 
   return (
     <Card size="small" title="ESXi Topology">
-      <Collapse items={items} defaultActiveKey={items.map(i => i.key)} />
+      <Collapse items={items} defaultActiveKey={[]} />
     </Card>
   );
 }

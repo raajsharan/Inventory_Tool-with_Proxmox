@@ -38,6 +38,7 @@ import AdminBranding from './pages/Admin/Branding.jsx';
 import Profile from './pages/Profile.jsx';
 import RecycleBin from './pages/Admin/RecycleBin.jsx';
 import DataHealth from './pages/Admin/DataHealth.jsx';
+import ComplianceConfig from './pages/Admin/ComplianceConfig.jsx';
 import Decommissioned from './pages/Decommissioned.jsx';
 import NavOrder from './pages/Admin/NavOrder.jsx';
 import UserPageControl from './pages/Admin/UserPageControl.jsx';
@@ -110,6 +111,7 @@ export default function App() {
         <Route path="/admin/branding" element={<AdminBranding />} />
         <Route path="/admin/recycle-bin" element={<RecycleBin />} />
         <Route path="/admin/data-health" element={<DataHealth />} />
+        <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
         <Route path="/decommissioned" element={<Decommissioned />} />
         <Route path="/admin/nav-order" element={<NavOrder />} />
         <Route path="/admin/user-page-control" element={<UserPageControl />} />

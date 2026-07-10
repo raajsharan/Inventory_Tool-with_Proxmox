@@ -34,5 +34,6 @@ router.use('/db-import',           authenticate, requirePageAccess('admin/import
 router.use('/search',              require('./searchRoutes'));
 router.use('/data-health',         require('./dataHealthRoutes'));
 router.use('/decommissioned',      authenticate, requirePageAccess('decommissioned'), require('./decommissionRoutes'));
+router.use('/compliance-config',   authenticate, require('./complianceConfigRoutes'));
 
 module.exports = router;

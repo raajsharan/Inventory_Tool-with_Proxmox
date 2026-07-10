@@ -1,7 +1,8 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { createContext, useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
+  App, Input, Tooltip,
 } from 'antd';
 import {
   DatabaseOutlined, SafetyCertificateOutlined, ThunderboltOutlined,
@@ -16,6 +17,119 @@ import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
 import { useAppTheme } from '../context/ThemeContext.jsx';
 import InfrastructureDashboard from '../components/InfrastructureDashboard.jsx';
+import {
+  resolveTabs, resolveDefaultView, resolveDefaultTab, resolveWidget, customWidgetsFor,
+  DASHBOARD_WIDGETS,
+} from './Admin/dashboardRegistry.js';
+
+// -- Widget gate + title override -------------------------------------------
+const DashCfgCtx = createContext({ cfg: {} });
+
+const widgetDefaultTitle = (tab, k) =>
+  (DASHBOARD_WIDGETS[tab] || []).find(w => w.key === k)?.defaultTitle || k;
+
+function Wgt({ tab, k, children }) {
+  const { cfg } = useContext(DashCfgCtx);
+  return resolveWidget(cfg, tab, k).visible ? children : null;
+}
+
+function WTitle({ tab, k, d }) {
+  const { cfg } = useContext(DashCfgCtx);
+  return resolveWidget(cfg, tab, k).title || d;
+}
+
+
+
+// -- User-created widgets ---------------------------------------------------
+function CustomWidget({ w }) {
+  const [data, setData] = useState(null);
+  const [err, setErr]   = useState('');
+  useEffect(() => {
+    const params = { source: w.source || 'all' };
+    if (w.type === 'stat') {
+      if (w.filterField && w.filterValue) {
+        params.filterField = w.filterField;
+        params.filterValue = w.filterValue;
+      }
+    } else {
+      params.groupBy = w.groupBy;
+    }
+    api.get('/dashboard/widget-data', { params })
+      .then(r => setData(r.data))
+      .catch(e => setErr(e.response?.data?.error || 'Failed to load widget'));
+  }, [JSON.stringify(w)]); // eslint-disable-line
+
+  if (err) return <Card title={w.title}><Alert type="error" message={err} /></Card>;
+  if (!data) return <Card title={w.title}><Spin /></Card>;
+
+  if (w.type === 'stat') {
+    return (
+      <Card>
+        <Typography.Text type="secondary">{w.title}</Typography.Text>
+        <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.15 }}>
+          {(data.value ?? 0).toLocaleString()}
+        </div>
+        {w.filterField && w.filterValue && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {w.filterField.replace(/_/g, ' ')} = {w.filterValue}
+          </Typography.Text>
+        )}
+      </Card>
+    );
+  }
+  const rows = data.rows || [];
+  if (w.type === 'pie') {
+    return (
+      <Card title={w.title}>
+        <Pie data={rows} angleField="value" colorField="key" radius={0.85}
+          label={{ text: 'value', position: 'outside' }}
+          legend={{ position: 'bottom' }} height={260} />
+      </Card>
+    );
+  }
+  if (w.type === 'column') {
+    return (
+      <Card title={w.title}>
+        <Column data={rows} xField="key" yField="value" height={260}
+          label={{ position: 'top' }} />
+      </Card>
+    );
+  }
+  return (
+    <Card title={w.title}>
+      <Table size="small" rowKey="key" dataSource={rows} pagination={false}
+        columns={[
+          { title: 'Value', dataIndex: 'key' },
+          { title: 'Count', dataIndex: 'value', align: 'right', width: 110,
+            render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+        ]} />
+    </Card>
+  );
+}
+
+function CustomWidgets({ tab }) {
+  const { cfg } = useContext(DashCfgCtx);
+  const widgets = customWidgetsFor(cfg, tab);
+  if (!widgets.length) return null;
+  return (
+    <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+      {widgets.map(w => (
+        <Col key={w.id} xs={24} sm={w.type === 'stat' ? 12 : 24} lg={w.type === 'stat' ? 6 : 12}>
+          {false ? (
+            <div className="wgt-editable">
+              <div className="wgt-tools">
+                <Tooltip title="Remove this custom widget">
+                  <Button size="small" danger onClick={() => {}} />
+                </Tooltip>
+              </div>
+              <CustomWidget w={w} />
+            </div>
+          ) : <CustomWidget w={w} />}
+        </Col>
+      ))}
+    </Row>
+  );
+}
 
 function StatTile({ icon, value, label, color }) {
   return (
@@ -99,7 +213,23 @@ function ExtChip({ label, value, tone }) {
   );
 }
 
-function ExecutiveOverview({ data }) {
+// Build the ordered, filtered, label-resolved chip list for the Ext. Endpoint Compliance card.
+const EXT_CHIP_DEFS = [
+  { key: 'meInstalled',     defaultLabel: 'ManageEngine Installed', tone: 'emerald' },
+  { key: 'meNotApplicable', defaultLabel: 'ME Not Applicable',      tone: 'gray'    },
+  { key: 'nameConflicts',   defaultLabel: 'Name Conflicts',         tone: 'yellow'  },
+  { key: 'autoPatching',    defaultLabel: 'Auto Patching',          tone: 'green'   },
+  { key: 'manualPatching',  defaultLabel: 'Manual Patching',        tone: 'blue'    },
+];
+function resolveExtChips(ec, extCfg = {}) {
+  const hidden = extCfg.hidden_ext_chips ?? [];
+  const labels = extCfg.ext_chip_labels   ?? {};
+  return EXT_CHIP_DEFS
+    .filter(c => !hidden.includes(c.key))
+    .map(c => ({ ...c, label: labels[c.key] || c.defaultLabel, value: ec[c.key] }));
+}
+
+function ExecutiveOverview({ data, compCfg = {} }) {
   const h = data.headline || {};
   const a = data.assetInventory || {};
   const e = data.extendedInventory || {};
@@ -108,7 +238,7 @@ function ExecutiveOverview({ data }) {
 
   return (
     <div>
-      <Row gutter={[16, 16]}>
+      <Wgt tab="exec" k="kpi_cards"><Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -175,9 +305,9 @@ function ExecutiveOverview({ data }) {
             </Space>
           </Card>
         </Col>
-      </Row>
+      </Row></Wgt>
 
-      <div style={{ marginTop: 24 }}>
+      <Wgt tab="exec" k="asset_summary"><div style={{ marginTop: 24 }}>
         <Space size={10} style={{ marginBottom: 12 }}>
           <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
             width: 36, height: 36, borderRadius: 8, display: 'flex',
@@ -185,7 +315,7 @@ function ExecutiveOverview({ data }) {
             <BarChartOutlined />
           </div>
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>Asset Inventory Summary</Typography.Title>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="asset_summary" d="Asset Inventory Summary" /></Typography.Title>
             <Typography.Text type="secondary">Live counts across VM and Physical Server inventory</Typography.Text>
           </div>
         </Space>
@@ -209,9 +339,9 @@ function ExecutiveOverview({ data }) {
           <StatTile icon={<PoweroffOutlined />}        value={a.poweredOff}      label="Powered Off"      color={C.amber} />
           <StatTile icon={<CloseCircleOutlined />}     value={a.notAlive}        label="Not Alive"        color={C.rose} />
         </div>
-      </div>
+      </div></Wgt>
 
-      <div style={{ marginTop: 24 }}>
+      <Wgt tab="exec" k="ext_summary"><div style={{ marginTop: 24 }}>
         <Space size={10} style={{ marginBottom: 12 }}>
           <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
             width: 36, height: 36, borderRadius: 8, display: 'flex',
@@ -219,7 +349,7 @@ function ExecutiveOverview({ data }) {
             <AppstoreOutlined />
           </div>
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>Extended Inventory Summary</Typography.Title>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="ext_summary" d="Extended Inventory Summary" /></Typography.Title>
             <Typography.Text type="secondary">Live counts from extended inventory</Typography.Text>
           </div>
         </Space>
@@ -231,9 +361,9 @@ function ExecutiveOverview({ data }) {
           <StatTile icon={<SafetyOutlined />}        value={e.meInstalled} label="Ext. ME Installed" color={C.emerald} />
           <StatTile icon={<SafetyCertificateOutlined />} value={e.tenable} label="Ext. Tenable"      color={C.cyan} />
         </div>
-      </div>
+      </div></Wgt>
 
-      <Card style={{ marginTop: 24 }}
+      <Wgt tab="exec" k="msl_compliance"><Card style={{ marginTop: 24 }}
         title={
           <Space>
             <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
@@ -242,7 +372,7 @@ function ExecutiveOverview({ data }) {
               <RiseOutlined />
             </div>
             <div>
-              <Typography.Title level={5} style={{ margin: 0 }}>Total Inventory MSL Compliance</Typography.Title>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="msl_compliance" d="Total Inventory MSL Compliance" /></Typography.Title>
               <Typography.Text type="secondary">MSL includes VMs in Alive/Powered Off scope and excludes Decom/Not Applicable</Typography.Text>
             </div>
           </Space>
@@ -267,9 +397,9 @@ function ExecutiveOverview({ data }) {
               render: v => <a style={{ fontWeight: 600 }}>{(v ?? 0).toLocaleString()}</a> },
           ]}
         />
-      </Card>
+      </Card></Wgt>
 
-      <Card style={{ marginTop: 16 }}
+      <Wgt tab="exec" k="ext_compliance"><Card style={{ marginTop: 16 }}
         title={
           <Space>
             <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
@@ -278,7 +408,7 @@ function ExecutiveOverview({ data }) {
               <AppstoreOutlined />
             </div>
             <div>
-              <Typography.Title level={5} style={{ margin: 0 }}>Ext. Endpoint Compliance</Typography.Title>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="ext_compliance" d="Ext. Endpoint Compliance" /></Typography.Title>
               <Typography.Text type="secondary">Password and agent compliance across extended inventory endpoints</Typography.Text>
             </div>
           </Space>
@@ -296,13 +426,44 @@ function ExecutiveOverview({ data }) {
         </Typography.Paragraph>
 
         <Row gutter={[12, 12]}>
-          <Col xs={24} md={12}><ExtChip label="ManageEngine Installed" value={ec.meInstalled}     tone="emerald" /></Col>
-          <Col xs={24} md={12}><ExtChip label="ME Not Applicable"      value={ec.meNotApplicable} tone="gray" /></Col>
-          <Col xs={24} md={12}><ExtChip label="Name Conflicts"         value={ec.nameConflicts}   tone="yellow" /></Col>
-          <Col xs={24} md={12}><ExtChip label="Auto Patching"          value={ec.autoPatching}    tone="green" /></Col>
-          <Col xs={24} md={12}><ExtChip label="Manual Patching"        value={ec.manualPatching}  tone="blue" /></Col>
+          {resolveExtChips(ec, compCfg.ext).map(c => (
+            <Col xs={24} md={12} key={c.key}>
+              <ExtChip label={c.label} value={c.value} tone={c.tone} />
+            </Col>
+          ))}
         </Row>
-      </Card>
+
+        <div style={{ marginTop: 20, maxWidth: 340 }}>
+          <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: '#1d4ed8' }}>
+            Location-wise endpoint count:
+          </Typography.Text>
+          <Table
+            rowKey="location"
+            size="small"
+            dataSource={ec.locationCount || []}
+            pagination={false}
+            tableLayout="fixed"
+            locale={{ emptyText: 'No location data assigned in Extended Inventory' }}
+            columns={[
+              { title: 'Location', dataIndex: 'location' },
+              { title: 'Count', dataIndex: 'count', align: 'right',
+                render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+            ]}
+            summary={(rows) => {
+              if (!rows.length) return null;
+              const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+              return (
+                <Table.Summary.Row style={{ fontWeight: 700 }}>
+                  <Table.Summary.Cell index={0}><strong>Grand Total</strong></Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <strong>{grand.toLocaleString()}</strong>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
+              );
+            }}
+          />
+        </div>
+      </Card></Wgt>
     </div>
   );
 }
@@ -368,7 +529,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
             <RiseOutlined />
           </div>
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>Asset Inventory Active Status</Typography.Title>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="active_status" d="Asset Inventory Active Status" /></Typography.Title>
             <Typography.Text type="secondary">VM and Physical Server records on Windows/Linux, based on patching type and excluding VMware</Typography.Text>
           </div>
         </Space>
@@ -403,7 +564,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
             <ThunderboltOutlined />
           </div>
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>Asset Inventory Patching Status</Typography.Title>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="patching_status" d="Asset Inventory Patching Status" /></Typography.Title>
             <Typography.Text type="secondary">Patching type distribution across VM, Physical Server, and Bare Metal Server inventory</Typography.Text>
           </div>
         </Space>
@@ -440,7 +601,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
             <EnvironmentOutlined />
           </div>
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>VM Count by Location</Typography.Title>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="vm_by_location" d="VM Count by Location" /></Typography.Title>
             <Typography.Text type="secondary">Live VM inventory grouped by location</Typography.Text>
           </div>
         </Space>
@@ -479,47 +640,47 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
     <div>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card title="Assets by OS Type">
+        <Col xs={24} lg={12}><Wgt tab="asset" k="os_chart">
+          <Card title={<WTitle tab="asset" k="os_chart" d="Assets by OS Type" />}>
             <Pie data={data.charts?.byOsType || []} angleField="value" colorField="key" radius={0.85}
               theme={chartTheme}
               label={{ text: 'value', position: 'outside', style: labelStyle }}
               legend={{ position: 'bottom', ...legendStyle }}
               height={260} />
           </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Assets by Server Status">
+        </Wgt></Col>
+        <Col xs={24} lg={12}><Wgt tab="asset" k="status_chart">
+          <Card title={<WTitle tab="asset" k="status_chart" d="Assets by Server Status" />}>
             <Column data={data.charts?.byServerStatus || []} xField="key" yField="value" height={260}
               theme={chartTheme}
               axis={{ x: axisStyle, y: axisStyle }}
               label={{ position: 'top', style: labelStyle }} />
           </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Assets by Location">
+        </Wgt></Col>
+        <Col xs={24} lg={12}><Wgt tab="asset" k="location_chart">
+          <Card title={<WTitle tab="asset" k="location_chart" d="Assets by Location" />}>
             <Column data={data.charts?.byLocation || []} xField="key" yField="value" height={260}
               theme={chartTheme}
               axis={{ x: axisStyle, y: axisStyle }}
               label={{ position: 'top', style: labelStyle }} />
           </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="EOL Status">
+        </Wgt></Col>
+        <Col xs={24} lg={12}><Wgt tab="asset" k="eol_chart">
+          <Card title={<WTitle tab="asset" k="eol_chart" d="EOL Status" />}>
             <Pie data={data.charts?.byEolStatus || []} angleField="value" colorField="key" radius={0.85}
               theme={chartTheme}
               label={{ text: 'value', position: 'outside', style: labelStyle }}
               legend={{ position: 'bottom', ...legendStyle }}
               height={260} />
           </Card>
-        </Col>
+        </Wgt></Col>
       </Row>
 
-      {activeStatusCard}
-      {patchingStatusCard}
-      {vmLocationCard}
+      <Wgt tab="asset" k="active_status">{activeStatusCard}</Wgt>
+      <Wgt tab="asset" k="patching_status">{patchingStatusCard}</Wgt>
+      <Wgt tab="asset" k="vm_by_location">{vmLocationCard}</Wgt>
 
-      <Card title="Recent Assets" style={{ marginTop: 16 }}>
+      <Wgt tab="asset" k="recent_assets"><Card title={<WTitle tab="asset" k="recent_assets" d="Recent Assets" />} style={{ marginTop: 16 }}>
         <Table
           rowKey="id"
           size="small"
@@ -535,12 +696,12 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
             { title: 'Created', dataIndex: 'created_at', render: v => new Date(v).toLocaleString() },
           ]}
         />
-      </Card>
+      </Card></Wgt>
     </div>
   );
 }
 
-function ExtendedInventoryTab({ data }) {
+function ExtendedInventoryTab({ data, compCfg = {} }) {
   const h  = data.headline || {};
   const e  = data.extendedInventory || {};
   const ec = data.extEndpointCompliance || {};
@@ -577,7 +738,7 @@ function ExtendedInventoryTab({ data }) {
 
   return (
     <div>
-      <Row gutter={[16, 16]}>
+      <Wgt tab="ext" k="kpi_cards"><Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -644,9 +805,9 @@ function ExtendedInventoryTab({ data }) {
             </Space>
           </Card>
         </Col>
-      </Row>
+      </Row></Wgt>
 
-      <div style={{ marginTop: 24 }}>
+      <Wgt tab="ext" k="ext_summary"><div style={{ marginTop: 24 }}>
         <Space size={10} style={{ marginBottom: 12 }}>
           <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
             width: 36, height: 36, borderRadius: 8, display: 'flex',
@@ -654,7 +815,7 @@ function ExtendedInventoryTab({ data }) {
             <AppstoreOutlined />
           </div>
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>Extended Inventory Summary</Typography.Title>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="ext" k="ext_summary" d="Extended Inventory Summary" /></Typography.Title>
             <Typography.Text type="secondary">Live counts from extended inventory</Typography.Text>
           </div>
         </Space>
@@ -665,9 +826,9 @@ function ExtendedInventoryTab({ data }) {
           <StatTile icon={<SafetyOutlined />}        value={e.meInstalled} label="Ext. ME Installed" color={C.emerald} />
           <StatTile icon={<SafetyCertificateOutlined />} value={e.tenable} label="Ext. Tenable"      color={C.cyan} />
         </div>
-      </div>
+      </div></Wgt>
 
-      <Card style={{ marginTop: 24 }}
+      <Wgt tab="ext" k="ext_compliance"><Card style={{ marginTop: 24 }}
         title={
           <Space>
             <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
@@ -676,7 +837,7 @@ function ExtendedInventoryTab({ data }) {
               <AppstoreOutlined />
             </div>
             <div>
-              <Typography.Title level={5} style={{ margin: 0 }}>Ext. Endpoint Compliance</Typography.Title>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="ext" k="ext_compliance" d="Ext. Endpoint Compliance" /></Typography.Title>
               <Typography.Text type="secondary">Password and agent compliance across extended inventory endpoints</Typography.Text>
             </div>
           </Space>
@@ -693,15 +854,46 @@ function ExtendedInventoryTab({ data }) {
           {(ec.total ? (ec.withPassword / ec.total) * 100 : 0).toFixed(2)}%
         </Typography.Paragraph>
         <Row gutter={[12, 12]}>
-          <Col xs={24} md={12}><ExtChip label="ManageEngine Installed" value={ec.meInstalled}     tone="emerald" /></Col>
-          <Col xs={24} md={12}><ExtChip label="ME Not Applicable"      value={ec.meNotApplicable} tone="gray" /></Col>
-          <Col xs={24} md={12}><ExtChip label="Name Conflicts"         value={ec.nameConflicts}   tone="yellow" /></Col>
-          <Col xs={24} md={12}><ExtChip label="Auto Patching"          value={ec.autoPatching}    tone="green" /></Col>
-          <Col xs={24} md={12}><ExtChip label="Manual Patching"        value={ec.manualPatching}  tone="blue" /></Col>
+          {resolveExtChips(ec, compCfg.ext).map(c => (
+            <Col xs={24} md={12} key={c.key}>
+              <ExtChip label={c.label} value={c.value} tone={c.tone} />
+            </Col>
+          ))}
         </Row>
-      </Card>
 
-      <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 20, maxWidth: 340 }}>
+          <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: '#1d4ed8' }}>
+            Location-wise endpoint count:
+          </Typography.Text>
+          <Table
+            rowKey="location"
+            size="small"
+            dataSource={ec.locationCount || []}
+            pagination={false}
+            tableLayout="fixed"
+            locale={{ emptyText: 'No location data assigned in Extended Inventory' }}
+            columns={[
+              { title: 'Location', dataIndex: 'location' },
+              { title: 'Count', dataIndex: 'count', align: 'right',
+                render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+            ]}
+            summary={(rows) => {
+              if (!rows.length) return null;
+              const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+              return (
+                <Table.Summary.Row style={{ fontWeight: 700 }}>
+                  <Table.Summary.Cell index={0}><strong>Grand Total</strong></Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <strong>{grand.toLocaleString()}</strong>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
+              );
+            }}
+          />
+        </div>
+      </Card></Wgt>
+
+      <Wgt tab="ext" k="dept_distribution"><div style={{ marginTop: 24 }}>
         <Space size={10} style={{ marginBottom: 12 }}>
           <div style={{ background: 'rgba(124,58,237,0.16)', color: '#7c3aed',
             width: 28, height: 28, borderRadius: 8, display: 'flex',
@@ -718,7 +910,7 @@ function ExtendedInventoryTab({ data }) {
             <Space>
               <TeamOutlined style={{ color: '#7c3aed' }} />
               <div>
-                <Typography.Title level={5} style={{ margin: 0 }}>Ext. Dept-wise Endpoint Distribution</Typography.Title>
+                <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="ext" k="dept_distribution" d="Ext. Dept-wise Endpoint Distribution" /></Typography.Title>
                 <Typography.Text type="secondary">
                   Extended inventory assets by department with status, patching, agent, and server-state details.
                   Updated {new Date().toLocaleTimeString()}
@@ -752,25 +944,25 @@ function ExtendedInventoryTab({ data }) {
             }}
           />
         </Card>
-      </div>
+      </div></Wgt>
     </div>
   );
 }
 
-function PatchPill({ n, label, tone }) {
+function PatchPill({ n, label, tone, isDark }) {
   const palette = {
-    green:  { bg: 'rgba(34,197,94,0.10)',  fg: '#15803d' },
-    blue:   { bg: 'rgba(59,130,246,0.10)', fg: '#1d4ed8' },
-    yellow: { bg: 'rgba(234,179,8,0.18)',  fg: '#a16207' },
-    purple: { bg: 'rgba(168,85,247,0.10)', fg: '#7e22ce' },
-    red:    { bg: 'rgba(239,68,68,0.10)',  fg: '#b91c1c' },
-    cyan:   { bg: 'rgba(6,182,212,0.10)',  fg: '#0e7490' },
-    gray:   { bg: 'rgba(148,163,184,0.12)',fg: '#475569' },
-    orange: { bg: 'rgba(249,115,22,0.10)', fg: '#c2410c' },
+    green:  { bg: 'rgba(34,197,94,0.10)',  fg: '#15803d', dfg: '#4ade80' },
+    blue:   { bg: 'rgba(59,130,246,0.10)', fg: '#1d4ed8', dfg: '#60a5fa' },
+    yellow: { bg: 'rgba(234,179,8,0.18)',  fg: '#a16207', dfg: '#fbbf24' },
+    purple: { bg: 'rgba(168,85,247,0.10)', fg: '#7e22ce', dfg: '#c084fc' },
+    red:    { bg: 'rgba(239,68,68,0.10)',  fg: '#b91c1c', dfg: '#f87171' },
+    cyan:   { bg: 'rgba(6,182,212,0.10)',  fg: '#0e7490', dfg: '#22d3ee' },
+    gray:   { bg: 'rgba(148,163,184,0.12)',fg: '#475569', dfg: '#94a3b8' },
+    orange: { bg: 'rgba(249,115,22,0.10)', fg: '#c2410c', dfg: '#fb923c' },
   }[tone || 'gray'];
   return (
     <div style={{
-      background: palette.bg, color: palette.fg,
+      background: palette.bg, color: isDark ? palette.dfg : palette.fg,
       borderRadius: 8, padding: '8px 12px',
     }}>
       <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{(n ?? 0).toLocaleString()}</div>
@@ -811,14 +1003,14 @@ function PatchingStatusCard({ title, data, isDark }) {
         </Col>
         <Col xs={24} md={18}>
           <Row gutter={[10, 10]}>
-            <Col xs={12} md={8}><PatchPill n={data?.auto_patching}     label="Auto"               tone="green" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.manual_patching}   label="Manual"             tone="blue" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.exception}         label="Exception"          tone="yellow" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.beijing_it}        label="Beijing IT"         tone="purple" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.eol}               label="EOL - No Patches"   tone="red" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.pending}           label="Pending"            tone="cyan" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.on_hold}           label="On Hold"            tone="gray" /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.alive_powered_off} label="Alive Powered Off"  tone="orange" /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.auto_patching}     label="Auto"               tone="green"  isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.manual_patching}   label="Manual"             tone="blue"   isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.exception}         label="Exception"          tone="yellow" isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.beijing_it}        label="Beijing IT"         tone="purple" isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.eol}               label="EOL - No Patches"   tone="red"    isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.pending}           label="Pending"            tone="cyan"   isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.on_hold}           label="On Hold"            tone="gray"   isDark={isDark} /></Col>
+            <Col xs={12} md={8}><PatchPill n={data?.alive_powered_off} label="Alive Powered Off"  tone="orange" isDark={isDark} /></Col>
           </Row>
         </Col>
       </Row>
@@ -832,7 +1024,7 @@ function PatchingStatusCard({ title, data, isDark }) {
 
 function WeeklyReportRow({ label, children }) {
   return (
-    <Row gutter={16} style={{ padding: '16px 0', borderBottom: '1px solid var(--ant-color-border-secondary, #f0f0f0)' }}>
+    <Row gutter={16} style={{ padding: '16px 0', borderBottom: '1px solid var(--ant-color-border-secondary, #303030)' }}>
       <Col xs={24} md={4}>
         <Typography.Text strong>{label}</Typography.Text>
       </Col>
@@ -844,39 +1036,39 @@ function WeeklyReportRow({ label, children }) {
 // All possible patching-type columns; only those with at least one non-zero
 // value across the rows are rendered, so the table adapts to the data.
 const BREAKDOWN_METRICS = [
-  { key: 'alive_powered_off', title: 'Alive But Powered Off', color: '#c2410c' },
-  { key: 'auto_patching',     title: 'Auto',                  color: '#15803d' },
-  { key: 'beijing_it',        title: 'Beijing IT Team',       color: '#7e22ce' },
-  { key: 'eol',               title: 'EOL - No Patches',      color: '#b91c1c' },
-  { key: 'exception',         title: 'Exception',             color: '#a16207' },
-  { key: 'manual_patching',   title: 'Manual',                color: '#1d4ed8' },
-  { key: 'on_hold',           title: 'On Hold',               color: '#475569' },
-  { key: 'onboard_pending',   title: 'Onboard Pending',       color: '#0e7490' },
+  { key: 'alive_powered_off', title: 'Alive But Powered Off', color: '#c2410c', darkColor: '#fb923c' },
+  { key: 'auto_patching',     title: 'Auto',                  color: '#15803d', darkColor: '#4ade80' },
+  { key: 'beijing_it',        title: 'Beijing IT Team',       color: '#7e22ce', darkColor: '#c084fc' },
+  { key: 'eol',               title: 'EOL - No Patches',      color: '#b91c1c', darkColor: '#f87171' },
+  { key: 'exception',         title: 'Exception',             color: '#a16207', darkColor: '#fbbf24' },
+  { key: 'manual_patching',   title: 'Manual',                color: '#1d4ed8', darkColor: '#60a5fa' },
+  { key: 'on_hold',           title: 'On Hold',               color: '#475569', darkColor: '#94a3b8' },
+  { key: 'onboard_pending',   title: 'Onboard Pending',       color: '#0e7490', darkColor: '#22d3ee' },
 ];
 
-function WeeklyBreakdownTable({ rows, groupLabel, linkFor }) {
+function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'] }) {
   // Each cell: link-coloured number when > 0, "-" when zero.
-  const numCell = (v, color) => {
+  const numCell = (v, color, darkColor) => {
     const n = Number(v ?? 0);
     if (n === 0) return <span style={{ color: '#94a3b8' }}>-</span>;
-    return <span style={{ color, fontWeight: 600 }}>{n.toLocaleString()}</span>;
+    return <span style={{ color: isDark ? (darkColor || color) : color, fontWeight: 600 }}>{n.toLocaleString()}</span>;
   };
 
-  // Percentage = (Total - Alive But Powered Off - EOL) / Total — the
-  // fraction of records that are actively in scope for patching.
+  // Percentage = (Total - out-of-scope types) / Total using pctExclude config.
   const enriched = (rows || []).map(r => {
     const total = Number(r.total || 0);
-    const inScope = total - Number(r.alive_powered_off || 0) - Number(r.eol || 0);
+    const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
+    const inScope = total - excluded;
     return { ...r, pct: total ? (inScope / total) * 100 : 0 };
   });
 
   const sumKey = (key) => enriched.reduce((s, r) => s + Number(r[key] || 0), 0);
   const totalSum = sumKey('total');
-  const inScopeSum = totalSum - sumKey('alive_powered_off') - sumKey('eol');
+  const inScopeSum = totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
   const totalPct = totalSum ? (inScopeSum / totalSum) * 100 : 0;
 
-  // Dynamic columns: drop any metric that is zero/empty for every row.
-  const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0);
+  // Dynamic columns: drop any metric that is zero/empty for every row, then apply explicit hidden list.
+  const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0 && !hiddenColumns.includes(m.key));
 
   const columns = [
     { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: '16%',
@@ -887,7 +1079,7 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor }) {
           : <strong>{v}</strong>;
       } },
     ...activeMetrics.map(m => ({
-      title: m.title, dataIndex: m.key, align: 'center', render: v => numCell(v, m.color),
+      title: m.title, dataIndex: m.key, align: 'center', render: v => numCell(v, m.color, m.darkColor),
     })),
     { title: 'Total',      dataIndex: 'total', align: 'center',
       render: v => <strong>{Number(v ?? 0).toLocaleString()}</strong> },
@@ -927,7 +1119,7 @@ const ME_BUCKET_ORDER = [
   'EOL - No Patches', 'Exception', 'Manual', 'Not Applicable', 'On Hold', 'Onboard Pending', 'Other',
 ];
 
-function MEComplianceTable({ rows, excludedBuckets = [] }) {
+function MEComplianceTable({ rows, excludedBuckets = [], isDark }) {
   const sorted = [...rows].sort(
     (a, b) => ME_BUCKET_ORDER.indexOf(a.bucket) - ME_BUCKET_ORDER.indexOf(b.bucket),
   );
@@ -935,48 +1127,80 @@ function MEComplianceTable({ rows, excludedBuckets = [] }) {
   const totalYes = sorted.reduce((s, r) => s + (r.yes_me || 0), 0);
   const totalAll = sorted.reduce((s, r) => s + (r.total  || 0), 0);
 
-  const dash = (n) => (n === 0 ? <span style={{ color: '#bbb' }}>—</span> : <strong style={{ color: '#1d4ed8' }}>{n.toLocaleString()}</strong>);
+  const accent   = isDark ? '#60a5fa' : '#1d4ed8';
+  const dimColor = isDark ? '#6b7280' : '#aaa';
+  const dashEl   = (n) => n === 0
+    ? <span style={{ color: isDark ? '#555' : '#bbb' }}>—</span>
+    : <strong style={{ color: accent }}>{n.toLocaleString()}</strong>;
 
-  const thStyle = {
-    background: '#e8eef7', fontWeight: 700, fontSize: 12,
-    padding: '8px 12px', textAlign: 'left', letterSpacing: 0.3,
-    borderBottom: '2px solid #c8d8ef',
-  };
-  const tdStyle = (align = 'left') => ({
-    padding: '7px 12px', borderBottom: '1px solid #f0f0f0',
-    textAlign: align, fontSize: 13,
-  });
+  const numColW = 110;
+  const columns = [
+    {
+      title: 'PATCHING TYPE \\ MANAGEENGINE INSTALLED',
+      dataIndex: 'bucket',
+      render: (v) => {
+        const excl = excludedBuckets.includes(v);
+        return <span style={{ color: excl ? dimColor : undefined }}>{v}</span>;
+      },
+    },
+    {
+      title: 'NO',
+      dataIndex: 'no_me',
+      align: 'right',
+      width: numColW,
+      render: (v, r) => {
+        const excl = excludedBuckets.includes(r.bucket);
+        return excl ? <span style={{ color: dimColor }}>{dashEl(v)}</span> : dashEl(v);
+      },
+    },
+    {
+      title: 'YES',
+      dataIndex: 'yes_me',
+      align: 'right',
+      width: numColW,
+      render: (v, r) => {
+        const excl = excludedBuckets.includes(r.bucket);
+        return excl ? <span style={{ color: dimColor }}>{dashEl(v)}</span> : dashEl(v);
+      },
+    },
+    {
+      title: 'TOTAL',
+      dataIndex: 'total',
+      align: 'right',
+      width: numColW,
+      render: (v, r) => {
+        const excl = excludedBuckets.includes(r.bucket);
+        return <strong style={{ color: excl ? dimColor : undefined }}>{(v || 0).toLocaleString()}</strong>;
+      },
+    },
+  ];
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr>
-            <th style={{ ...thStyle, width: '55%' }}>PATCHING TYPE \ MANAGEENGINE INSTALLED</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>NO</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>YES</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r) => (
-            <tr key={r.bucket} style={{ background: excludedBuckets.includes(r.bucket) ? '#fafafa' : undefined }}>
-              <td style={{ ...tdStyle(), color: excludedBuckets.includes(r.bucket) ? '#aaa' : undefined }}>{r.bucket}</td>
-              <td style={tdStyle('right')}>{dash(r.no_me)}</td>
-              <td style={tdStyle('right')}>{dash(r.yes_me)}</td>
-              <td style={{ ...tdStyle('right'), fontWeight: 600 }}>{(r.total || 0).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr style={{ background: '#f5f7fb', fontWeight: 700 }}>
-            <td style={{ ...tdStyle(), fontWeight: 700 }}>Total</td>
-            <td style={{ ...tdStyle('right'), fontWeight: 700, color: '#1d4ed8' }}>{totalNo.toLocaleString()}</td>
-            <td style={{ ...tdStyle('right'), fontWeight: 700, color: '#1d4ed8' }}>{totalYes.toLocaleString()}</td>
-            <td style={{ ...tdStyle('right'), fontWeight: 700 }}>{totalAll.toLocaleString()}</td>
-          </tr>
-        </tfoot>
-      </table>
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 700 }}>
+        <Table
+          rowKey="bucket"
+          size="small"
+          dataSource={sorted}
+          columns={columns}
+          pagination={false}
+          rowClassName={(r) => excludedBuckets.includes(r.bucket) ? 'me-excl-row' : ''}
+          summary={() => (
+            <Table.Summary.Row style={{ fontWeight: 700 }}>
+              <Table.Summary.Cell index={0}><strong>Total</strong></Table.Summary.Cell>
+              <Table.Summary.Cell index={1} align="right">
+                <strong style={{ color: accent }}>{totalNo.toLocaleString()}</strong>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={2} align="right">
+                <strong style={{ color: accent }}>{totalYes.toLocaleString()}</strong>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={3} align="right">
+                <strong>{totalAll.toLocaleString()}</strong>
+              </Table.Summary.Cell>
+            </Table.Summary.Row>
+          )}
+        />
+      </div>
     </div>
   );
 }
@@ -989,7 +1213,7 @@ function isoWeek(d) {
   return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
 }
 
-function WeeklyReportTab({ data, isDark }) {
+function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
@@ -1015,9 +1239,23 @@ function WeeklyReportTab({ data, isDark }) {
   const overallPatchD = apTotal + epTotal;
   const overallPatchPct = overallPatchD ? ((overallPatchN / overallPatchD) * 100).toFixed(2) : '0.00';
 
-  // ME compliance: exclude Beijing IT, Not Applicable, Powered Off, EOL from denominator
-  const MSL_EXCL = ['Beijing IT Team', 'Not Applicable', 'Alive But Powered Off', 'EOL - No Patches'];
-  const EXT_EXCL = ['Beijing IT Team', 'Not Applicable', 'Alive But Powered Off', 'EOL - No Patches', 'Exception'];
+  // Weekly config with fallbacks
+  const MSL_EXCL       = compCfg.weekly?.me_msl_exclude_buckets
+    ?? ['Beijing IT Team', 'Not Applicable', 'Alive But Powered Off', 'EOL - No Patches'];
+  const EXT_EXCL       = compCfg.weekly?.me_ext_exclude_buckets
+    ?? ['Beijing IT Team', 'Not Applicable', 'Alive But Powered Off', 'EOL - No Patches', 'Exception'];
+  const MSL_FOOTNOTE   = compCfg.weekly?.me_msl_footnote   || '(*Excludes Bomgar & Beijing Team Managed count, esxi hosts and not applicable vms, powered off VMs EOL VMs)';
+  const EXT_FOOTNOTE   = compCfg.weekly?.me_ext_footnote   || "(*Excludes ESXi hosts and not applicable vm's like appliances, Beijing IT managed, exceptions, EOL VMs)";
+  const HIDDEN_COLS    = compCfg.weekly?.breakdown_hidden_columns    ?? [];
+  const PCT_EXCL       = compCfg.weekly?.breakdown_pct_exclude       ?? ['alive_powered_off', 'eol'];
+  const EXCL_LOCS      = compCfg.weekly?.breakdown_excluded_locations    ?? [];
+  const EXCL_DEPTS     = compCfg.weekly?.breakdown_excluded_departments  ?? [];
+  const REPORT_TITLE   = compCfg.weekly?.report_title    || 'Weekly Infrastructure Report';
+  const REPORT_SUB     = compCfg.weekly?.report_subtitle || 'Patch & Agent Compliance';
+
+  const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
+  const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));
+
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
   const meMslYes  = meMslIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
@@ -1029,12 +1267,12 @@ function WeeklyReportTab({ data, isDark }) {
 
   return (
     <div>
-      {/* ── Report masthead — the tab reads as a formal ops report ── */}
+      <Wgt tab="weekly" k="masthead">{/* ── Report masthead — the tab reads as a formal ops report ── */}
       <div className="wr-masthead">
         <div className="wr-masthead-top">
           <div>
-            <span className="wr-eyebrow">Weekly Infrastructure Report</span>
-            <h2 className="wr-title">Patch &amp; Agent Compliance</h2>
+            <span className="wr-eyebrow">{REPORT_TITLE}</span>
+            <h2 className="wr-title">{REPORT_SUB}</h2>
           </div>
           <div className="wr-stamp">
             W{String(isoWeek(now)).padStart(2, '0')} · {now.getFullYear()}<br />
@@ -1063,46 +1301,44 @@ function WeeklyReportTab({ data, isDark }) {
             <div className="wr-figure-detail">{overallPatchN.toLocaleString()} / {overallPatchD.toLocaleString()}</div>
           </div>
         </div>
-      </div>
+      </div></Wgt>
 
       <Card bodyStyle={{ padding: '0 20px' }}>
-        <WeeklyReportRow label="Asset Inventory">
+        <Wgt tab="weekly" k="asset_inventory"><WeeklyReportRow label={<WTitle tab="weekly" k="asset_inventory" d="Asset Inventory" />}>
           <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 8, textDecoration: 'underline' }}>
             MSL OVERALL ACTIVE COUNT STATUS
           </Typography.Title>
-          <Typography.Paragraph style={{ marginBottom: 6 }}>
-            <strong>Total Inventory MSL Compliance:</strong>
+          <Typography.Paragraph style={{ marginBottom: 6 }}><strong>Total Inventory MSL Compliance:</strong></Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 4 }}>
+            Asset Inventory Overall: <strong>{mslOverall.toLocaleString()}</strong> out of <strong>{mslOverallD.toLocaleString()}</strong> X 100 = <strong>{pct(mslOverall, mslOverallD)}%</strong>
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            <strong>Asset Inventory Overall:</strong> {mslOverall.toLocaleString()} out of {mslOverallD.toLocaleString()} X 100 = <strong>{pct(mslOverall, mslOverallD)}%</strong>
-          </Typography.Paragraph>
-          <Typography.Paragraph style={{ marginBottom: 4 }}>
-            <strong>Ext. Asset Inventory Overall:</strong> {extNum.toLocaleString()} out of {extDen.toLocaleString()} X 100 = <strong>{pct(extNum, extDen)}%</strong>
+            Ext. Asset Inventory Overall: <strong>{extNum.toLocaleString()}</strong> out of <strong>{extDen.toLocaleString()}</strong> X 100 = <strong>{pct(extNum, extDen)}%</strong>
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 16 }}>
-            <strong>Asset + Ext Overall:</strong> {combNum.toLocaleString()} out of {combDen.toLocaleString()} X 100 = <strong>{pct(combNum, combDen)}%</strong>
+            Asset + Ext Overall: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
           </Typography.Paragraph>
 
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total Asset Inventory Count is <strong>{mslOverall.toLocaleString()}</strong>{' '}
-            <Typography.Text type="secondary">(decommissioned excluded)</Typography.Text>
+            Total Asset Inventory Count is <strong>{mslOverall.toLocaleString()}</strong> (decommissioned excluded)
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             Total decommissioned assets: <strong>{(vmGaps.decommissioned ?? 0).toLocaleString()}</strong>
           </Typography.Paragraph>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>From active inventory, pending/follow-ups:</Typography.Paragraph>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>
+            From active inventory, pending/follow-ups:
+          </Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 4 }}>
             <li>- <strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
             <li>- Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
             <li>- <strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
-            <li>- <strong>Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
+            <li><strong>- Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
           </ul>
-        </WeeklyReportRow>
+        </WeeklyReportRow></Wgt>
 
-        <WeeklyReportRow label="Extended Inventory">
+        <Wgt tab="weekly" k="extended_inventory"><WeeklyReportRow label={<WTitle tab="weekly" k="extended_inventory" d="Extended Inventory" />}>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            <strong>Total {(ec.total ?? 0).toLocaleString()} endpoints</strong>{' '}
-            <Typography.Text type="secondary">(decommissioned, not applicable &amp; not-in-scope excluded)</Typography.Text>
+            Total <strong>{(ec.total ?? 0).toLocaleString()}</strong> endpoints (decommissioned, not applicable &amp; not-in-scope excluded)
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 8 }}>
             Total decommissioned VMs: <strong>{(ec.decommissioned ?? 0).toLocaleString()}</strong>
@@ -1110,17 +1346,47 @@ function WeeklyReportTab({ data, isDark }) {
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints, password info is received.
           </Typography.Paragraph>
-          <Typography.Paragraph strong style={{ color: '#1d4ed8', marginBottom: 12 }}>
-            Compliance: {(ec.withPassword ?? 0).toLocaleString()} out of {(ec.total ?? 0).toLocaleString()} = {pct(ec.withPassword, ec.total)}%
+          <Typography.Paragraph strong style={{ color: isDark ? '#60a5fa' : '#1d4ed8', marginBottom: 12 }}>
+            Compliance: <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> out of <strong>{(ec.total ?? 0).toLocaleString()}</strong> = <strong>{pct(ec.withPassword, ec.total)}%</strong>
           </Typography.Paragraph>
-          <ul style={{ paddingLeft: 18, marginBottom: 0 }}>
+          <ul style={{ paddingLeft: 18, marginBottom: 16 }}>
             <li>- <strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
             <li>- <strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
             <li>- <strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
           </ul>
-        </WeeklyReportRow>
 
-        <WeeklyReportRow label="Patch Management Solution">
+          {/* Location-wise endpoint count table — always rendered */}
+          <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
+            <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
+              Location-wise endpoint count:
+            </Typography.Text>
+            <Table
+              rowKey="location"
+              size="small"
+              dataSource={ec.locationCount || []}
+              pagination={false}
+              tableLayout="fixed"
+              locale={{ emptyText: 'No location data assigned in Extended Inventory' }}
+              columns={[
+                { title: 'Location', dataIndex: 'location' },
+                { title: 'Count', dataIndex: 'count', align: 'right',
+                  render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+              ]}
+              summary={(rows) => {
+                if (!rows.length) return null;
+                const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+                return (
+                  <Table.Summary.Row style={{ fontWeight: 700 }}>
+                    <Table.Summary.Cell index={0}><strong>Grand Total</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right"><strong>{grand.toLocaleString()}</strong></Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
+            />
+          </div>
+        </WeeklyReportRow></Wgt>
+
+        <Wgt tab="weekly" k="patch_management"><WeeklyReportRow label={<WTitle tab="weekly" k="patch_management" d="Patch Management Solution" />}>
           <Alert
             type="info"
             showIcon
@@ -1142,39 +1408,68 @@ function WeeklyReportTab({ data, isDark }) {
               <PatchingStatusCard title="Ext. Inventory Patching Status" data={extPatching} isDark={isDark} />
             </Col>
           </Row>
-        </WeeklyReportRow>
+        </WeeklyReportRow></Wgt>
       </Card>
 
-      <div style={{ marginTop: 24 }}>
+      <Wgt tab="weekly" k="location_patching"><div style={{ marginTop: 24 }}>
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8 }}>
-          Location wise auto/Manual-patching status:
+          <WTitle tab="weekly" k="location_patching" d="Location wise auto/Manual-patching status:" />
         </Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
-          <WeeklyBreakdownTable rows={locRows} groupLabel="Location"
-            linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`} />
+          <WeeklyBreakdownTable rows={filteredLocRows} groupLabel="Location" isDark={isDark}
+            linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`}
+            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} />
         </Card>
-      </div>
+      </div></Wgt>
 
-      <div style={{ marginTop: 24 }}>
+      <Wgt tab="weekly" k="department_patching"><div style={{ marginTop: 24 }}>
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          Departments Patching Onboarding Status:
+          <WTitle tab="weekly" k="department_patching" d="Departments Patching Onboarding Status:" />
         </Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
-          <WeeklyBreakdownTable rows={deptRows} groupLabel="Department"
-            linkFor={(dept) => `/assets?q=${encodeURIComponent(dept)}`} />
+          <WeeklyBreakdownTable rows={filteredDeptRows} groupLabel="Department" isDark={isDark}
+            linkFor={(dept) => `/assets?q=${encodeURIComponent(dept)}`}
+            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} />
         </Card>
-      </div>
+      </div></Wgt>
 
       {/* AUTO PATCHING GROUP COUNT STATUS */}
-      <div style={{ marginTop: 32 }}>
+      <Wgt tab="weekly" k="me_compliance"><div style={{ marginTop: 32 }}>
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          Auto Patching Group Count Status{' '}
+          <WTitle tab="weekly" k="me_compliance" d="Auto Patching Group Count Status" />{' '}
           <Typography.Text type="secondary" style={{ fontWeight: 400, textTransform: 'none', fontSize: 12 }}>
             (Includes the endpoints in staging state)
           </Typography.Text>
         </Typography.Text>
 
-        <Card bodyStyle={{ padding: 20 }} style={{ marginBottom: 20 }}>
+        {/* Overall combined ME compliance — MSL + Extended */}
+        {(() => {
+          const combinedYes = meMslYes + meExtYes;
+          const combinedDen = meMslDen + meExtDen;
+          const combinedPct = combinedDen ? ((combinedYes / combinedDen) * 100).toFixed(2) : '0.00';
+          return (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 20 }}
+              message={
+                <span>
+                  <strong>Overall ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
+                  <strong>{combinedYes.toLocaleString()}</strong>
+                  {' / '}
+                  <strong>{combinedDen.toLocaleString()}</strong>
+                  {' × 100 = '}
+                  <strong style={{ fontSize: 15 }}>{combinedPct}%</strong>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
+                    (MSL: {meMslYes}/{meMslDen} · Extended: {meExtYes}/{meExtDen})
+                  </Typography.Text>
+                </span>
+              }
+            />
+          );
+        })()}
+
+        <Card className="weekly-breakdown-card" bodyStyle={{ padding: 20 }} style={{ marginBottom: 20 }}>
           <Typography.Paragraph style={{ marginBottom: 12 }}>
             <Typography.Link underline strong>
               Manage Engine compliance with MSL
@@ -1182,13 +1477,13 @@ function WeeklyReportTab({ data, isDark }) {
             → {meMslYes.toLocaleString()}/{meMslDen.toLocaleString()} x 100 ={' '}
             <strong>{meMslDen ? ((meMslYes / meMslDen) * 100).toFixed(2) : '0.00'}%</strong>{' '}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              (*Excludes Bomgar &amp; Beijing Team Managed count, esxi hosts and not applicable vms, powered off VMs EOL VMs)
+              {MSL_FOOTNOTE}
             </Typography.Text>
           </Typography.Paragraph>
-          <MEComplianceTable rows={meMslRows} excludedBuckets={MSL_EXCL} />
+          <MEComplianceTable rows={meMslRows} excludedBuckets={MSL_EXCL} isDark={isDark} />
         </Card>
 
-        <Card bodyStyle={{ padding: 20 }}>
+        <Card className="weekly-breakdown-card" bodyStyle={{ padding: 20 }}>
           <Typography.Paragraph style={{ marginBottom: 12 }}>
             <Typography.Link underline strong>
               Manage Engine compliance with Extended Inventory
@@ -1196,12 +1491,12 @@ function WeeklyReportTab({ data, isDark }) {
             → {meExtYes.toLocaleString()}/{meExtDen.toLocaleString()} x 100 ={' '}
             <strong>{meExtDen ? ((meExtYes / meExtDen) * 100).toFixed(2) : '0.00'}%</strong>{' '}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              (*Excludes ESXi hosts and not applicable vm&apos;s like appliances, Beijing IT managed, exceptions, EOL VMs)
+              {EXT_FOOTNOTE}
             </Typography.Text>
           </Typography.Paragraph>
-          <MEComplianceTable rows={meExtRows} excludedBuckets={EXT_EXCL} />
+          <MEComplianceTable rows={meExtRows} excludedBuckets={EXT_EXCL} isDark={isDark} />
         </Card>
-      </div>
+      </div></Wgt>
     </div>
   );
 }
@@ -1229,21 +1524,49 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [err,  setErr]  = useState('');
 
+  const [dashCfg, setDashCfg] = useState(null);
+  const [compCfg, setCompCfg] = useState({});
+
   useEffect(() => {
+    setData(null);
+    setErr('');
     api.get('/dashboard/summary')
       .then(r => setData(r.data))
       .catch(e => setErr(e.response?.data?.error || 'Failed'));
-  }, []);
+    api.get('/dashboard/config')
+      .then(r => {
+        const cfg = r.data.config || {};
+        setDashCfg(cfg);
+        if (!localStorage.getItem('dashView')) setView(resolveDefaultView(cfg));
+      })
+      .catch(() => setDashCfg({}));
+    api.get('/compliance-config')
+      .then(r => setCompCfg(r.data.config || {}))
+      .catch(() => setCompCfg({}));
+  }, []); // eslint-disable-line
 
   function handleViewChange(v) {
     setView(v);
     localStorage.setItem('dashView', v);
   }
 
+  const TAB_CONTENT = {
+    exec:   (d) => <><ExecutiveOverview data={d} compCfg={compCfg} /><CustomWidgets tab="exec" /></>,
+    asset:  (d) => <><AssetInventoryTab data={d} isDark={isDark} axisStyle={axisStyle}
+                     labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} /><CustomWidgets tab="asset" /></>,
+    ext:    (d) => <><ExtendedInventoryTab data={d} compCfg={compCfg} /><CustomWidgets tab="ext" /></>,
+    weekly: (d) => <WeeklyReportTab data={d} isDark={isDark} compCfg={compCfg} />,
+  };
+  const cfgTabs = resolveTabs(dashCfg || {}).filter(t => t.visible && TAB_CONTENT[t.key]);
+  const tabItems = (cfgTabs.length ? cfgTabs : [{ key: 'exec', title: 'Executive Overview' }])
+    .map(t => ({ key: t.key, label: t.title, children: data ? TAB_CONTENT[t.key](data) : null }));
+  const defaultTab = resolveDefaultTab(dashCfg || {});
+
   return (
+    <DashCfgCtx.Provider value={{ cfg: dashCfg || {} }}>
     <div>
-      {/* Toggle */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <Space.Compact>
           <Button
             type={view === 'inventory' ? 'primary' : 'default'}
@@ -1269,33 +1592,17 @@ export default function Dashboard() {
       {view === 'inventory' && (
         <>
           {err  && <Alert type="error" message={err} />}
-          {!data && !err && <Spin />}
-          {data && (
+          {(!data || dashCfg === null) && !err && <Spin />}
+          {data && dashCfg !== null && (
             <Tabs
-              defaultActiveKey="exec"
-              items={[
-                {
-                  key: 'exec', label: 'Executive Overview',
-                  children: <ExecutiveOverview data={data} />,
-                },
-                {
-                  key: 'asset', label: 'Asset Inventory',
-                  children: <AssetInventoryTab data={data} isDark={isDark} axisStyle={axisStyle}
-                              labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} />,
-                },
-                {
-                  key: 'ext', label: 'Extended Inventory',
-                  children: <ExtendedInventoryTab data={data} />,
-                },
-                {
-                  key: 'weekly', label: 'Weekly Report',
-                  children: <WeeklyReportTab data={data} isDark={isDark} />,
-                },
-              ]}
+              key={defaultTab}
+              defaultActiveKey={defaultTab}
+              items={tabItems}
             />
           )}
         </>
       )}
     </div>
+    </DashCfgCtx.Provider>
   );
 }

@@ -1,9 +1,26 @@
 const db = require('../config/db');
+const { DEFAULT_CONFIG: COMPLIANCE_DEFAULTS } = require('./complianceConfigController');
+
+// Fields allowed in name-conflict cross-table JOINs (whitelist, never interpolate user input).
+const VALID_CONFLICT_FIELDS = new Set(['vm_name', 'os_hostname', 'asset_name', 'ip_address', 'mac_address']);
 
 // VM-like inventories rolled up: assets + beijing_assets + physical_esxi_servers.
 // ext_assets is reported separately.
 async function summary(_req, res, next) {
   try {
+    // Fetch compliance config first so dynamic queries can be built before the parallel fan-out.
+    let compCfg;
+    try {
+      const { rows } = await db.query('SELECT config FROM compliance_config WHERE id = 1');
+      compCfg = (rows[0]?.config && Object.keys(rows[0].config).length) ? rows[0].config : COMPLIANCE_DEFAULTS;
+    } catch (_) {
+      compCfg = COMPLIANCE_DEFAULTS;
+    }
+    const mslInclStatuses = compCfg.msl?.include_server_statuses || COMPLIANCE_DEFAULTS.msl.include_server_statuses;
+    const mslExclEol      = compCfg.msl?.exclude_eol_statuses    || COMPLIANCE_DEFAULTS.msl.exclude_eol_statuses;
+    const conflictFlds    = (compCfg.ext?.name_conflict_fields    || COMPLIANCE_DEFAULTS.ext.name_conflict_fields)
+                              .filter(f => VALID_CONFLICT_FIELDS.has(f));
+
     const invQ = db.query(`
       WITH inv AS (
         SELECT 'assets'::text AS source, asset_type, server_status, patching_type, eol_status,
@@ -100,8 +117,10 @@ async function summary(_req, res, next) {
     `);
 
     // ---------------------------------------------------------------
-    // MSL Compliance: VMs/physical that are Alive or Powered Off and
-    // NOT Decommissioned / Not Applicable.
+    // MSL Compliance: filtered by admin-configured server statuses /
+    // EOL exclusion list (stored in compliance_config).
+    // $1 = include_server_statuses[], $2 = exclude_eol_statuses[]
+    // Empty arrays mean "no filter" (all pass).
     // ---------------------------------------------------------------
     const mslQ = db.query(`
       WITH inv AS (
@@ -111,13 +130,15 @@ async function summary(_req, res, next) {
       )
       SELECT COUNT(*)::int AS msl
         FROM inv
-       WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%'
-              OR server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')
-         AND (eol_status IS NULL
-              OR (eol_status NOT IN ('Decommissioned','Not Applicable','Decom','NA','N/A')
-                  AND eol_status NOT ILIKE 'Decom%'
-                  AND eol_status NOT ILIKE 'Not Applic%'));
-    `);
+       WHERE (
+         array_length($1::text[], 1) IS NULL
+         OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+       )
+       AND (
+         array_length($2::text[], 1) IS NULL
+         OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
+       )
+    `, [mslInclStatuses, mslExclEol]);
 
     // "in_scope" = countable endpoint: not deleted, not decommissioned
     // (flag or status), and status is not Not Applicable / Not in Scope.
@@ -159,19 +180,18 @@ async function summary(_req, res, next) {
       FROM e;
     `);
 
-    // Name conflicts: ext_assets whose vm_name OR os_hostname collides
-    // with a record in any other inventory.
-    const nameConflictQ = db.query(`
-      SELECT COUNT(*)::int AS c FROM ext_assets e
-       WHERE EXISTS (SELECT 1 FROM assets a
-                       WHERE a.vm_name = e.vm_name OR a.os_hostname = e.os_hostname)
-          OR EXISTS (SELECT 1 FROM beijing_assets b
-                       WHERE b.vm_name = e.vm_name OR b.os_hostname = e.os_hostname)
-          OR EXISTS (SELECT 1 FROM physical_esxi_servers p
-                       WHERE p.vm_name = e.vm_name OR p.os_hostname = e.os_hostname);
-    `);
+    // Name conflicts: dynamic — fields determined by compliance_config.ext.name_conflict_fields.
+    // Field names are whitelisted before interpolation; safe against injection.
+    const _conflictFlds = conflictFlds.length ? conflictFlds : ['vm_name', 'os_hostname'];
+    const _conflictTbls = ['assets', 'beijing_assets', 'physical_esxi_servers'];
+    const _existsClauses = _conflictTbls.flatMap(t =>
+      _conflictFlds.map(f => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${f} = e.${f} AND x.deleted_at IS NULL)`)
+    ).join('\n          OR ');
+    const nameConflictQ = db.query(
+      `SELECT COUNT(*)::int AS c FROM ext_assets e WHERE e.deleted_at IS NULL AND (${_existsClauses})`
+    );
 
-    // Location-wise count across all four inventories.
+    // Location-wise count across all four inventories (MSL + ext combined).
     const locationCountQ = db.query(`
       SELECT COALESCE(location, 'Unspecified') AS location, COUNT(*)::int AS count
         FROM (
@@ -184,6 +204,16 @@ async function summary(_req, res, next) {
         GROUP BY 1
         ORDER BY 2 DESC
         LIMIT 10;
+    `);
+
+    // Location-wise count for ext_assets only (shown in Weekly → Extended Inventory).
+    const extLocationCountQ = db.query(`
+      SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
+        FROM ext_assets
+        WHERE deleted_at IS NULL
+          AND LOWER(COALESCE(server_status,'')) NOT IN ('decommissioned','not applicable','not in scope')
+        GROUP BY 1
+        ORDER BY 2 DESC;
     `);
 
     // ---------------------------------------------------------------
@@ -493,13 +523,13 @@ async function summary(_req, res, next) {
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
-           meMslBreakdown, meExtBreakdown] = await Promise.all([
+           meMslBreakdown, meExtBreakdown, extLocationCount] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
-      meMslBreakdownQ, meExtBreakdownQ,
+      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ,
     ]);
 
     const i = inv.rows[0];
@@ -576,6 +606,7 @@ async function summary(_req, res, next) {
         nameConflicts:   nameConflict.rows[0].c,
         autoPatching:    extComp.rows[0].auto_patching,
         manualPatching:  extComp.rows[0].manual_patching,
+        locationCount:   extLocationCount.rows,
       },
 
       assetInventoryActiveStatus: activeStatus.rows[0],
@@ -601,4 +632,81 @@ async function summary(_req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { summary };
+// ── Dashboard customization config (org-wide, JSONB) ────────────────────────
+async function getConfig(_req, res, next) {
+  try {
+    const { rows } = await db.query(`SELECT config, updated_at FROM dashboard_config WHERE id = 1`);
+    res.json(rows[0] || { config: {} });
+  } catch (e) { next(e); }
+}
+
+async function saveConfig(req, res, next) {
+  try {
+    const config = req.body?.config;
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      const ApiError = require('../utils/ApiError');
+      throw new ApiError(400, 'config object is required');
+    }
+    const { rows } = await db.query(
+      `INSERT INTO dashboard_config (id, config, updated_by, updated_at)
+       VALUES (1, $1, $2, NOW())
+       ON CONFLICT (id) DO UPDATE
+         SET config = EXCLUDED.config, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+       RETURNING config, updated_at`,
+      [JSON.stringify(config), req.user.id],
+    );
+    res.json(rows[0]);
+  } catch (e) { next(e); }
+}
+
+// ── Custom widget data — safe, whitelisted aggregation over inventories ─────
+const WIDGET_TABLES = {
+  all:                   ['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'],
+  assets:                ['assets'],
+  beijing_assets:        ['beijing_assets'],
+  ext_assets:            ['ext_assets'],
+  physical_esxi_servers: ['physical_esxi_servers'],
+};
+const WIDGET_FIELDS = [
+  'os_type', 'server_status', 'location', 'eol_status', 'department',
+  'patching_type', 'asset_type', 'ome_status', 'assigned_user',
+];
+
+async function widgetData(req, res, next) {
+  try {
+    const ApiError = require('../utils/ApiError');
+    const source      = String(req.query.source || 'all');
+    const groupBy     = req.query.groupBy ? String(req.query.groupBy) : null;
+    const filterField = req.query.filterField ? String(req.query.filterField) : null;
+    const filterValue = req.query.filterValue != null ? String(req.query.filterValue) : null;
+
+    const tables = WIDGET_TABLES[source];
+    if (!tables) throw new ApiError(400, `Unknown source "${source}"`);
+    if (groupBy && !WIDGET_FIELDS.includes(groupBy)) throw new ApiError(400, `Field "${groupBy}" is not available for widgets`);
+    if (filterField && !WIDGET_FIELDS.includes(filterField)) throw new ApiError(400, `Field "${filterField}" is not available for widgets`);
+
+    const params = [];
+    let filterSql = '';
+    if (filterField && filterValue !== null && filterValue !== '') {
+      params.push(filterValue);
+      filterSql = ` AND ${filterField} ILIKE $${params.length}`;
+    }
+    const union = tables.map(t =>
+      `SELECT ${WIDGET_FIELDS.join(', ')} FROM ${t}
+        WHERE deleted_at IS NULL AND decommissioned_at IS NULL${filterSql}`
+    ).join(' UNION ALL ');
+
+    if (groupBy) {
+      const { rows } = await db.query(
+        `SELECT COALESCE(NULLIF(TRIM(${groupBy}), ''), 'Unspecified') AS key, COUNT(*)::int AS value
+           FROM (${union}) u GROUP BY 1 ORDER BY 2 DESC LIMIT 30`,
+        params,
+      );
+      return res.json({ rows });
+    }
+    const { rows } = await db.query(`SELECT COUNT(*)::int AS value FROM (${union}) u`, params);
+    res.json({ value: rows[0].value });
+  } catch (e) { next(e); }
+}
+
+module.exports = { summary, getConfig, saveConfig, widgetData };
