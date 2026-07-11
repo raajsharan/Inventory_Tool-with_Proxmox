@@ -67,8 +67,47 @@ function StageOptionsEditor({ value = DEFAULT_STAGE_OPTIONS, onChange }) {
         }
       />
       <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
-        These options appear in the VMs Vacate, Proxmox Install, and VM Migration Back dropdowns for this project.
+        These options appear in the VMs Vacate, Proxmox Install, and VM Migration Back dropdowns on the Hosts tab.
       </Text>
+    </div>
+  );
+}
+
+// Generic tag-style options editor (no enforced default — for free-form lists)
+function OptionsEditor({ value = [], onChange, placeholder = 'Type an option and press Enter…' }) {
+  const [inputVal, setInputVal] = useState('');
+  const inputRef = useRef(null);
+
+  const add = () => {
+    const v = inputVal.trim();
+    if (!v) return;
+    if (!value.includes(v)) onChange([...value, v]);
+    setInputVal('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const remove = (opt) => onChange(value.filter(o => o !== opt));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+        {value.map(opt => (
+          <Tag key={opt} closable onClose={() => remove(opt)} style={{ margin: 0 }}>{opt}</Tag>
+        ))}
+        {value.length === 0 && (
+          <Text type="secondary" style={{ fontSize: 12 }}>No options yet — add one below</Text>
+        )}
+      </div>
+      <Input
+        ref={inputRef}
+        size="small"
+        placeholder={placeholder}
+        value={inputVal}
+        onChange={e => setInputVal(e.target.value)}
+        onPressEnter={add}
+        style={{ maxWidth: 260 }}
+        suffix={<Button type="link" size="small" onClick={add} style={{ padding: 0 }}>Add</Button>}
+      />
     </div>
   );
 }
@@ -585,7 +624,8 @@ export default function MigrationConfig() {
       environment:   record.environment,
       description:   record.description,
       is_default:    record.is_default,
-      stage_options: record.stage_options || DEFAULT_STAGE_OPTIONS,
+      stage_options:       record.stage_options       || DEFAULT_STAGE_OPTIONS,
+      assigned_to_options: record.assigned_to_options || [],
     });
     setModalOpen(true);
   };
@@ -809,6 +849,14 @@ export default function MigrationConfig() {
             initialValue={DEFAULT_STAGE_OPTIONS}
           >
             <StageOptionsEditor />
+          </Form.Item>
+          <Form.Item
+            name="assigned_to_options"
+            label="Assigned To Options"
+            tooltip="Options shown in the Assigned To dropdown on the Hosts tab. Leave empty to allow free-text entry."
+            initialValue={[]}
+          >
+            <OptionsEditor placeholder="e.g. Team A, John Doe, Unassigned…" />
           </Form.Item>
           <Form.Item name="is_default" label="Set as default project" valuePropName="checked">
             <Switch />

@@ -154,7 +154,7 @@ export default function MigrationTracker() {
     {
       key: 'hosts',
       label: <span><HddOutlined /> Hosts</span>,
-      children: <HostsTab key={`${refreshToken}-${projectId}`} projectId={projectId} refreshToken={refreshToken} stageOptions={currentProject?.stage_options} />,
+      children: <HostsTab key={`${refreshToken}-${projectId}`} projectId={projectId} refreshToken={refreshToken} stageOptions={currentProject?.stage_options} assignedToOptions={currentProject?.assigned_to_options} />,
     },
     ...vmTabItems,
     ...customTabItems,

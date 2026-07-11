@@ -150,16 +150,23 @@ function validStageOptions(v) {
   return v.map(s => String(s).trim()).filter(Boolean);
 }
 
-async function createProject({ name, environment, description, is_default, stage_options }) {
+function validStringOptions(v) {
+  if (!Array.isArray(v)) return [];
+  return v.map(s => String(s).trim()).filter(Boolean);
+}
+
+async function createProject({ name, environment, description, is_default, stage_options, assigned_to_options }) {
   if (!name?.trim()) throw new Error('Project name is required');
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
     if (is_default) await client.query('UPDATE migration_projects SET is_default = false');
     const { rows } = await client.query(
-      `INSERT INTO migration_projects (name, environment, description, is_default, stage_options)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [name.trim(), str(environment), str(description), !!is_default, JSON.stringify(validStageOptions(stage_options))]
+      `INSERT INTO migration_projects (name, environment, description, is_default, stage_options, assigned_to_options)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [name.trim(), str(environment), str(description), !!is_default,
+       JSON.stringify(validStageOptions(stage_options)),
+       JSON.stringify(validStringOptions(assigned_to_options))]
     );
     await client.query('COMMIT');
     return rows[0];
@@ -167,7 +174,7 @@ async function createProject({ name, environment, description, is_default, stage
   finally { client.release(); }
 }
 
-async function updateProject(id, { name, environment, description, is_default, stage_options }) {
+async function updateProject(id, { name, environment, description, is_default, stage_options, assigned_to_options }) {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
@@ -176,15 +183,18 @@ async function updateProject(id, { name, environment, description, is_default, s
     }
     const { rows } = await client.query(
       `UPDATE migration_projects
-         SET name          = COALESCE($1, name),
-             environment   = $2,
-             description   = $3,
-             is_default    = COALESCE($4, is_default),
-             stage_options = COALESCE($5, stage_options),
-             updated_at    = NOW()
-       WHERE id = $6 RETURNING *`,
+         SET name                = COALESCE($1, name),
+             environment         = $2,
+             description         = $3,
+             is_default          = COALESCE($4, is_default),
+             stage_options       = COALESCE($5, stage_options),
+             assigned_to_options = COALESCE($6, assigned_to_options),
+             updated_at          = NOW()
+       WHERE id = $7 RETURNING *`,
       [name?.trim() || null, str(environment), str(description), is_default ?? null,
-       stage_options !== undefined ? JSON.stringify(validStageOptions(stage_options)) : null, id]
+       stage_options !== undefined ? JSON.stringify(validStageOptions(stage_options)) : null,
+       assigned_to_options !== undefined ? JSON.stringify(validStringOptions(assigned_to_options)) : null,
+       id]
     );
     await client.query('COMMIT');
     return rows[0] || null;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select } from 'antd';
+import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select, Input } from 'antd';
 import { DownloadOutlined, WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -62,7 +62,7 @@ function useHostsSummary(refreshKey, projectId) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function HostsTab({ projectId, refreshToken = 0, stageOptions }) {
+export default function HostsTab({ projectId, refreshToken = 0, stageOptions, assignedToOptions }) {
   const { user, canViewPasswords } = useAuth();
   const canEdit = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const { token } = theme.useToken();
@@ -129,13 +129,28 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions }) 
     },
     { title: 'Assigned Licenses', dataIndex: 'assigned_licenses', key: 'assigned_licenses', width: 180, ellipsis: true, render: cell },
     {
-      title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 140,
-      render: (v, r) => canEdit
-        ? <StageSelect
-            value={v}
-            onChange={val => patch(r.id, { assigned_to: val })}
+      title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 155,
+      render: (v, r) => {
+        if (!canEdit) return cell(v);
+        if (assignedToOptions?.length) {
+          return (
+            <StageSelect
+              value={v}
+              options={assignedToOptions}
+              onChange={val => patch(r.id, { assigned_to: val })}
+            />
+          );
+        }
+        return (
+          <Input
+            size="small"
+            defaultValue={v}
+            style={{ width: 140 }}
+            onBlur={e => { if (e.target.value !== v) patch(r.id, { assigned_to: e.target.value }); }}
+            onPressEnter={e => { e.target.blur(); }}
           />
-        : cell(v),
+        );
+      },
     },
     { title: 'Host Owner',       dataIndex: 'host_owner',     key: 'host_owner',     width: 140, render: cell },
     { title: 'VMs to Migrate',   dataIndex: 'vms_to_migrate', key: 'vms_to_migrate', width: 110, render: cell },
