@@ -129,9 +129,10 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
     },
     { title: 'Assigned Licenses', dataIndex: 'assigned_licenses', key: 'assigned_licenses', width: 180, ellipsis: true, render: cell },
     {
-      title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 155,
+      title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 160,
       render: (v, r) => {
         if (!canEdit) return cell(v);
+        // If admin configured fixed options, use a fixed Select
         if (assignedToOptions?.length) {
           return (
             <StageSelect
@@ -141,13 +142,22 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
             />
           );
         }
+        // No configured options — derive from existing values in table + allow free entry
+        const autoOpts = [...new Set(data.items.map(i => i.assigned_to).filter(Boolean))];
         return (
-          <Input
+          <Select
             size="small"
-            defaultValue={v}
-            style={{ width: 140 }}
-            onBlur={e => { if (e.target.value !== v) patch(r.id, { assigned_to: e.target.value }); }}
-            onPressEnter={e => { e.target.blur(); }}
+            mode="tags"
+            value={v ? [v] : []}
+            onChange={vals => {
+              const latest = vals[vals.length - 1] ?? '';
+              patch(r.id, { assigned_to: latest });
+            }}
+            style={{ width: 145 }}
+            maxTagCount={1}
+            options={autoOpts.map(o => ({ value: o, label: o }))}
+            tokenSeparators={[',']}
+            placeholder="Assign to…"
           />
         );
       },
