@@ -15,6 +15,10 @@ coverage/
 .npm
 uploads/
 
+# Sensitive migration data files (contain production credentials)
+*.xlsx
+*.xls
+
 # Claude Code local (per-developer) settings
 .claude/settings.local.json
 
