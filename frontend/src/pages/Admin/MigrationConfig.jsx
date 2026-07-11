@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Table, Button, Modal, Form, Input, Switch, Tag, Space,
   Typography, Popconfirm, message, Tooltip, Badge,
@@ -20,6 +20,58 @@ const BUILTIN_TABS = [
   { key: 'security_vms',    icon: <SafetyOutlined />,    defaultLabel: 'Security VMs'    },
   { key: 'standalone_esxi', icon: <ClusterOutlined />,   defaultLabel: 'Standalone ESXi' },
 ];
+
+const DEFAULT_STAGE_OPTIONS = ['Pending', 'In Progress', 'Completed'];
+
+// ── Stage options tag editor ───────────────────────────────────────────────────
+function StageOptionsEditor({ value = DEFAULT_STAGE_OPTIONS, onChange }) {
+  const [inputVal, setInputVal] = useState('');
+  const inputRef = useRef(null);
+
+  const add = () => {
+    const v = inputVal.trim();
+    if (!v) return;
+    if (!value.includes(v)) onChange([...value, v]);
+    setInputVal('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const remove = (opt) => onChange(value.filter(o => o !== opt));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+        {value.map(opt => (
+          <Tag
+            key={opt}
+            closable
+            onClose={() => remove(opt)}
+            style={{ margin: 0 }}
+          >
+            {opt}
+          </Tag>
+        ))}
+      </div>
+      <Input
+        ref={inputRef}
+        size="small"
+        placeholder="Type an option and press Enter…"
+        value={inputVal}
+        onChange={e => setInputVal(e.target.value)}
+        onPressEnter={add}
+        style={{ maxWidth: 260 }}
+        suffix={
+          <Button type="link" size="small" onClick={add} style={{ padding: 0 }}>
+            Add
+          </Button>
+        }
+      />
+      <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+        These options appear in the VMs Vacate, Proxmox Install, and VM Migration Back dropdowns for this project.
+      </Text>
+    </div>
+  );
+}
 
 // ── Column checkbox panel ─────────────────────────────────────────────────────
 function ColumnCheckboxes({ columns, hiddenColumns, onChange }) {
@@ -529,10 +581,11 @@ export default function MigrationConfig() {
   const openEdit = (record) => {
     setEditing(record);
     form.setFieldsValue({
-      name:        record.name,
-      environment: record.environment,
-      description: record.description,
-      is_default:  record.is_default,
+      name:          record.name,
+      environment:   record.environment,
+      description:   record.description,
+      is_default:    record.is_default,
+      stage_options: record.stage_options || DEFAULT_STAGE_OPTIONS,
     });
     setModalOpen(true);
   };
@@ -748,6 +801,14 @@ export default function MigrationConfig() {
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} placeholder="Optional notes about this migration project..." />
+          </Form.Item>
+          <Form.Item
+            name="stage_options"
+            label="Stage Dropdown Options"
+            tooltip="Options shown in the VMs Vacate, Proxmox Install, and VM Migration Back dropdowns on the Hosts tab."
+            initialValue={DEFAULT_STAGE_OPTIONS}
+          >
+            <StageOptionsEditor />
           </Form.Item>
           <Form.Item name="is_default" label="Set as default project" valuePropName="checked">
             <Switch />

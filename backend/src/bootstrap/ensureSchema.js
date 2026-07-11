@@ -319,6 +319,7 @@ const STATEMENTS = [
   `UPDATE migration_bomgar_vms       SET project_id = (SELECT id FROM migration_projects WHERE is_default ORDER BY id LIMIT 1) WHERE project_id IS NULL`,
   `UPDATE migration_security_vms     SET project_id = (SELECT id FROM migration_projects WHERE is_default ORDER BY id LIMIT 1) WHERE project_id IS NULL`,
   `UPDATE migration_standalone_esxi  SET project_id = (SELECT id FROM migration_projects WHERE is_default ORDER BY id LIMIT 1) WHERE project_id IS NULL`,
+  `ALTER TABLE migration_projects ADD COLUMN IF NOT EXISTS stage_options JSONB NOT NULL DEFAULT '["Pending","In Progress","Completed"]'`,
 
   // ── MIGRATION TAB CONFIG ─────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS migration_tab_configs (

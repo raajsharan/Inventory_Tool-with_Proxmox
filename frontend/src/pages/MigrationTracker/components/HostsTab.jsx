@@ -34,17 +34,19 @@ function ExpiryDate({ value }) {
 }
 
 // ── Status select (inline edit) ───────────────────────────────────────────────
-const STAGE_VALUES = ['Pending', 'In Progress', 'Completed'];
+const DEFAULT_STAGE_VALUES = ['Pending', 'In Progress', 'Completed'];
 
-function StageSelect({ value, onChange, disabled = false }) {
+function StageSelect({ value, onChange, disabled = false, options }) {
+  const opts = (options?.length ? options : DEFAULT_STAGE_VALUES);
+  const safeValue = opts.includes(value) ? value : opts[0];
   return (
     <Select
       size="small"
-      value={value || 'Pending'}
+      value={safeValue}
       onChange={onChange}
       disabled={disabled}
-      style={{ width: 130 }}
-      options={STAGE_VALUES.map(v => ({ value: v, label: v }))}
+      style={{ width: 140 }}
+      options={opts.map(v => ({ value: v, label: v }))}
     />
   );
 }
@@ -60,7 +62,7 @@ function useHostsSummary(refreshKey, projectId) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function HostsTab({ projectId, refreshToken = 0 }) {
+export default function HostsTab({ projectId, refreshToken = 0, stageOptions }) {
   const { user, canViewPasswords } = useAuth();
   const canEdit = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const { token } = theme.useToken();
@@ -140,24 +142,24 @@ export default function HostsTab({ projectId, refreshToken = 0 }) {
     { title: 'Powered Off VMs',  dataIndex: 'powered_off_vms',key: 'powered_off_vms',width: 120, render: cell },
     {
       title: 'VMs Vacate',
-      dataIndex: 'vms_vacate', key: 'vms_vacate', width: 140,
+      dataIndex: 'vms_vacate', key: 'vms_vacate', width: 155,
       render: (v, r) => canEdit
-        ? <StageSelect value={v} onChange={val => patch(r.id, { vms_vacate: val })} />
-        : <StageSelect value={v} disabled />,
+        ? <StageSelect value={v} options={stageOptions} onChange={val => patch(r.id, { vms_vacate: val })} />
+        : <StageSelect value={v} options={stageOptions} disabled />,
     },
     {
       title: 'Proxmox Install',
-      dataIndex: 'proxmox_install', key: 'proxmox_install', width: 140,
+      dataIndex: 'proxmox_install', key: 'proxmox_install', width: 155,
       render: (v, r) => canEdit
-        ? <StageSelect value={v} onChange={val => patch(r.id, { proxmox_install: val })} />
-        : <StageSelect value={v} disabled />,
+        ? <StageSelect value={v} options={stageOptions} onChange={val => patch(r.id, { proxmox_install: val })} />
+        : <StageSelect value={v} options={stageOptions} disabled />,
     },
     {
       title: 'VM Migration Back',
-      dataIndex: 'vm_migration_back', key: 'vm_migration_back', width: 145,
+      dataIndex: 'vm_migration_back', key: 'vm_migration_back', width: 155,
       render: (v, r) => canEdit
-        ? <StageSelect value={v} onChange={val => patch(r.id, { vm_migration_back: val })} />
-        : <StageSelect value={v} disabled />,
+        ? <StageSelect value={v} options={stageOptions} onChange={val => patch(r.id, { vm_migration_back: val })} />
+        : <StageSelect value={v} options={stageOptions} disabled />,
     },
   ];
 
