@@ -66,6 +66,7 @@ function ConfigModal({ open, onClose, onSaved }) {
         server_url:  r.data.server_url,
         customer_id: r.data.customer_id || '1',
         api_key:     r.data.api_key,
+        api_path:    r.data.api_path || '',
         verify_ssl:  r.data.verify_ssl,
       });
       setTestResult(null);
@@ -75,6 +76,8 @@ function ConfigModal({ open, onClose, onSaved }) {
   const handleSave = async () => {
     try {
       const vals = await form.validateFields();
+      // Normalise api_path: trim and ensure it starts with /
+      if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
       setSaving(true);
       await api.put('/endpoint-central/config', vals);
       message.success('Configuration saved');
@@ -92,11 +95,17 @@ function ConfigModal({ open, onClose, onSaved }) {
       setTestResult({ success: false, error: 'Enter Server URL and API Key first' });
       return;
     }
+    // Normalise api_path before saving for the test
+    if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
     setTesting(true);
     setTestResult(null);
     try {
       await api.put('/endpoint-central/config', vals);
       const r = await api.post('/endpoint-central/test');
+      // If test succeeded and auto-discovered a working path, fill it in
+      if (r.data.success && r.data.working_path && !vals.api_path) {
+        form.setFieldValue('api_path', r.data.working_path);
+      }
       setTestResult(r.data);
     } catch (e) {
       setTestResult({ success: false, error: e?.response?.data?.error || 'Request failed' });
@@ -141,6 +150,33 @@ function ConfigModal({ open, onClose, onSaved }) {
           extra="Generate via Admin › API Explorer in the Endpoint Central console"
         >
           <Input.Password placeholder="Paste API key here" autoComplete="new-password" />
+        </Form.Item>
+
+        <Form.Item
+          name="api_path"
+          label="API Path"
+          extra={
+            <span>
+              Leave blank to auto-detect. Common paths:{' '}
+              <code>/api/1.4/computers</code>,{' '}
+              <code>/api/1.4/patch/allsystems</code>
+            </span>
+          }
+        >
+          <Select
+            allowClear
+            placeholder="Auto-detect (tries known paths)"
+            showSearch
+            mode="combobox"
+            options={[
+              { value: '/api/1.4/computers',              label: '/api/1.4/computers' },
+              { value: '/api/1.4/patch/allsystems',       label: '/api/1.4/patch/allsystems' },
+              { value: '/api/1.4/patch/systems/allsystems', label: '/api/1.4/patch/systems/allsystems' },
+              { value: '/api/1.4/inventory/computers',    label: '/api/1.4/inventory/computers' },
+              { value: '/dcapi/rd/computers',             label: '/dcapi/rd/computers' },
+            ]}
+            onClear={() => form.setFieldValue('api_path', '')}
+          />
         </Form.Item>
 
         <Form.Item name="verify_ssl" label="Verify SSL Certificate" valuePropName="checked">

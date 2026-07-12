@@ -121,11 +121,13 @@ const STATEMENTS = [
       server_url  TEXT NOT NULL DEFAULT '',
       customer_id TEXT NOT NULL DEFAULT '1',
       api_key     TEXT NOT NULL DEFAULT '',
+      api_path    TEXT NOT NULL DEFAULT '',
       verify_ssl  BOOLEAN NOT NULL DEFAULT FALSE,
       updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `INSERT INTO endpoint_central_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS api_path TEXT NOT NULL DEFAULT ''`,
 
   // ── vm_name uniqueness removal (drop_vm_name_unique.sql)
   `ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key`,
