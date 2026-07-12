@@ -116,11 +116,14 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
   ];
 
   const toggleableCols = allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key));
-  const { visible, toggle, reset } = useColumnVisibility('standalone-esxi', toggleableCols.map(c => c.key));
+  const { visible, toggle, reset, order, reorder } = useColumnVisibility('standalone-esxi', toggleableCols.map(c => c.key));
 
   const baseColumns = [
-    allColumns[0],
-    ...allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key) && visible.has(c.key)),
+    allColumns[0], // vm — always visible, never reordered
+    ...order
+      .filter(k => visible.has(k))
+      .map(k => allColumns.find(c => c.key === k))
+      .filter(Boolean),
   ];
 
   const customFieldCols = fieldDefs.map(fd => ({
@@ -172,7 +175,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
         onClear={clearFilters}
         extra={
           <Space>
-            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
             <Button icon={<DownloadOutlined />}
               onClick={() => downloadCSV('standalone-esxi', { ...filters, search })}>
               Export CSV

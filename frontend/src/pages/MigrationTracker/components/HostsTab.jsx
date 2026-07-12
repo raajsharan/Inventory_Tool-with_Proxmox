@@ -208,10 +208,13 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
 
   const allColumns = columns; // alias for clarity below
   const toggleableCols = allColumns.filter(c => c.key !== 'host');
-  const { visible, toggle, reset } = useColumnVisibility('hosts', toggleableCols.map(c => c.key));
+  const { visible, toggle, reset, order, reorder } = useColumnVisibility('hosts', toggleableCols.map(c => c.key));
   const visibleColumns = [
-    allColumns[0], // host — always visible
-    ...allColumns.filter(c => c.key !== 'host' && visible.has(c.key)),
+    allColumns[0], // host — always visible, never reordered
+    ...order
+      .filter(k => visible.has(k))
+      .map(k => allColumns.find(c => c.key === k))
+      .filter(Boolean),
   ];
 
   const summaryCards = summary ? [
@@ -235,7 +238,7 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
         onClear={clearFilters}
         extra={
           <Space>
-            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
             <Button
               icon={<DownloadOutlined />}
               onClick={() => downloadCSV('hosts', { ...filters, search })}

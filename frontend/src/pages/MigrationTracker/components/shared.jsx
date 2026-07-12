@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Tag, Tooltip, Button, Space, Typography, theme, Popover, Checkbox, Divider } from 'antd';
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, StopOutlined,
-  EyeOutlined, EyeInvisibleOutlined, CopyOutlined, SettingOutlined,
+  EyeOutlined, EyeInvisibleOutlined, CopyOutlined, SettingOutlined, HolderOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -350,9 +350,10 @@ function AnimatedValue({ value }) {
   return <>{display ?? '—'}</>;
 }
 
-// ── COLUMN VISIBILITY HOOK ────────────────────────────────────────────────────
+// ── COLUMN VISIBILITY + ORDER HOOK ───────────────────────────────────────────
 export function useColumnVisibility(storageKey, allKeys) {
   const keysRef = useRef(allKeys);
+
   const [visible, setVisible] = useState(() => {
     try {
       const saved = localStorage.getItem(`col-vis:${storageKey}`);
@@ -365,6 +366,20 @@ export function useColumnVisibility(storageKey, allKeys) {
     return new Set(keysRef.current);
   });
 
+  const [order, setOrder] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`col-ord:${storageKey}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Merge: saved order first, then any new keys appended at end
+        const valid = parsed.filter(k => keysRef.current.includes(k));
+        const added = keysRef.current.filter(k => !valid.includes(k));
+        if (valid.length > 0) return [...valid, ...added];
+      }
+    } catch {}
+    return [...keysRef.current];
+  });
+
   const toggle = (key, checked) => {
     setVisible(prev => {
       const next = new Set(prev);
@@ -375,34 +390,98 @@ export function useColumnVisibility(storageKey, allKeys) {
     });
   };
 
+  const reorder = (newOrder) => {
+    setOrder(newOrder);
+    localStorage.setItem(`col-ord:${storageKey}`, JSON.stringify(newOrder));
+  };
+
   const reset = () => {
     const all = new Set(keysRef.current);
     setVisible(all);
+    setOrder([...keysRef.current]);
     localStorage.removeItem(`col-vis:${storageKey}`);
+    localStorage.removeItem(`col-ord:${storageKey}`);
   };
 
-  return { visible, toggle, reset };
+  return { visible, toggle, reset, order, reorder };
 }
 
-// ── COLUMN TOGGLE BUTTON ──────────────────────────────────────────────────────
-export function ColumnToggleButton({ columns, visible, onToggle, onReset }) {
+// ── COLUMN TOGGLE BUTTON (with drag-to-reorder) ───────────────────────────────
+export function ColumnToggleButton({ columns, visible, onToggle, onReset, order, onReorder }) {
+  const [dragKey, setDragKey] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
   const hiddenCount = columns.filter(c => !visible.has(c.key)).length;
 
+  // Build display list: use persisted order when available, otherwise original order
+  const orderedColumns = order
+    ? [
+        ...order.map(k => columns.find(c => c.key === k)).filter(Boolean),
+        ...columns.filter(c => !order.includes(c.key)),
+      ]
+    : columns;
+
+  const handleDragStart = (e, key) => {
+    setDragKey(key);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, key) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!dragKey || dragKey === key) return;
+    setDragOver(key);
+    if (!onReorder) return;
+    const cur = order || columns.map(c => c.key);
+    const fromIdx = cur.indexOf(dragKey);
+    const toIdx   = cur.indexOf(key);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+    const next = [...cur];
+    next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, dragKey);
+    onReorder(next);
+  };
+
+  const handleDragEnd = () => { setDragKey(null); setDragOver(null); };
+
   const content = (
-    <div style={{ minWidth: 210, maxHeight: 420, overflowY: 'auto' }}>
+    <div style={{ minWidth: 220, maxHeight: 440, overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px 6px' }}>
         <Button size="small" type="link" style={{ padding: 0 }}
           onClick={() => columns.forEach(c => onToggle(c.key, true))}>
           Show all
         </Button>
-        <Button size="small" type="link" style={{ padding: 0 }}
-          onClick={onReset}>
+        <Button size="small" type="link" style={{ padding: 0 }} onClick={onReset}>
           Reset default
         </Button>
       </div>
-      <Divider style={{ margin: '0 0 6px' }} />
-      {columns.map(col => (
-        <div key={col.key} style={{ padding: '3px 4px' }}>
+      <Divider style={{ margin: '0 0 4px' }} />
+      {onReorder && (
+        <div style={{ fontSize: 11, color: '#8c8c8c', padding: '0 4px 6px', userSelect: 'none' }}>
+          Drag <HolderOutlined /> to reorder
+        </div>
+      )}
+      {orderedColumns.map(col => (
+        <div
+          key={col.key}
+          draggable={!!onReorder}
+          onDragStart={e => handleDragStart(e, col.key)}
+          onDragOver={e => handleDragOver(e, col.key)}
+          onDragEnd={handleDragEnd}
+          style={{
+            padding: '4px 4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            borderRadius: 4,
+            cursor: onReorder ? 'grab' : 'default',
+            background: dragOver === col.key ? 'rgba(22,119,255,0.06)' : undefined,
+            borderTop: dragOver === col.key ? '2px solid #1677ff' : '2px solid transparent',
+            transition: 'background 100ms ease, border-color 100ms ease',
+          }}
+        >
+          {onReorder && (
+            <HolderOutlined style={{ color: '#bfbfbf', fontSize: 13, flexShrink: 0 }} />
+          )}
           <Checkbox
             checked={visible.has(col.key)}
             onChange={e => onToggle(col.key, e.target.checked)}
@@ -420,7 +499,7 @@ export function ColumnToggleButton({ columns, visible, onToggle, onReset }) {
   return (
     <Popover
       content={content}
-      title="Show / hide columns"
+      title="Show / hide · Drag to reorder"
       trigger="click"
       placement="bottomRight"
     >

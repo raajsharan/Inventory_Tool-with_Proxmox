@@ -193,14 +193,17 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
 
   const allBuilt = buildColumns(hiddenColumns, canEdit, patch);
   const toggleableCols = allBuilt.filter(c => c.key !== 'vm');
-  const { visible, toggle, reset } = useColumnVisibility(
+  const { visible, toggle, reset, order, reorder } = useColumnVisibility(
     `custom-vms-${tabId || 'default'}`,
     toggleableCols.map(c => c.key)
   );
 
   const baseColumns = [
-    allBuilt[0], // vm — always visible
-    ...allBuilt.filter(c => c.key !== 'vm' && visible.has(c.key)),
+    allBuilt[0], // vm — always visible, never reordered
+    ...order
+      .filter(k => visible.has(k))
+      .map(k => allBuilt.find(c => c.key === k))
+      .filter(Boolean),
   ];
 
   const customFieldCols = fieldDefs.map(fd => ({
@@ -241,7 +244,7 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
         onClear={clearFilters}
         extra={
           <Space>
-            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
             <Button icon={<DownloadOutlined />}
               onClick={() => downloadCSV('custom-vms', { ...filters, search, tab_id: tabId })}>
               Export CSV

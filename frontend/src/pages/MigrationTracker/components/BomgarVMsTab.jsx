@@ -155,11 +155,14 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
   ];
 
   const toggleableCols = allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key));
-  const { visible, toggle, reset } = useColumnVisibility('bomgar-vms', toggleableCols.map(c => c.key));
+  const { visible, toggle, reset, order, reorder } = useColumnVisibility('bomgar-vms', toggleableCols.map(c => c.key));
 
   const baseColumns = [
-    allColumns[0], // vm — always visible
-    ...allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key) && visible.has(c.key)),
+    allColumns[0], // vm — always visible, never reordered
+    ...order
+      .filter(k => visible.has(k))
+      .map(k => allColumns.find(c => c.key === k))
+      .filter(Boolean),
   ];
 
   const customFieldCols = fieldDefs.map(fd => ({
@@ -201,7 +204,7 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
         onClear={clearFilters}
         extra={
           <Space>
-            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
             <Button icon={<DownloadOutlined />}
               onClick={() => downloadCSV('bomgar-vms', { ...filters, search })}>
               Export CSV
