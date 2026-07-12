@@ -5,7 +5,7 @@ import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   useMigrTable, SummaryCards, MigrationStatusBadge, PowerstateBadge,
-  DiskSize, downloadCSV, cell,
+  DiskSize, downloadCSV, cell, useColumnVisibility, ColumnToggleButton,
 } from './shared.jsx';
 import FilterToolbar from './FilterToolbar.jsx';
 import { useCustomFields } from './useCustomFields.js';
@@ -154,9 +154,13 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
     { title: 'Path',  dataIndex: 'path',  key: 'path',  width: 200, ellipsis: true, render: cell },
   ];
 
-  const baseColumns = hiddenColumns.length
-    ? allColumns.filter(c => c.key === 'vm' || !hiddenColumns.includes(c.key))
-    : allColumns;
+  const toggleableCols = allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key));
+  const { visible, toggle, reset } = useColumnVisibility('bomgar-vms', toggleableCols.map(c => c.key));
+
+  const baseColumns = [
+    allColumns[0], // vm — always visible
+    ...allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key) && visible.has(c.key)),
+  ];
 
   const customFieldCols = fieldDefs.map(fd => ({
     key:   `cf_${fd.id}`,
@@ -196,10 +200,13 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
         density={density} setDensity={setDensity}
         onClear={clearFilters}
         extra={
-          <Button icon={<DownloadOutlined />}
-            onClick={() => downloadCSV('bomgar-vms', { ...filters, search })}>
-            Export CSV
-          </Button>
+          <Space>
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <Button icon={<DownloadOutlined />}
+              onClick={() => downloadCSV('bomgar-vms', { ...filters, search })}>
+              Export CSV
+            </Button>
+          </Space>
         }
       />
 

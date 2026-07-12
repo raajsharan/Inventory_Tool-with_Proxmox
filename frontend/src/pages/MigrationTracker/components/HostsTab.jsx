@@ -5,7 +5,7 @@ import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   useMigrTable, SummaryCards, MigrationStatusBadge, MaskedField,
-  downloadCSV, cell,
+  downloadCSV, cell, useColumnVisibility, ColumnToggleButton,
 } from './shared.jsx';
 import FilterToolbar from './FilterToolbar.jsx';
 
@@ -206,6 +206,14 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
     },
   ];
 
+  const allColumns = columns; // alias for clarity below
+  const toggleableCols = allColumns.filter(c => c.key !== 'host');
+  const { visible, toggle, reset } = useColumnVisibility('hosts', toggleableCols.map(c => c.key));
+  const visibleColumns = [
+    allColumns[0], // host — always visible
+    ...allColumns.filter(c => c.key !== 'host' && visible.has(c.key)),
+  ];
+
   const summaryCards = summary ? [
     { label: 'Total Hosts',       value: summary.total_hosts },
     { label: 'Fully Migrated',    value: summary.fully_migrated,       color: '#52c41a' },
@@ -226,12 +234,15 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
         density={density} setDensity={setDensity}
         onClear={clearFilters}
         extra={
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => downloadCSV('hosts', { ...filters, search })}
-          >
-            Export CSV
-          </Button>
+          <Space>
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={() => downloadCSV('hosts', { ...filters, search })}
+            >
+              Export CSV
+            </Button>
+          </Space>
         }
       />
 
@@ -251,7 +262,7 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
         size={density}
         loading={loading}
         dataSource={data.items}
-        columns={columns}
+        columns={visibleColumns}
         pagination={pagination}
         scroll={{ x: 'max-content' }}
         sticky

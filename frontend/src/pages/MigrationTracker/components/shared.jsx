@@ -2,10 +2,10 @@
  * shared.jsx — common components and hooks for all Migration Tracker tabs.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Tag, Tooltip, Button, Space, Typography, theme } from 'antd';
+import { Tag, Tooltip, Button, Space, Typography, theme, Popover, Checkbox, Divider } from 'antd';
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, StopOutlined,
-  EyeOutlined, EyeInvisibleOutlined, CopyOutlined,
+  EyeOutlined, EyeInvisibleOutlined, CopyOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -305,4 +305,85 @@ export function downloadCSV(type, params = {}) {
 export function cell(v) {
   if (v == null || v === '') return <Text type="secondary">—</Text>;
   return v;
+}
+
+// ── COLUMN VISIBILITY HOOK ────────────────────────────────────────────────────
+export function useColumnVisibility(storageKey, allKeys) {
+  const keysRef = useRef(allKeys);
+  const [visible, setVisible] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`col-vis:${storageKey}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const valid = new Set(parsed.filter(k => keysRef.current.includes(k)));
+        if (valid.size > 0) return valid;
+      }
+    } catch {}
+    return new Set(keysRef.current);
+  });
+
+  const toggle = (key, checked) => {
+    setVisible(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(key);
+      else if (next.size > 1) next.delete(key);
+      localStorage.setItem(`col-vis:${storageKey}`, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const reset = () => {
+    const all = new Set(keysRef.current);
+    setVisible(all);
+    localStorage.removeItem(`col-vis:${storageKey}`);
+  };
+
+  return { visible, toggle, reset };
+}
+
+// ── COLUMN TOGGLE BUTTON ──────────────────────────────────────────────────────
+export function ColumnToggleButton({ columns, visible, onToggle, onReset }) {
+  const hiddenCount = columns.filter(c => !visible.has(c.key)).length;
+
+  const content = (
+    <div style={{ minWidth: 210, maxHeight: 420, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px 6px' }}>
+        <Button size="small" type="link" style={{ padding: 0 }}
+          onClick={() => columns.forEach(c => onToggle(c.key, true))}>
+          Show all
+        </Button>
+        <Button size="small" type="link" style={{ padding: 0 }}
+          onClick={onReset}>
+          Reset default
+        </Button>
+      </div>
+      <Divider style={{ margin: '0 0 6px' }} />
+      {columns.map(col => (
+        <div key={col.key} style={{ padding: '3px 4px' }}>
+          <Checkbox
+            checked={visible.has(col.key)}
+            onChange={e => onToggle(col.key, e.target.checked)}
+            disabled={visible.size === 1 && visible.has(col.key)}
+          >
+            <span style={{ fontSize: 13 }}>
+              {typeof col.title === 'string' ? col.title : col.key}
+            </span>
+          </Checkbox>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <Popover
+      content={content}
+      title="Show / hide columns"
+      trigger="click"
+      placement="bottomRight"
+    >
+      <Button icon={<SettingOutlined />}>
+        Columns{hiddenCount > 0 ? ` (${hiddenCount} hidden)` : ''}
+      </Button>
+    </Popover>
+  );
 }

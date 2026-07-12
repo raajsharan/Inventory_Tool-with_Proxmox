@@ -5,7 +5,7 @@ import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   useMigrTable, SummaryCards, MigrationStatusBadge, PowerstateBadge,
-  GuestStateBadge, DiskSize, downloadCSV, cell,
+  GuestStateBadge, DiskSize, downloadCSV, cell, useColumnVisibility, ColumnToggleButton,
 } from './shared.jsx';
 import FilterToolbar from './FilterToolbar.jsx';
 import { useCustomFields } from './useCustomFields.js';
@@ -99,9 +99,13 @@ export default function SecurityVMsTab({ projectId, hiddenColumns = [] }) {
     { title: 'OS (tools)',  dataIndex: 'os_tools',   key: 'os_tools',    width: 200, ellipsis: true, render: cell },
   ];
 
-  const baseColumns = hiddenColumns.length
-    ? allColumns.filter(c => c.key === 'vm' || !hiddenColumns.includes(c.key))
-    : allColumns;
+  const toggleableCols = allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key));
+  const { visible, toggle, reset } = useColumnVisibility('security-vms', toggleableCols.map(c => c.key));
+
+  const baseColumns = [
+    allColumns[0],
+    ...allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key) && visible.has(c.key)),
+  ];
 
   const customFieldCols = fieldDefs.map(fd => ({
     key:   `cf_${fd.id}`,
@@ -140,10 +144,13 @@ export default function SecurityVMsTab({ projectId, hiddenColumns = [] }) {
         density={density} setDensity={setDensity}
         onClear={clearFilters}
         extra={
-          <Button icon={<DownloadOutlined />}
-            onClick={() => downloadCSV('security-vms', { ...filters, search })}>
-            Export CSV
-          </Button>
+          <Space>
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <Button icon={<DownloadOutlined />}
+              onClick={() => downloadCSV('security-vms', { ...filters, search })}>
+              Export CSV
+            </Button>
+          </Space>
         }
       />
 

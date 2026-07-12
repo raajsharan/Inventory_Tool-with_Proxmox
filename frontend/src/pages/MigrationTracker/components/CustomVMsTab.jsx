@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Table, Button, Select, Typography, message } from 'antd';
+import { Table, Button, Select, Typography, Space, message } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
   SummaryCards, MigrationStatusBadge, PowerstateBadge,
-  GuestStateBadge, DiskSize, downloadCSV, cell,
+  GuestStateBadge, DiskSize, downloadCSV, cell, useColumnVisibility, ColumnToggleButton,
 } from './shared.jsx';
 import FilterToolbar from './FilterToolbar.jsx';
 import { CUSTOM_COLUMNS } from '../tabColumnRegistry.js';
@@ -191,7 +191,17 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
     } catch { message.error('Update failed'); }
   };
 
-  const baseColumns = buildColumns(hiddenColumns, canEdit, patch);
+  const allBuilt = buildColumns(hiddenColumns, canEdit, patch);
+  const toggleableCols = allBuilt.filter(c => c.key !== 'vm');
+  const { visible, toggle, reset } = useColumnVisibility(
+    `custom-vms-${tabId || 'default'}`,
+    toggleableCols.map(c => c.key)
+  );
+
+  const baseColumns = [
+    allBuilt[0], // vm — always visible
+    ...allBuilt.filter(c => c.key !== 'vm' && visible.has(c.key)),
+  ];
 
   const customFieldCols = fieldDefs.map(fd => ({
     key:   `cf_${fd.id}`,
@@ -230,10 +240,13 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
         density={density} setDensity={setDensity}
         onClear={clearFilters}
         extra={
-          <Button icon={<DownloadOutlined />}
-            onClick={() => downloadCSV('custom-vms', { ...filters, search, tab_id: tabId })}>
-            Export CSV
-          </Button>
+          <Space>
+            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} />
+            <Button icon={<DownloadOutlined />}
+              onClick={() => downloadCSV('custom-vms', { ...filters, search, tab_id: tabId })}>
+              Export CSV
+            </Button>
+          </Space>
         }
       />
 
