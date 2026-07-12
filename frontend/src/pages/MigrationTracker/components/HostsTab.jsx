@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select, Input } from 'antd';
 import { DownloadOutlined, WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
@@ -39,17 +39,40 @@ const DEFAULT_STAGE_VALUES = ['Pending', 'In Progress', 'Completed'];
 function StageSelect({ value, onChange, disabled = false, options }) {
   const opts = (options?.length ? options : DEFAULT_STAGE_VALUES);
   const safeValue = opts.includes(value) ? value : opts[0];
+  const ref = useRef(null);
   return (
-    <Select
-      size="small"
-      value={safeValue}
-      onChange={onChange}
-      disabled={disabled}
-      style={{ width: 140 }}
-      options={opts.map(v => ({ value: v, label: v }))}
-      labelRender={({ label }) => <span>{label}</span>}
-      getPopupContainer={t => t.parentElement}
-    />
+    <div ref={ref} style={{ position: 'relative' }}>
+      <Select
+        size="small"
+        value={safeValue}
+        onChange={onChange}
+        disabled={disabled}
+        style={{ width: 140 }}
+        options={opts.map(v => ({ value: v, label: v }))}
+        labelRender={({ label }) => <span>{label}</span>}
+        getPopupContainer={() => ref.current || document.body}
+      />
+    </div>
+  );
+}
+
+function AssignedToSelect({ value, opts, onChange }) {
+  const ref = useRef(null);
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <Select
+        size="small"
+        mode="tags"
+        value={value ? [value] : []}
+        onChange={vals => onChange(vals[vals.length - 1] ?? '')}
+        style={{ width: 145 }}
+        maxTagCount={1}
+        options={opts.map(o => ({ value: o, label: o }))}
+        tokenSeparators={[',']}
+        placeholder="Assign to…"
+        getPopupContainer={() => ref.current || document.body}
+      />
+    </div>
   );
 }
 
@@ -149,20 +172,10 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
         // No configured options — derive from existing values in table + allow free entry
         const autoOpts = [...new Set(data.items.map(i => i.assigned_to).filter(Boolean))];
         return (
-          <Select
-            size="small"
-            mode="tags"
-            value={v ? [v] : []}
-            onChange={vals => {
-              const latest = vals[vals.length - 1] ?? '';
-              patch(r.id, { assigned_to: latest });
-            }}
-            style={{ width: 145 }}
-            maxTagCount={1}
-            options={autoOpts.map(o => ({ value: o, label: o }))}
-            tokenSeparators={[',']}
-            placeholder="Assign to…"
-            getPopupContainer={t => t.parentElement}
+          <AssignedToSelect
+            value={v}
+            opts={autoOpts}
+            onChange={latest => patch(r.id, { assigned_to: latest })}
           />
         );
       },

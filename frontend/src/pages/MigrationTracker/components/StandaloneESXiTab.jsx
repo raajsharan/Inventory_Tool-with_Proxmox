@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Table, Button, Select, Typography, Alert, Space, message } from 'antd';
 import { DownloadOutlined, WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
@@ -16,12 +16,15 @@ const { Text } = Typography;
 const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Completed', 'Blocked'];
 
 function StatusSelect({ value, onChange }) {
+  const ref = useRef(null);
   return (
-    <Select size="small" value={value || 'Not Started'} onChange={onChange}
-      style={{ width: 130 }}
-      options={STATUS_OPTIONS.map(v => ({ value: v, label: v }))}
-      labelRender={({ label }) => <span>{label}</span>}
-      getPopupContainer={t => t.parentElement} />
+    <div ref={ref} style={{ position: 'relative' }}>
+      <Select size="small" value={value || 'Not Started'} onChange={onChange}
+        style={{ width: 130 }}
+        options={STATUS_OPTIONS.map(v => ({ value: v, label: v }))}
+        labelRender={({ label }) => <span>{label}</span>}
+        getPopupContainer={() => ref.current || document.body} />
+    </div>
   );
 }
 
