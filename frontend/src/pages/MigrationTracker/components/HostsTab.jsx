@@ -47,6 +47,7 @@ function StageSelect({ value, onChange, disabled = false, options }) {
       disabled={disabled}
       style={{ width: 140 }}
       options={opts.map(v => ({ value: v, label: v }))}
+      labelRender={({ label }) => <span>{label}</span>}
     />
   );
 }
