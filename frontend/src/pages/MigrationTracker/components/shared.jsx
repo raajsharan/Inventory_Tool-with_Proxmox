@@ -269,7 +269,9 @@ export function SummaryCards({ cards }) {
           padding: '10px 14px',
         }}>
           <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>{label}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: color || token.colorText, lineHeight: 1.2 }}>{value ?? '—'}</div>
+          <div className="migration-card-value" style={{ fontSize: 22, fontWeight: 700, color: color || token.colorText, lineHeight: 1.2 }}>
+            <AnimatedValue value={value} />
+          </div>
           {sub && <div style={{ fontSize: 11, color: token.colorTextSecondary, marginTop: 2 }}>{sub}</div>}
         </div>
       ))}
@@ -305,6 +307,47 @@ export function downloadCSV(type, params = {}) {
 export function cell(v) {
   if (v == null || v === '') return <Text type="secondary">—</Text>;
   return v;
+}
+
+// ── COUNT-UP ANIMATION (data-visualization: "Counter animations accelerate then decelerate") ──
+function useCountUp(target, duration = 380) {
+  const prevRef = useRef(null);
+  const rafRef  = useRef(null);
+  const [val, setVal] = useState(typeof target === 'number' ? 0 : target);
+
+  useEffect(() => {
+    if (typeof target !== 'number' || isNaN(target)) {
+      setVal(target);
+      return;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setVal(target);
+      prevRef.current = target;
+      return;
+    }
+    const from = typeof prevRef.current === 'number' ? prevRef.current : 0;
+    prevRef.current = target;
+    if (from === target) return;
+    let t0 = null;
+    const tick = (ts) => {
+      if (!t0) t0 = ts;
+      const p = Math.min((ts - t0) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(from + (target - from) * eased));
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration]);
+
+  return val;
+}
+
+function AnimatedValue({ value }) {
+  const display = useCountUp(typeof value === 'number' ? value : null);
+  if (typeof value !== 'number' || value == null) return <>{value ?? '—'}</>;
+  return <>{display ?? '—'}</>;
 }
 
 // ── COLUMN VISIBILITY HOOK ────────────────────────────────────────────────────
