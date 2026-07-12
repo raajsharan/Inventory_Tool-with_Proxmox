@@ -261,7 +261,7 @@ export function SummaryCards({ cards }) {
       display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16,
     }}>
       {cards.map(({ label, value, color, sub }) => (
-        <div key={label} style={{
+        <div key={label} className="migration-card" style={{
           flex: '1 1 130px', minWidth: 110,
           background: token.colorBgContainer,
           border: `1px solid ${token.colorBorderSecondary}`,

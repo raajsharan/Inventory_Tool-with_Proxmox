@@ -40,7 +40,7 @@ function StageOptionsEditor({ value = DEFAULT_STAGE_OPTIONS, onChange }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+      <div className="options-tag-editor" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
         {value.map(opt => (
           <Tag
             key={opt}
@@ -90,7 +90,7 @@ function OptionsEditor({ value = [], onChange, placeholder = 'Type an option and
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+      <div className="options-tag-editor" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
         {value.map(opt => (
           <Tag key={opt} closable onClose={() => remove(opt)} style={{ margin: 0 }}>{opt}</Tag>
         ))}

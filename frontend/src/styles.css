@@ -148,10 +148,73 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
 
 /* Respect reduced-motion preference. */
 @media (prefers-reduced-motion: reduce) {
-  .page-shell > *, .stat-tile, .stat-tile-icon, .ant-btn .anticon-loading {
+  .page-shell > *, .stat-tile, .stat-tile-icon, .ant-btn .anticon-loading,
+  .migration-card, .options-tag-editor .ant-tag {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ----- Migration summary cards ---------------------------------------- */
+/* Matches stat-tile pattern: staggered pop-in on mount, subtle hover lift. */
+.migration-card {
+  animation: tilePop 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  will-change: transform;
+}
+.migration-card:nth-child(1) { animation-delay: 0.04s; }
+.migration-card:nth-child(2) { animation-delay: 0.08s; }
+.migration-card:nth-child(3) { animation-delay: 0.12s; }
+.migration-card:nth-child(4) { animation-delay: 0.16s; }
+.migration-card:nth-child(5) { animation-delay: 0.20s; }
+.migration-card:nth-child(6) { animation-delay: 0.24s; }
+.migration-card:nth-child(7) { animation-delay: 0.28s; }
+@media (hover: hover) and (pointer: fine) {
+  .migration-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.09);
+  }
+  body[data-theme="dark"] .migration-card:hover {
+    box-shadow: 0 6px 16px rgba(0,0,0,0.40);
+  }
+}
+
+/* ----- Button press feedback ------------------------------------------ */
+/* Fast scale-down on :active gives physical "click" feel.                 */
+.ant-btn {
+  transition: transform 0.10s ease, opacity 0.10s ease,
+              background-color 0.15s ease, border-color 0.15s ease,
+              color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.ant-btn:not(:disabled):active {
+  transform: scale(0.97) !important;
+}
+
+/* ----- Tag enter animation — scoped to options editors ---------------- */
+@keyframes tagIn {
+  from { opacity: 0; transform: scale(0.75); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.options-tag-editor .ant-tag {
+  animation: tagIn 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ----- Table row hover — smoother background transition --------------- */
+.ant-table-tbody > tr {
+  transition: background 0.12s ease;
+}
+.ant-table-tbody > tr > td {
+  transition: background 0.12s ease;
+}
+
+/* ----- Tabs ink-bar — ensure hardware-accelerated slide --------------- */
+.ant-tabs-ink-bar {
+  will-change: transform, width;
+}
+
+/* ----- Select focus border glow --------------------------------------- */
+.ant-select-selector {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
 /* Asset View — card-grid details page. */
