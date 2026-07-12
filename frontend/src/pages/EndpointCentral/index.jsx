@@ -271,11 +271,14 @@ export default function EndpointCentral() {
       setConfigured(true);
     } catch (e) {
       const status = e?.response?.status;
-      if (status === 400) {
+      const errMsg = e?.response?.data?.error || '';
+      // 400 = not configured; 503 = schema not ready — both mean "needs setup"
+      if (status === 400 || status === 503) {
         setConfigured(false);
         setAgents([]);
+        if (status === 503) message.warning('Backend schema not ready — please restart the backend server');
       } else {
-        message.error(e?.response?.data?.error || 'Failed to load agents');
+        message.error(errMsg || 'Failed to load agents');
       }
     } finally { setLoading(false); }
   }, [message]);

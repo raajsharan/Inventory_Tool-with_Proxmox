@@ -79,24 +79,39 @@ const DEFAULT_CONFIG = {
 };
 
 async function getConfig() {
-  const { rows } = await db.query('SELECT * FROM endpoint_central_config WHERE id = 1');
-  return rows[0] || DEFAULT_CONFIG;
+  try {
+    const { rows } = await db.query('SELECT * FROM endpoint_central_config WHERE id = 1');
+    return rows[0] || DEFAULT_CONFIG;
+  } catch (e) {
+    // Table or column doesn't exist yet — schema hasn't been applied (backend needs a restart)
+    if (e.code === '42P01' || e.code === '42703') return DEFAULT_CONFIG;
+    throw e;
+  }
 }
 
 async function saveConfig({ server_url, customer_id, api_key, api_path, verify_ssl }, updatedBy) {
-  await db.query(`
-    INSERT INTO endpoint_central_config
-      (id, server_url, customer_id, api_key, api_path, verify_ssl, updated_by, updated_at)
-    VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
-    ON CONFLICT (id) DO UPDATE SET
-      server_url  = EXCLUDED.server_url,
-      customer_id = EXCLUDED.customer_id,
-      api_key     = EXCLUDED.api_key,
-      api_path    = EXCLUDED.api_path,
-      verify_ssl  = EXCLUDED.verify_ssl,
-      updated_by  = EXCLUDED.updated_by,
-      updated_at  = NOW()
-  `, [server_url || '', customer_id || '1', api_key || '', api_path || '', !!verify_ssl, updatedBy || null]);
+  try {
+    await db.query(`
+      INSERT INTO endpoint_central_config
+        (id, server_url, customer_id, api_key, api_path, verify_ssl, updated_by, updated_at)
+      VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        server_url  = EXCLUDED.server_url,
+        customer_id = EXCLUDED.customer_id,
+        api_key     = EXCLUDED.api_key,
+        api_path    = EXCLUDED.api_path,
+        verify_ssl  = EXCLUDED.verify_ssl,
+        updated_by  = EXCLUDED.updated_by,
+        updated_at  = NOW()
+    `, [server_url || '', customer_id || '1', api_key || '', api_path || '', !!verify_ssl, updatedBy || null]);
+  } catch (e) {
+    if (e.code === '42P01' || e.code === '42703') {
+      const err = new Error('Database schema not ready — restart the backend to apply pending schema updates, then try again');
+      err.status = 503;
+      throw err;
+    }
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------
