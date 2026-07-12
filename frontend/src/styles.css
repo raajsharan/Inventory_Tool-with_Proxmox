@@ -309,7 +309,8 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
   from { opacity: 0; transform: scaleY(0.94) translateY(-4px); }
   to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
 }
-.ant-select-dropdown,
+/* ant-select-dropdown excluded: scaleY transform triggers Ant Design's
+   position recalculation loop, causing flicker on inline table selects. */
 .ant-dropdown-menu,
 .ant-picker-dropdown {
   animation: dropdownOpen 0.16s var(--anim-enter) both;
