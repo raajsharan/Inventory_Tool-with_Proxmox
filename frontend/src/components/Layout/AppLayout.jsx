@@ -110,10 +110,11 @@ export default function AppLayout() {
           ? [{ key: '/reports', icon: <BarChartOutlined />, label: <Link to="/reports">Report Builder</Link> }]
           : [];
       case 'software-services': {
-        const meItem      = can('software_status') && { key: '/software-status', icon: <SafetyCertificateOutlined />, label: <Link to="/software-status">ManageEngine Status</Link> };
-        const nessusItem  = can('nessus_status')   && { key: '/nessus-status',   icon: <SafetyCertificateOutlined />, label: <Link to="/nessus-status">Nessus Agent Status</Link> };
-        const tenableItem = can('tenable_report')  && { key: '/tenable-report',  icon: <SafetyCertificateOutlined />, label: <Link to="/tenable-report">Tenable Report</Link> };
-        const children    = [meItem, nessusItem, tenableItem].filter(Boolean);
+        const meItem      = can('software_status')   && { key: '/software-status',  icon: <SafetyCertificateOutlined />, label: <Link to="/software-status">ManageEngine Status</Link> };
+        const nessusItem  = can('nessus_status')     && { key: '/nessus-status',    icon: <SafetyCertificateOutlined />, label: <Link to="/nessus-status">Nessus Agent Status</Link> };
+        const tenableItem = can('tenable_report')    && { key: '/tenable-report',   icon: <SafetyCertificateOutlined />, label: <Link to="/tenable-report">Tenable Report</Link> };
+        const ecItem      = can('endpoint_central')  && { key: '/endpoint-central', icon: <SafetyCertificateOutlined />, label: <Link to="/endpoint-central">ME Endpoint Central</Link> };
+        const children    = [meItem, nessusItem, tenableItem, ecItem].filter(Boolean);
         return children.length
           ? [{ key: 'software-services', icon: <SafetyCertificateOutlined />, label: 'Software Services', children }]
           : [];
@@ -221,7 +222,7 @@ export default function AppLayout() {
           selectedKeys={[loc.pathname]}
           defaultOpenKeys={[
             ...['/vmware-discovery', '/proxmox-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
-            ...['/software-status', '/nessus-status', '/tenable-report'].includes(loc.pathname) ? ['software-services'] : [],
+            ...['/software-status', '/nessus-status', '/tenable-report', '/endpoint-central'].includes(loc.pathname) ? ['software-services'] : [],
           ]}
           items={items}
         />

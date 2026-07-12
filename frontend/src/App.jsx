@@ -53,6 +53,7 @@ import NessusInstallConfig from './pages/Admin/NessusInstallConfig.jsx';
 import TenableReport from './pages/TenableReport/index.jsx';
 import DbImport from './pages/Admin/DbImport.jsx';
 import MigrationTracker from './pages/MigrationTracker/index.jsx';
+import EndpointCentral from './pages/EndpointCentral/index.jsx';
 
 export default function App() {
   return (
@@ -99,6 +100,7 @@ export default function App() {
         <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
         <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
         <Route path="/migration-tracker"  element={<MigrationTracker />} />
+        <Route path="/endpoint-central"   element={<EndpointCentral />} />
 
         <Route path="/admin/users" element={<Users />} />
         <Route path="/admin/dropdowns" element={<Dropdowns />} />

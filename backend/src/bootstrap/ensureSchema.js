@@ -115,6 +115,18 @@ const STATEMENTS = [
    )`,
   `INSERT INTO compliance_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
 
+  // ── ManageEngine Endpoint Central connection config (singleton row)
+  `CREATE TABLE IF NOT EXISTS endpoint_central_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      server_url  TEXT NOT NULL DEFAULT '',
+      customer_id TEXT NOT NULL DEFAULT '1',
+      api_key     TEXT NOT NULL DEFAULT '',
+      verify_ssl  BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO endpoint_central_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+
   // ── vm_name uniqueness removal (drop_vm_name_unique.sql)
   `ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key`,
   `ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_vm_name_key`,

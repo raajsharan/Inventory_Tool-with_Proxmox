@@ -25,9 +25,10 @@ const PAGE_SECTIONS = [
   {
     title: 'SOFTWARE SERVICES',
     pages: [
-      { key: 'software_status', label: 'ManageEngine Status' },
-      { key: 'nessus_status',   label: 'Nessus Agent Status' },
-      { key: 'tenable_report',  label: 'Tenable Report' },
+      { key: 'software_status',  label: 'ManageEngine Status' },
+      { key: 'nessus_status',    label: 'Nessus Agent Status' },
+      { key: 'tenable_report',   label: 'Tenable Report' },
+      { key: 'endpoint_central', label: 'ME Endpoint Central' },
     ],
   },
   {
