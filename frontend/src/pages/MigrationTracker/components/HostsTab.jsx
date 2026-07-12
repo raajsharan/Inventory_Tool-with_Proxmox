@@ -72,11 +72,13 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
     search, onSearch, filters, onFilter, clearFilters, filterOpts, reload,
   } = useMigrTable('/migration/hosts', projectId ? { project_id: projectId } : {});
 
-  const summary = useHostsSummary(refreshToken + data.total, projectId);
+  const [patchTick, setPatchTick] = useState(0);
+  const summary = useHostsSummary(refreshToken + data.total + patchTick, projectId);
 
   const patch = async (id, fields) => {
     try {
       await api.patch(`/migration/hosts/${id}`, fields);
+      setPatchTick(t => t + 1);
       reload();
     } catch { message.error('Update failed'); }
   };

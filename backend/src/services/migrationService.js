@@ -295,7 +295,7 @@ async function patchHost(id, fields) {
   let i = 1;
   for (const [k, v] of Object.entries(fields)) {
     if (!allowed.includes(k)) continue;
-    if (['vms_vacate','proxmox_install','vm_migration_back'].includes(k) && !VALID_STAGE_STATUSES.includes(v)) continue;
+    if (['vms_vacate','proxmox_install','vm_migration_back'].includes(k) && !v) continue;
     sets.push(`${k} = $${i++}`);
     vals.push(v === '' ? null : v);
   }
