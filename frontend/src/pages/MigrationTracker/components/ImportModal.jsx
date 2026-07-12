@@ -102,6 +102,7 @@ export default function ImportModal({ open, onClose, onImported, projectId, proj
 
       {/* ── Step 0: Upload ──────────────────────────────────────────────── */}
       {step === 0 && (
+        <div className="import-step-content">
         <Spin spinning={loading}>
           <Alert
             type="info"
@@ -125,10 +126,12 @@ export default function ImportModal({ open, onClose, onImported, projectId, proj
             <p className="ant-upload-hint">Sheets not matching expected names will be ignored. Existing data will be replaced.</p>
           </Dragger>
         </Spin>
+        </div>
       )}
 
       {/* ── Step 1: Preview ─────────────────────────────────────────────── */}
       {step === 1 && preview && (
+        <div className="import-step-content">
         <Spin spinning={loading}>
           <Alert
             type="warning"
@@ -177,11 +180,12 @@ export default function ImportModal({ open, onClose, onImported, projectId, proj
             </Button>
           </Space>
         </Spin>
+        </div>
       )}
 
       {/* ── Step 2: Done ────────────────────────────────────────────────── */}
       {step === 2 && counts && (
-        <div style={{ textAlign: 'center', padding: '24px 0' }}>
+        <div className="import-step-content" style={{ textAlign: 'center', padding: '24px 0' }}>
           <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 16 }} />
           <Title level={4}>Import complete</Title>
           <Descriptions column={1} bordered size="small" style={{ maxWidth: 360, margin: '16px auto' }}>

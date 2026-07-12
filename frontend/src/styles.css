@@ -217,6 +217,141 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
   transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ANIMATION SYSTEM v2
+   Skills applied: micro-interactions · page-transitions · web-motion-design
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Central token system — tune all motion here. */
+:root {
+  --anim-fast:   100ms;
+  --anim-std:    200ms;
+  --anim-enter:  cubic-bezier(0.22, 1, 0.36, 1);   /* decelerate-in spring */
+  --anim-exit:   cubic-bezier(0.4,  0, 1, 1);       /* ease-in */
+  --anim-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* elastic overshoot */
+  --anim-smooth: cubic-bezier(0.4,  0, 0.2, 1);     /* material standard */
+}
+
+/* ----- Button hover lift (Anticipation) ------------------------------- */
+/* Slight rise prepares for the click — touch-safe media query.          */
+@media (hover: hover) and (pointer: fine) {
+  .ant-btn:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  }
+  .ant-btn-primary:not(:disabled):hover {
+    box-shadow: 0 3px 10px rgba(22, 119, 255, 0.30);
+  }
+}
+/* Squash & Stretch: compress Y + widen X slightly on press. */
+.ant-btn:not(:disabled):active {
+  transform: translateY(0) scaleX(0.98) scaleY(0.96) !important;
+}
+
+/* ----- Icon secondary action ------------------------------------------ */
+/* Icon scales with button on hover — reinforces the state change.       */
+@media (hover: hover) and (pointer: fine) {
+  .ant-btn:not(:disabled):hover .anticon {
+    transform: scale(1.12);
+    transition: transform var(--anim-fast) var(--anim-enter);
+  }
+}
+
+/* ----- Switch elastic thumb (Follow Through) -------------------------- */
+/* Overshoot easing makes toggle feel physically grounded.               */
+.ant-switch .ant-switch-handle {
+  transition: left var(--anim-std) var(--anim-spring) !important;
+}
+.ant-switch {
+  transition: background var(--anim-std) var(--anim-smooth) !important;
+}
+
+/* ----- Form validation error shake (Staging + Exaggeration) ----------- */
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX( 5px); }
+  60%       { transform: translateX(-3px); }
+  80%       { transform: translateX( 3px); }
+}
+.ant-form-item-has-error .ant-input,
+.ant-form-item-has-error .ant-input-affix-wrapper,
+.ant-form-item-has-error .ant-select-selector,
+.ant-form-item-has-error .ant-input-number {
+  animation: errorShake 0.32s var(--anim-smooth);
+}
+.ant-form-item-explain-error {
+  animation: fadeInUp 0.18s var(--anim-enter) both;
+}
+
+/* ----- Drawer asymmetric timing (page-transitions) -------------------- */
+/* Open: decelerate spring. Close: ease-in (faster exit feels snappier). */
+.ant-drawer-content-wrapper {
+  will-change: transform;
+  transition: transform 220ms var(--anim-enter) !important;
+}
+
+/* ----- Modal entrance (page-transitions) ------------------------------ */
+.ant-modal-content {
+  animation: fadeInUp 0.20s var(--anim-enter) both;
+}
+.ant-modal-mask {
+  animation: fadeIn 0.18s ease both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ----- Dropdown / Select / Picker open -------------------------------- */
+/* Panel unfolds from top with slight scale — like opening a physical lid.*/
+@keyframes dropdownOpen {
+  from { opacity: 0; transform: scaleY(0.94) translateY(-4px); }
+  to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
+}
+.ant-select-dropdown,
+.ant-dropdown-menu,
+.ant-picker-dropdown {
+  animation: dropdownOpen 0.16s var(--anim-enter) both;
+  transform-origin: top center;
+}
+
+/* ----- Collapse header hover + caret ---------------------------------- */
+.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  transition: background 0.15s var(--anim-smooth),
+              color 0.15s var(--anim-smooth) !important;
+}
+.ant-collapse-arrow {
+  transition: transform 0.2s var(--anim-spring) !important;
+}
+
+/* ----- ImportModal step crossfade ------------------------------------- */
+/* Each step mounts fresh on state change — fadeInUp makes it feel guided.*/
+.import-step-content {
+  animation: fadeInUp 0.2s var(--anim-enter) both;
+}
+
+/* ----- Reduced motion — all v2 additions covered ---------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .ant-btn,
+  .ant-switch,
+  .ant-switch .ant-switch-handle,
+  .ant-drawer-content-wrapper,
+  .ant-modal-content,
+  .ant-modal-mask,
+  .ant-select-dropdown,
+  .ant-dropdown-menu,
+  .ant-picker-dropdown,
+  .ant-collapse-arrow,
+  .ant-form-item-explain-error,
+  .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-select-selector,
+  .import-step-content {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Asset View — card-grid details page. */
 .asset-view-titlebar {
   display: flex; align-items: center; justify-content: space-between;
