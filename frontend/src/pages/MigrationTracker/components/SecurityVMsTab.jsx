@@ -20,7 +20,8 @@ function StatusSelect({ value, onChange }) {
     <Select size="small" value={value || 'Not Started'} onChange={onChange}
       style={{ width: 130 }}
       options={STATUS_OPTIONS.map(v => ({ value: v, label: v }))}
-      labelRender={({ label }) => <span>{label}</span>} />
+      labelRender={({ label }) => <span>{label}</span>}
+      getPopupContainer={t => t.parentElement} />
   );
 }
 

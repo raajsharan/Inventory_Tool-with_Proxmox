@@ -48,6 +48,7 @@ function StageSelect({ value, onChange, disabled = false, options }) {
       style={{ width: 140 }}
       options={opts.map(v => ({ value: v, label: v }))}
       labelRender={({ label }) => <span>{label}</span>}
+      getPopupContainer={t => t.parentElement}
     />
   );
 }
@@ -161,6 +162,7 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
             options={autoOpts.map(o => ({ value: o, label: o }))}
             tokenSeparators={[',']}
             placeholder="Assign to…"
+            getPopupContainer={t => t.parentElement}
           />
         );
       },
