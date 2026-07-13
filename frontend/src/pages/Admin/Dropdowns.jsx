@@ -6,6 +6,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined,
   TagsOutlined, EnvironmentOutlined, AppstoreOutlined, ClockCircleOutlined,
   ThunderboltOutlined, DesktopOutlined, FileTextOutlined, SafetyOutlined,
+  HddOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 
@@ -16,6 +17,7 @@ const CATEGORIES = [
   { key: 'os_type',           label: 'OS Types',          icon: <DesktopOutlined /> },
   { key: 'os_version',        label: 'OS Versions',       icon: <DesktopOutlined />, parentCategory: 'os_type', parentLabel: 'OS Types' },
   { key: 'server_status',     label: 'Server Status',     icon: <SafetyOutlined /> },
+  { key: 'server_model',      label: 'Server Models',     icon: <HddOutlined /> },
   { key: 'patching_type',     label: 'Patching Type',     icon: <ThunderboltOutlined /> },
   { key: 'server_patch_type', label: 'Server Patch Type', icon: <ThunderboltOutlined /> },
   { key: 'patching_schedule', label: 'Patching Schedule', icon: <ClockCircleOutlined /> },
