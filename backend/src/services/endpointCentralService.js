@@ -21,14 +21,20 @@ const db    = require('../config/db');
 // ---------------------------------------------------------------------------
 
 const KNOWN_PATHS = [
-  '/api/1.4/computers',
+  // Official documented paths (ME EC 10.x / Endpoint Central)
+  '/api/1.4/som/computers',            // Systems of Management — primary documented endpoint
+  '/api/1.4/inventory/computers',      // Inventory module computers
+  '/api/1.4/inventory/scancomputers',  // Inventory scan details
+  '/api/1.4/inventory/compdetailssummary', // Computer detail summary
+  // Patch management paths (older / alternate)
   '/api/1.4/patch/allsystems',
-  '/api/1.4/inventory/computers',
   '/api/1.4/patch/systems/allsystems',
-  '/dcapi/rd/computers',
+  // Legacy Desktop Central paths
+  '/api/1.4/computers',
   '/api/1.3/computers',
   '/api/1.4/computers/filter',
   '/api/1.4/inventory/managedendpoints',
+  '/dcapi/rd/computers',
 ];
 
 // ---------------------------------------------------------------------------
@@ -120,7 +126,20 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
 
 // Known JSON key paths to check (tried in order before the recursive fallback)
 const EXTRACT_PATHS = [
+  // SoM (Systems of Management) module — /api/1.4/som/computers
+  ['message_response', 'Computers'],
+  ['message_response', 'computers_details'],
+  ['message_response', 'SomComputers'],
+  // Inventory module
+  ['message_response', 'computer'],
+  ['message_response', 'computers'],
+  ['message_response', 'allsystems'],
+  ['message_response', 'allsystemsdetail'],
+  ['message_response', 'systems'],
+  ['message_response', 'resourcesdata'],
+  ['message_response', 'compdetailssummary'],
   ['data', 'computers'],
+  ['data', 'Computers'],
   ['data', 'allsystemsdetail'],
   ['data', 'allsystems'],
   ['data', 'computerdetails'],
@@ -128,13 +147,9 @@ const EXTRACT_PATHS = [
   ['data', 'managedendpoints'],
   ['data', 'inventory'],
   ['data', 'resourcesdata'],
-  ['message_response', 'computer'],
-  ['message_response', 'computers'],
-  ['message_response', 'allsystems'],
-  ['message_response', 'allsystemsdetail'],
-  ['message_response', 'systems'],
-  ['message_response', 'resourcesdata'],
+  // Top-level arrays
   ['computers'],
+  ['Computers'],
   ['systems'],
   ['allsystems'],
   ['allsystemsdetail'],
@@ -145,11 +160,13 @@ const EXTRACT_PATHS = [
 function looksLikeComputer(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
   const up = new Set(Object.keys(obj).map(k => k.toUpperCase()));
-  return up.has('COMPUTERNAME') || up.has('COMPUTER_NAME') || up.has('HOSTNAME')
-      || up.has('RESOURCE_ID')  || up.has('RESOURCEID')
-      || up.has('IPADDRESS')    || up.has('IP_ADDRESS')
-      || up.has('AGENTVERSION') || up.has('AGENT_VERSION')
-      || up.has('MANAGED_STATUS') || up.has('AGENT_STATUS');
+  return up.has('COMPUTERNAME')   || up.has('COMPUTER_NAME') || up.has('HOSTNAME')
+      || up.has('RESOURCE_ID')    || up.has('RESOURCEID')
+      || up.has('IPADDRESS')      || up.has('IP_ADDRESS')
+      || up.has('AGENTVERSION')   || up.has('AGENT_VERSION')
+      || up.has('MANAGED_STATUS') || up.has('AGENT_STATUS')
+      || up.has('COMPUTERID')     || up.has('COMPUTER_ID')    // SoM fields
+      || up.has('NETBIOSNAME')    || up.has('NETBIOS_NAME');  // SoM fields
 }
 
 // Recursively find the first array whose elements look like computer records
@@ -195,18 +212,22 @@ function extractComputers(json) {
 
 function normalizeComputer(c) {
   return {
-    resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? null,
-    computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? c.COMPUTER_NAME  ?? '—',
-    domain:         c.domain         ?? c.DOMAIN         ?? '—',
-    ip_address:     c.ipaddress      ?? c.IP_ADDRESS     ?? c.ip_address    ?? c.IPADDRESS      ?? '—',
-    os_name:        c.osname         ?? c.OS_NAME        ?? c.osName        ?? c.os_name        ?? '—',
+    resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? c.computer_id   ?? c.COMPUTER_ID   ?? null,
+    computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? c.COMPUTER_NAME
+                 ?? c.netbiosname    ?? c.NETBIOSNAME    ?? c.netbios_name  ?? c.NETBIOS_NAME  ?? '—',
+    domain:         c.domain         ?? c.DOMAIN         ?? c.domain_name   ?? c.DOMAIN_NAME   ?? '—',
+    ip_address:     c.ipaddress      ?? c.IP_ADDRESS     ?? c.ip_address    ?? c.IPADDRESS
+                 ?? c.client_ip      ?? c.CLIENT_IP      ?? '—',
+    os_name:        c.osname         ?? c.OS_NAME        ?? c.osName        ?? c.os_name
+                 ?? c.os             ?? c.OS             ?? c.operatingsystem ?? '—',
     os_platform:    c.osplatform     ?? c.OS_PLATFORM    ?? null,
-    agent_version:  c.agentversion   ?? c.AGENT_VERSION  ?? c.agent_version ?? c.AGENTVERSION   ?? '—',
+    agent_version:  c.agentversion   ?? c.AGENT_VERSION  ?? c.agent_version ?? c.AGENTVERSION  ?? '—',
     managed_status: c.managed_status ?? c.MANAGED_STATUS ?? c.managedstatus ?? 1,
     // agent_status: 0 = Online/Live, 1 = Offline/Dead
     agent_status:   c.agent_status   ?? c.AGENT_STATUS   ?? c.agentstatus   ?? 1,
-    last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC       ?? null,
-    office:         c.resourceoffice ?? c.RESOURCE_OFFICE ?? c.office       ?? '—',
+    last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
+                 ?? c.last_contact   ?? c.LAST_CONTACT   ?? null,
+    office:         c.resourceoffice ?? c.RESOURCE_OFFICE ?? c.office       ?? c.site ?? c.SITE ?? '—',
     resource_type:  c.resourcetype   ?? c.RESOURCE_TYPE  ?? 0,
   };
 }

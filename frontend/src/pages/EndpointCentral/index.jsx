@@ -195,9 +195,8 @@ function ConfigModal({ open, onClose, onSaved }) {
           label="API Path"
           extra={
             <span>
-              Leave blank to auto-detect. Common paths:{' '}
-              <code>/api/1.4/computers</code>,{' '}
-              <code>/api/1.4/patch/allsystems</code>
+              Leave blank to auto-detect. Recommended:{' '}
+              <code>/api/1.4/som/computers</code>
             </span>
           }
         >
@@ -207,11 +206,14 @@ function ConfigModal({ open, onClose, onSaved }) {
             showSearch
             mode="combobox"
             options={[
-              { value: '/api/1.4/computers',                label: '/api/1.4/computers' },
-              { value: '/api/1.4/patch/allsystems',         label: '/api/1.4/patch/allsystems' },
-              { value: '/api/1.4/patch/systems/allsystems', label: '/api/1.4/patch/systems/allsystems' },
-              { value: '/api/1.4/inventory/computers',      label: '/api/1.4/inventory/computers' },
-              { value: '/dcapi/rd/computers',               label: '/dcapi/rd/computers' },
+              { value: '/api/1.4/som/computers',               label: '/api/1.4/som/computers (recommended)' },
+              { value: '/api/1.4/inventory/computers',         label: '/api/1.4/inventory/computers' },
+              { value: '/api/1.4/inventory/scancomputers',     label: '/api/1.4/inventory/scancomputers' },
+              { value: '/api/1.4/inventory/compdetailssummary',label: '/api/1.4/inventory/compdetailssummary' },
+              { value: '/api/1.4/patch/allsystems',            label: '/api/1.4/patch/allsystems' },
+              { value: '/api/1.4/patch/systems/allsystems',    label: '/api/1.4/patch/systems/allsystems' },
+              { value: '/api/1.4/computers',                   label: '/api/1.4/computers (legacy)' },
+              { value: '/dcapi/rd/computers',                  label: '/dcapi/rd/computers (legacy)' },
             ]}
             onClear={() => form.setFieldValue('api_path', '')}
           />
