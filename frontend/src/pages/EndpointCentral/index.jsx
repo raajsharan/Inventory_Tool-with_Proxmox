@@ -95,16 +95,19 @@ function ConfigModal({ open, onClose, onSaved }) {
       setTestResult({ success: false, error: 'Enter Server URL and API Key first' });
       return;
     }
-    // Normalise api_path before saving for the test
+    // Normalise api_path
     if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
     setTesting(true);
     setTestResult(null);
     try {
+      // Save current settings first, then run test (backend reads from DB)
       await api.put('/endpoint-central/config', vals);
       const r = await api.post('/endpoint-central/test');
-      // If test succeeded and auto-discovered a working path, fill it in
-      if (r.data.success && r.data.working_path && !vals.api_path) {
+      // Auto-fill the working path + save it if auto-discovered
+      if (r.data.success && r.data.working_path) {
         form.setFieldValue('api_path', r.data.working_path);
+        // Persist the discovered path so page load uses it directly
+        await api.put('/endpoint-central/config', { ...vals, api_path: r.data.working_path });
       }
       setTestResult(r.data);
     } catch (e) {
@@ -190,6 +193,15 @@ function ConfigModal({ open, onClose, onSaved }) {
           type={testResult.success ? 'success' : 'error'}
           showIcon
           message={testResult.success ? testResult.message : testResult.error}
+          description={
+            !testResult.success && testResult.detail
+              ? (
+                <pre style={{ fontSize: 11, marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 160, overflowY: 'auto' }}>
+                  {testResult.detail}
+                </pre>
+              )
+              : null
+          }
         />
       )}
     </Modal>

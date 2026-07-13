@@ -2,15 +2,15 @@
  * endpointCentralService.js
  * --------------------------
  * Connects to ManageEngine Endpoint Central (formerly Desktop Central) REST API.
- * Reads computer / agent inventory using an API key (no session login required).
  *
- * The API path varies by product version:
- *   v10.x  /api/1.4/computers
- *   v11+   /api/1.4/patch/allsystems  (most common alternate)
- *   older  /dcapi/rd/computers
+ * Auth methods tried (in order):
+ *   1. Query param:   ?apikey=<KEY>&customerid=<ID>           (older versions)
+ *   2. Auth header:   Authorization: Authtoken <KEY>          (newer v11+ versions)
  *
- * When api_path is left blank, the service auto-discovers by trying each known
- * path in order and using the first one that returns a 200 with valid JSON.
+ * API paths tried during auto-discovery (in order):
+ *   /api/1.4/computers, /api/1.4/patch/allsystems,
+ *   /api/1.4/inventory/computers, /dcapi/rd/computers,
+ *   /api/1.4/patch/systems/allsystems
  */
 
 const https = require('https');
@@ -18,15 +18,15 @@ const http  = require('http');
 const db    = require('../config/db');
 
 // ---------------------------------------------------------------------------
-// Known API paths to try during auto-discovery (in priority order)
+// Known API paths to try during auto-discovery
 // ---------------------------------------------------------------------------
 
 const KNOWN_PATHS = [
   '/api/1.4/computers',
   '/api/1.4/patch/allsystems',
-  '/api/1.4/patch/systems/allsystems',
   '/api/1.4/inventory/computers',
   '/dcapi/rd/computers',
+  '/api/1.4/patch/systems/allsystems',
 ];
 
 // ---------------------------------------------------------------------------
@@ -45,11 +45,12 @@ function httpRequest(urlStr, options = {}) {
       path:     url.pathname + url.search,
       method:   options.method || 'GET',
       headers:  {
-        'Content-Type': 'application/json',
+        'Content-Type':  'application/json',
+        'Accept':        'application/json',
         ...(options.headers || {}),
       },
       ...(isHttps && !options.verifySsl ? { rejectUnauthorized: false } : {}),
-      timeout: 15000,
+      timeout: options.timeout || 12000,
     };
 
     const req = lib.request(reqOpts, (res) => {
@@ -60,8 +61,6 @@ function httpRequest(urlStr, options = {}) {
 
     req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
     req.on('error',   reject);
-
-    if (options.body) req.write(options.body);
     req.end();
   });
 }
@@ -83,7 +82,6 @@ async function getConfig() {
     const { rows } = await db.query('SELECT * FROM endpoint_central_config WHERE id = 1');
     return rows[0] || DEFAULT_CONFIG;
   } catch (e) {
-    // Table or column doesn't exist yet — schema hasn't been applied (backend needs a restart)
     if (e.code === '42P01' || e.code === '42703') return DEFAULT_CONFIG;
     throw e;
   }
@@ -106,7 +104,7 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
     `, [server_url || '', customer_id || '1', api_key || '', api_path || '', !!verify_ssl, updatedBy || null]);
   } catch (e) {
     if (e.code === '42P01' || e.code === '42703') {
-      const err = new Error('Database schema not ready — restart the backend to apply pending schema updates, then try again');
+      const err = new Error('Database schema not ready — restart the backend to apply schema updates');
       err.status = 503;
       throw err;
     }
@@ -115,22 +113,27 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
 }
 
 // ---------------------------------------------------------------------------
-// Response extraction — handles different response shapes across versions
+// Response extraction — handles different response shapes across ME EC versions
 // ---------------------------------------------------------------------------
 
 function extractComputers(json) {
-  // v10.x:         { data: { computers: [...] } }
-  // v11 patch:     { data: { allsystemsdetail: [...] } }
-  // older:         { message_response: { computer: [...] } }
-  // some versions: { computers: [...] } or { data: { computerdetails: [...] } }
-  return (
-    json?.data?.computers        ??
-    json?.data?.allsystemsdetail ??
-    json?.data?.computerdetails  ??
-    json?.message_response?.computer ??
-    json?.computers              ??
-    []
-  );
+  // v10.x:           { data: { computers: [...] } }
+  // v11 patch API:   { data: { allsystemsdetail: [...] } }
+  // older DC:        { message_response: { computer: [...] } }
+  // some versions:   { computers: [...] } or { data: { computerdetails: [...] } }
+  const candidates = [
+    json?.data?.computers,
+    json?.data?.allsystemsdetail,
+    json?.data?.computerdetails,
+    json?.message_response?.computer,
+    json?.computers,
+    json?.data?.systems,
+    json?.systems,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,50 +141,84 @@ function extractComputers(json) {
 // ---------------------------------------------------------------------------
 
 function normalizeComputer(c) {
+  // agent_status: 0 = Online/Live, 1 = Offline/Dead (ME EC convention)
+  // managed_status: 0 = Not Managed, 1 = Managed
   return {
     resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? null,
-    computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? '—',
+    computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? c.COMPUTER_NAME  ?? '—',
     domain:         c.domain         ?? c.DOMAIN         ?? '—',
-    ip_address:     c.ipaddress      ?? c.IP_ADDRESS      ?? c.ip_address    ?? '—',
-    os_name:        c.osname         ?? c.OS_NAME         ?? c.osName        ?? c.os_name  ?? '—',
-    os_platform:    c.osplatform     ?? c.OS_PLATFORM     ?? null,
-    agent_version:  c.agentversion   ?? c.AGENT_VERSION   ?? c.agent_version ?? '—',
-    // managed_status: 0 = Not Managed, 1 = Managed
-    managed_status: c.managed_status ?? c.MANAGED_STATUS  ?? 1,
-    // agent_status: 0 = Online/Active, 1 = Offline/Inactive
-    agent_status:   c.agent_status   ?? c.AGENT_STATUS    ?? 1,
-    last_sync:      c.lastsync       ?? c.LAST_SYNC        ?? c.last_sync     ?? null,
-    office:         c.resourceoffice ?? c.RESOURCE_OFFICE  ?? c.office        ?? '—',
-    resource_type:  c.resourcetype   ?? c.RESOURCE_TYPE    ?? 0,
+    ip_address:     c.ipaddress      ?? c.IP_ADDRESS     ?? c.ip_address    ?? c.IPADDRESS      ?? '—',
+    os_name:        c.osname         ?? c.OS_NAME        ?? c.osName        ?? c.os_name        ?? '—',
+    os_platform:    c.osplatform     ?? c.OS_PLATFORM    ?? null,
+    agent_version:  c.agentversion   ?? c.AGENT_VERSION  ?? c.agent_version ?? c.AGENTVERSION   ?? '—',
+    managed_status: c.managed_status ?? c.MANAGED_STATUS ?? c.managedstatus ?? 1,
+    agent_status:   c.agent_status   ?? c.AGENT_STATUS   ?? c.agentstatus   ?? 1,
+    last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC       ?? null,
+    office:         c.resourceoffice ?? c.RESOURCE_OFFICE?? c.office        ?? '—',
+    resource_type:  c.resourcetype   ?? c.RESOURCE_TYPE  ?? 0,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Build URL for a given path
+// Authentication strategies
 // ---------------------------------------------------------------------------
 
-function buildUrl(serverUrl, path, apiKey, customerId) {
+// Build the two auth strategies to try for a given path
+function authStrategies(serverUrl, path, apiKey, customerId) {
   const base = serverUrl.replace(/\/$/, '');
-  return `${base}${path}?apikey=${encodeURIComponent(apiKey)}&customerid=${encodeURIComponent(customerId || '1')}`;
+  return [
+    {
+      // Strategy 1: API key in query parameter (older/legacy)
+      label: 'query-param',
+      url:   `${base}${path}?apikey=${encodeURIComponent(apiKey)}&customerid=${encodeURIComponent(customerId || '1')}`,
+      headers: {},
+    },
+    {
+      // Strategy 2: API key in Authorization header (newer v11+)
+      label: 'auth-header',
+      url:   `${base}${path}?customerid=${encodeURIComponent(customerId || '1')}`,
+      headers: { 'Authorization': `Authtoken ${apiKey}` },
+    },
+    {
+      // Strategy 3: Header auth without customerid (some single-tenant setups)
+      label: 'auth-header-no-cid',
+      url:   `${base}${path}`,
+      headers: { 'Authorization': `Authtoken ${apiKey}` },
+    },
+  ];
 }
 
-// ---------------------------------------------------------------------------
-// Try one path — returns { ok, json, count } or null on non-200
-// ---------------------------------------------------------------------------
-
+// Try one path with all auth strategies. Returns { computers, path, authLabel } or null.
 async function tryPath(serverUrl, path, apiKey, customerId, verifySsl) {
-  try {
-    const url = buildUrl(serverUrl, path, apiKey, customerId);
-    const { status, body } = await httpRequest(url, { verifySsl });
-    if (status < 200 || status >= 300) return null;
-    let json;
-    try { json = JSON.parse(body); } catch { return null; }
-    const computers = extractComputers(json);
-    if (!Array.isArray(computers)) return null;
-    return { json, computers, path };
-  } catch {
-    return null;
+  for (const strat of authStrategies(serverUrl, path, apiKey, customerId)) {
+    try {
+      const { status, body } = await httpRequest(strat.url, {
+        verifySsl,
+        headers: strat.headers,
+        timeout: 10000,
+      });
+
+      if (status >= 200 && status < 300) {
+        let json;
+        try { json = JSON.parse(body); } catch { continue; }
+        const computers = extractComputers(json);
+        if (computers !== null) {
+          return { computers, path, authLabel: strat.label };
+        }
+        // 200 but unrecognised structure — keep trying other auth methods
+        continue;
+      }
+
+      // Hard auth failure — no point trying more auth methods for this path
+      if (status === 401 || status === 403) break;
+
+      // 404 or IAM error on this path — try next auth method (might be auth-related)
+      // unless it's a clear server error
+      if (status >= 500) break;
+
+    } catch { /* connection error — try next */ }
   }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,10 +244,12 @@ async function fetchAgents() {
   }
 
   const tried = paths.join(', ');
-  throw new Error(
-    `Endpoint Central did not respond successfully to any known API path. Tried: ${tried}. ` +
-    'Check the Server URL, API Key, and set the API Path manually if needed.'
+  const err = new Error(
+    `Could not retrieve agents from Endpoint Central. Tried paths: ${tried}. ` +
+    'Check the Server URL, verify the API key is valid, or try clearing the API Path to auto-detect.'
   );
+  err.status = 502;
+  throw err;
 }
 
 async function testConnection() {
@@ -221,51 +260,61 @@ async function testConnection() {
   }
 
   const paths = config.api_path ? [config.api_path] : KNOWN_PATHS;
+  const tried = [];
 
   for (const path of paths) {
-    try {
-      const url = buildUrl(config.server_url, path, config.api_key, config.customer_id);
-      const { status, body } = await httpRequest(url, { verifySsl: config.verify_ssl });
-
-      if (status >= 200 && status < 300) {
-        let json;
-        try { json = JSON.parse(body); } catch {
-          return { success: false, error: 'Server responded but returned non-JSON — check Server URL' };
-        }
-        const computers = extractComputers(json);
-        if (Array.isArray(computers)) {
-          return {
-            success: true,
-            message: `Connected via ${path} — ${computers.length} endpoint(s) found`,
-            working_path: path,
-          };
-        }
-        // Got 200 but unrecognised shape — keep trying
-        continue;
-      }
-
-      // Got a structured error response — report it with the path context
-      let detail = body.slice(0, 300);
+    // Try all auth strategies for this path so we can report the exact failure
+    for (const strat of authStrategies(config.server_url, path, config.api_key, config.customer_id)) {
       try {
-        const j = JSON.parse(body);
-        if (j.errorMsg) detail = j.errorMsg;
-        else if (j.message) detail = j.message;
-      } catch { /* keep raw */ }
+        const { status, body } = await httpRequest(strat.url, {
+          verifySsl: config.verify_ssl,
+          headers:   strat.headers,
+          timeout:   10000,
+        });
 
-      // Only stop early on auth errors, not 404s (wrong path)
-      if (status === 401 || status === 403) {
-        return { success: false, error: `Authentication failed (HTTP ${status}): ${detail}` };
+        if (status >= 200 && status < 300) {
+          let json;
+          try { json = JSON.parse(body); } catch {
+            tried.push({ path, auth: strat.label, status, note: 'non-JSON response' });
+            break; // wrong path, try next
+          }
+          const computers = extractComputers(json);
+          if (computers !== null) {
+            return {
+              success:      true,
+              message:      `Connected — ${computers.length} endpoint(s) found`,
+              working_path: path,
+              auth_method:  strat.label,
+            };
+          }
+          tried.push({ path, auth: strat.label, status, note: 'unrecognised response shape' });
+          continue;
+        }
+
+        // Parse the error body for a useful message
+        let detail = `HTTP ${status}`;
+        try {
+          const j = JSON.parse(body);
+          detail = j.errorMsg || j.message || j.error || detail;
+        } catch { /* ignore */ }
+
+        tried.push({ path, auth: strat.label, status, note: detail });
+
+        if (status === 401 || status === 403) break; // wrong credentials — skip remaining auth methods
+
+      } catch (e) {
+        tried.push({ path, auth: strat.label, status: 0, note: e.message });
+        break; // connection error — skip remaining auth methods for this path
       }
-      // 404 = wrong path, continue to next
-    } catch (e) {
-      return { success: false, error: e.message };
     }
   }
 
+  // Build a concise error summary
+  const summary = tried.map(t => `${t.path} [${t.auth}] → ${t.note}`).join('\n');
   return {
     success: false,
-    error: `None of the known API paths returned a valid response. Paths tried: ${paths.join(', ')}. ` +
-           'Set the API Path field manually to the correct endpoint for your ME EC version.',
+    error:   'Could not connect to Endpoint Central. Results per path:',
+    detail:  summary,
   };
 }
 
