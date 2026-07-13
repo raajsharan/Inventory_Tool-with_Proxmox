@@ -17,23 +17,31 @@ function pgEnv() {
   const url = process.env.DATABASE_URL;
   const env = { ...process.env };
   if (url) env.DATABASE_URL = url;
-  if (process.env.PGPASSWORD) env.PGPASSWORD = process.env.PGPASSWORD;
+  // Prefer PG* vars; fall back to the app's DB_* vars so pg_dump uses the
+  // correct role even when running as a non-postgres OS user.
+  const password = process.env.PGPASSWORD || process.env.DB_PASSWORD;
+  if (password) env.PGPASSWORD = password;
   return env;
 }
 
 function pgConnArgs() {
   const url = process.env.DATABASE_URL;
   if (url) return ['--dbname', url];
+  const host = process.env.PGHOST     || process.env.DB_HOST;
+  const port = process.env.PGPORT     || process.env.DB_PORT;
+  const user = process.env.PGUSER     || process.env.DB_USER;
+  const name = process.env.PGDATABASE || process.env.DB_NAME;
   const args = [];
-  if (process.env.PGHOST)     args.push('-h', process.env.PGHOST);
-  if (process.env.PGPORT)     args.push('-p', process.env.PGPORT);
-  if (process.env.PGUSER)     args.push('-U', process.env.PGUSER);
-  if (process.env.PGDATABASE) args.push('-d', process.env.PGDATABASE);
+  if (host) args.push('-h', host);
+  if (port) args.push('-p', String(port));
+  if (user) args.push('-U', user);
+  if (name) args.push('-d', name);
   return args;
 }
 
 function dbName() {
   if (process.env.PGDATABASE) return process.env.PGDATABASE;
+  if (process.env.DB_NAME)    return process.env.DB_NAME;
   const url = process.env.DATABASE_URL;
   if (url) {
     const m = url.match(/\/([^/?]+)(?:\?|$)/);
