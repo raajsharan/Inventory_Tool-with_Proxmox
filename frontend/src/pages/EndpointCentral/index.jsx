@@ -332,10 +332,11 @@ export default function EndpointCentral() {
   const isAdmin     = ['admin', 'superadmin'].includes(user?.role);
 
   // Endpoints tab
-  const [agents,     setAgents]     = useState([]);
-  const [loading,    setLoading]    = useState(false);
-  const [configured, setConfigured] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
+  const [agents,          setAgents]          = useState([]);
+  const [loading,         setLoading]         = useState(false);
+  const [configured,      setConfigured]      = useState(false);
+  const [connectionError, setConnectionError] = useState(null); // 502: configured but can't reach ME EC
+  const [configOpen,      setConfigOpen]      = useState(false);
 
   // Software tab
   const [software,    setSoftware]    = useState([]);
@@ -357,6 +358,7 @@ export default function EndpointCentral() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setConnectionError(null);
     try {
       const r = await api.get('/endpoint-central');
       setAgents(r.data.agents || []);
@@ -364,10 +366,20 @@ export default function EndpointCentral() {
     } catch (e) {
       const status = e?.response?.status;
       const errMsg = e?.response?.data?.error || '';
-      if (status === 400 || status === 503) {
+      if (status === 400) {
+        // Not configured — no server URL / API key saved yet
         setConfigured(false);
         setAgents([]);
-        if (status === 503) message.warning('Backend schema not ready — please restart the backend server');
+      } else if (status === 503) {
+        // Backend schema not ready
+        setConfigured(false);
+        setAgents([]);
+        message.warning('Backend schema not ready — please restart the backend server');
+      } else if (status === 502) {
+        // Configured but ME EC is unreachable or auth failed — show alert in-page
+        setConfigured(true);
+        setAgents([]);
+        setConnectionError(errMsg || 'Could not connect to Endpoint Central — check the server URL and API key');
       } else {
         message.error(errMsg || 'Failed to load agents');
       }
@@ -548,7 +560,26 @@ export default function EndpointCentral() {
       label: <span><DesktopOutlined /> Endpoints</span>,
       children: (
         <>
-          {configured && (
+          {configured && connectionError && (
+            <Alert
+              type="error"
+              showIcon
+              message="Could not reach Endpoint Central"
+              description={
+                <span>
+                  {connectionError}
+                  {isAdmin && (
+                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update the connection details or regenerate the API key.</>
+                  )}
+                </span>
+              }
+              style={{ marginBottom: 16 }}
+              action={
+                <Button size="small" icon={<ReloadOutlined />} onClick={load}>Retry</Button>
+              }
+            />
+          )}
+          {configured && !connectionError && (
             <>
               <SummaryCards agents={agents} />
               <Card size="small" style={{ marginBottom: 12 }}>

@@ -36,8 +36,11 @@ module.exports = (err, req, res, _next) => {
   // eslint-disable-next-line no-console
   if (status >= 500) console.error('[error]', err);
 
+  // 502/503 are thrown explicitly by services (ME EC unreachable, schema missing) — pass message through.
+  // All other 5xx hide the raw message in production to avoid leaking internals.
+  const isKnown5xx = status === 502 || status === 503;
   const message = pg?.message
-    || (status < 500 || isDev ? (err.message || 'Internal Server Error') : 'Internal Server Error');
+    || (status < 500 || isKnown5xx || isDev ? (err.message || 'Internal Server Error') : 'Internal Server Error');
   const details = pg?.details ?? err.details;
 
   res.status(status).json({
