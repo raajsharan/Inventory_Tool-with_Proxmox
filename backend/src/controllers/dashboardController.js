@@ -31,8 +31,8 @@ async function summary(_req, res, next) {
                manage_engine_installed, tenable_installed
           FROM beijing_assets
         UNION ALL
-        SELECT 'physical_esxi_servers', asset_type, server_status, patching_type, eol_status,
-               manage_engine_installed, tenable_installed
+        SELECT 'physical_esxi_servers', asset_type, server_status, NULL::text AS patching_type, NULL::text AS eol_status,
+               NULL::boolean AS manage_engine_installed, NULL::boolean AS tenable_installed
           FROM physical_esxi_servers
       )
       SELECT
@@ -95,7 +95,7 @@ async function summary(_req, res, next) {
         FROM (
           SELECT eol_status FROM assets
           UNION ALL SELECT eol_status FROM beijing_assets
-          UNION ALL SELECT eol_status FROM physical_esxi_servers
+          UNION ALL SELECT NULL::text AS eol_status FROM physical_esxi_servers
         ) x GROUP BY 1 ORDER BY 2 DESC`);
     const recentQ = db.query(`
       SELECT id, vm_name, ip_address, os_type, server_status, location, created_at
@@ -106,7 +106,7 @@ async function summary(_req, res, next) {
       WITH inv AS (
         SELECT created_at, server_status, patching_type FROM assets
         UNION ALL SELECT created_at, server_status, patching_type FROM beijing_assets
-        UNION ALL SELECT created_at, server_status, patching_type FROM physical_esxi_servers
+        UNION ALL SELECT created_at, server_status, NULL::text AS patching_type FROM physical_esxi_servers
       )
       SELECT
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int                              AS added_this_week,
@@ -126,7 +126,7 @@ async function summary(_req, res, next) {
       WITH inv AS (
         SELECT server_status, eol_status FROM assets
         UNION ALL SELECT server_status, eol_status FROM beijing_assets
-        UNION ALL SELECT server_status, eol_status FROM physical_esxi_servers
+        UNION ALL SELECT server_status, NULL::text AS eol_status FROM physical_esxi_servers
       )
       SELECT COUNT(*)::int AS msl
         FROM inv
@@ -256,7 +256,7 @@ async function summary(_req, res, next) {
       WITH inv AS (
         SELECT 'assets'::text AS source, server_status, patching_type, eol_status FROM assets
         UNION ALL SELECT 'beijing_assets', server_status, patching_type, eol_status FROM beijing_assets
-        UNION ALL SELECT 'physical_esxi_servers', server_status, patching_type, eol_status FROM physical_esxi_servers
+        UNION ALL SELECT 'physical_esxi_servers', server_status, NULL::text AS patching_type, NULL::text AS eol_status FROM physical_esxi_servers
       )
       SELECT
         COUNT(*)::int                                                                                AS total,
@@ -342,7 +342,7 @@ async function summary(_req, res, next) {
         SELECT 'beijing_assets', location, department, server_status, patching_type, eol_status
           FROM beijing_assets WHERE deleted_at IS NULL
         UNION ALL
-        SELECT 'physical_esxi_servers', location, department, server_status, patching_type, eol_status
+        SELECT 'physical_esxi_servers', location, department, server_status, NULL::text AS patching_type, NULL::text AS eol_status
           FROM physical_esxi_servers WHERE deleted_at IS NULL
       )
       SELECT
@@ -378,8 +378,8 @@ async function summary(_req, res, next) {
                COALESCE(manage_engine_installed, false)
           FROM beijing_assets WHERE deleted_at IS NULL
         UNION ALL
-        SELECT 'physical_esxi_servers', server_status, patching_type, eol_status,
-               COALESCE(manage_engine_installed, false)
+        SELECT 'physical_esxi_servers', server_status, NULL::text AS patching_type, NULL::text AS eol_status,
+               false
           FROM physical_esxi_servers WHERE deleted_at IS NULL
       ),
       cat AS (
@@ -691,10 +691,14 @@ async function widgetData(req, res, next) {
       params.push(filterValue);
       filterSql = ` AND ${filterField} ILIKE $${params.length}`;
     }
-    const union = tables.map(t =>
-      `SELECT ${WIDGET_FIELDS.join(', ')} FROM ${t}
-        WHERE deleted_at IS NULL AND decommissioned_at IS NULL${filterSql}`
-    ).join(' UNION ALL ');
+    const PHYS_ESXI_NULL = new Set(['patching_type', 'eol_status']);
+    const union = tables.map(t => {
+      const cols = WIDGET_FIELDS.map(f =>
+        (t === 'physical_esxi_servers' && PHYS_ESXI_NULL.has(f)) ? `NULL::text AS ${f}` : f
+      ).join(', ');
+      return `SELECT ${cols} FROM ${t}
+        WHERE deleted_at IS NULL AND decommissioned_at IS NULL${filterSql}`;
+    }).join(' UNION ALL ');
 
     if (groupBy) {
       const { rows } = await db.query(

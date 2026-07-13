@@ -192,7 +192,7 @@ async function viewPassword(id) {
   return crypto.decrypt(rows[0].asset_password_encrypted);
 }
 
-async function list({ search, osType, serverStatus, location, eolStatus, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
+async function list({ search, osType, serverStatus, location, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
   const where = ['a.deleted_at IS NULL', 'a.decommissioned_at IS NULL'];
   const params = [];
   if (search) {
@@ -203,9 +203,8 @@ async function list({ search, osType, serverStatus, location, eolStatus, page = 
   if (osType)       { params.push(osType);       where.push(`os_type = $${params.length}`); }
   if (serverStatus) { params.push(serverStatus); where.push(`server_status = $${params.length}`); }
   if (location)     { params.push(location);     where.push(`location = $${params.length}`); }
-  if (eolStatus)    { params.push(eolStatus);    where.push(`eol_status = $${params.length}`); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const safeSort = ['vm_name','ip_address','os_type','server_status','location','eol_status','created_at','updated_at'].includes(sortBy) ? sortBy : 'created_at';
+  const safeSort = ['vm_name','ip_address','os_type','server_status','location','created_at','updated_at'].includes(sortBy) ? sortBy : 'created_at';
   const safeDir = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * pageSize;
 
