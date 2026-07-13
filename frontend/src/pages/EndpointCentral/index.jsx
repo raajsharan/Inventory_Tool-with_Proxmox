@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, App, Badge, Button, Card, Col, Descriptions, Form, Input,
-  Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography,
+  Alert, App, Badge, Button, Card, Col, Divider, Form, Input,
+  Modal, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
   AppstoreOutlined, CheckCircleFilled, CloseCircleFilled, DesktopOutlined,
-  ExclamationCircleFilled, QuestionCircleOutlined, ReloadOutlined,
-  SafetyCertificateOutlined, SettingOutlined, WifiOutlined,
+  ExclamationCircleFilled, KeyOutlined, LockOutlined, LoginOutlined,
+  MobileOutlined, QuestionCircleOutlined, ReloadOutlined,
+  SafetyCertificateOutlined, SettingOutlined, UserOutlined, WifiOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -88,35 +89,115 @@ function ComplianceTag({ value }) {
   return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
 }
 
+// ── OTP modal — shown when ME EC responds with OTP_Validation_Required ────
+
+function OtpModal({ open, uniqueUserId, onSuccess, onCancel }) {
+  const { message } = App.useApp();
+  const [otp,       setOtp]       = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open) { setOtp(''); setTimeout(() => inputRef.current?.focus(), 100); }
+  }, [open]);
+
+  const handleSubmit = async () => {
+    const code = otp.trim().replace(/\s/g, '');
+    if (!code) { message.warning('Enter the 6-digit code from your authenticator app'); return; }
+    setLoading(true);
+    try {
+      await api.post('/endpoint-central/login/otp', { unique_user_id: uniqueUserId, otp: code });
+      message.success('Authenticated — session active');
+      onSuccess();
+    } catch (e) {
+      message.error(e?.response?.data?.error || 'OTP validation failed — check the code and try again');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={<><MobileOutlined /> Two-Factor Authentication</>}
+      onCancel={onCancel}
+      footer={[
+        <Button key="cancel" onClick={onCancel}>Cancel</Button>,
+        <Button key="verify" type="primary" loading={loading} onClick={handleSubmit} icon={<LockOutlined />}>
+          Verify Code
+        </Button>,
+      ]}
+      width={380}
+      destroyOnClose
+    >
+      <div style={{ textAlign: 'center', padding: '16px 0 8px' }}>
+        <MobileOutlined style={{ fontSize: 36, color: '#1677ff', marginBottom: 12 }} />
+        <div style={{ marginBottom: 8 }}>
+          <Typography.Text>Open your authenticator app and enter the 6-digit code for</Typography.Text>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <Typography.Text strong>ManageEngine Endpoint Central</Typography.Text>
+        </div>
+        <Input
+          ref={inputRef}
+          value={otp}
+          onChange={e => setOtp(e.target.value)}
+          onPressEnter={handleSubmit}
+          placeholder="000 000"
+          maxLength={8}
+          size="large"
+          style={{ textAlign: 'center', fontSize: 24, letterSpacing: 6, fontWeight: 700, width: 200 }}
+        />
+        <div style={{ marginTop: 10 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Code refreshes every 30 seconds
+          </Typography.Text>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Config modal ───────────────────────────────────────────────────────────
 
 function ConfigModal({ open, onClose, onSaved }) {
   const { message } = App.useApp();
   const [form]    = Form.useForm();
-  const [testing, setTesting] = useState(false);
-  const [saving,  setSaving]  = useState(false);
+  const [testing,    setTesting]    = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [logging,    setLogging]    = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [authMode,   setAuthMode]   = useState('api_key');
+  const [sessionActive, setSessionActive] = useState(false);
+  const [otpOpen,       setOtpOpen]       = useState(false);
+  const [uniqueUserId,  setUniqueUserId]  = useState('');
 
   useEffect(() => {
     if (!open) return;
     api.get('/endpoint-central/config').then(r => {
+      const mode = r.data.auth_mode || 'api_key';
+      setAuthMode(mode);
+      setSessionActive(!!r.data.session_active);
       form.setFieldsValue({
-        server_url:  r.data.server_url,
-        customer_id: r.data.customer_id || '1',
-        api_key:     r.data.api_key,
-        api_path:    r.data.api_path || '',
-        verify_ssl:  r.data.verify_ssl,
+        server_url:    r.data.server_url,
+        customer_id:   r.data.customer_id || '1',
+        api_key:       r.data.api_key,
+        api_path:      r.data.api_path || '',
+        verify_ssl:    r.data.verify_ssl,
+        auth_mode:     mode,
+        auth_username: r.data.auth_username || '',
+        auth_password: '',
       });
       setTestResult(null);
     });
   }, [open, form]);
+
+  const currentVals = () => form.getFieldsValue();
 
   const handleSave = async () => {
     try {
       const vals = await form.validateFields();
       if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
       setSaving(true);
-      await api.put('/endpoint-central/config', vals);
+      await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode });
       message.success('Configuration saved');
       onSaved();
       onClose();
@@ -127,22 +208,27 @@ function ConfigModal({ open, onClose, onSaved }) {
   };
 
   const handleTest = async () => {
-    const vals = form.getFieldsValue();
-    if (!vals.server_url || !vals.api_key) {
+    const vals = currentVals();
+    if (authMode === 'api_key' && !vals.server_url) {
       setTestResult({ success: false, error: 'Enter Server URL and API Key first' });
+      return;
+    }
+    if (authMode === 'credentials' && !sessionActive) {
+      setTestResult({ success: false, error: 'Log in first, then test the connection' });
       return;
     }
     if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
     setTesting(true);
     setTestResult(null);
     try {
-      await api.put('/endpoint-central/config', { ...vals, api_path: '' });
+      // Save current config before testing so the backend uses the latest values
+      await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode, api_path: '' });
       const r = await api.post('/endpoint-central/test');
       if (r.data.success && r.data.working_path) {
         form.setFieldValue('api_path', r.data.working_path);
-        await api.put('/endpoint-central/config', { ...vals, api_path: r.data.working_path });
+        await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode, api_path: r.data.working_path });
       } else {
-        await api.put('/endpoint-central/config', vals);
+        await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode });
       }
       setTestResult(r.data);
     } catch (e) {
@@ -150,98 +236,228 @@ function ConfigModal({ open, onClose, onSaved }) {
     } finally { setTesting(false); }
   };
 
-  return (
-    <Modal
-      open={open}
-      title={<><SettingOutlined /> ME Endpoint Central — Connection Settings</>}
-      onCancel={onClose}
-      footer={[
-        <Button key="test" onClick={handleTest} loading={testing}>Test Connection</Button>,
-        <Button key="cancel" onClick={onClose}>Cancel</Button>,
-        <Button key="save" type="primary" loading={saving} onClick={handleSave}>Save</Button>,
-      ]}
-      width={520}
-      destroyOnClose
-    >
-      <Form form={form} layout="vertical" style={{ marginTop: 12 }}>
-        <Form.Item
-          name="server_url"
-          label="Server URL"
-          rules={[{ required: true, message: 'Server URL is required' }]}
-          extra="e.g. https://meec.corp.local:8383"
-        >
-          <Input placeholder="https://your-me-ec-server:8383" autoComplete="off" />
-        </Form.Item>
+  const handleLogin = async () => {
+    const vals = currentVals();
+    if (!vals.server_url) { message.warning('Enter the Server URL first'); return; }
+    if (!vals.auth_username) { message.warning('Enter your username'); return; }
+    if (!vals.auth_password) { message.warning('Enter your password'); return; }
 
-        <Form.Item
-          name="customer_id"
-          label="Customer ID"
-          extra="Leave as 1 for default MSP / single-tenant installations"
-        >
-          <Input placeholder="1" style={{ width: 120 }} />
-        </Form.Item>
+    setLogging(true);
+    setTestResult(null);
+    try {
+      // Save base config (URL, customer ID, username, password, SSL) before logging in
+      await api.put('/endpoint-central/config', {
+        server_url:    vals.server_url,
+        customer_id:   vals.customer_id || '1',
+        verify_ssl:    vals.verify_ssl,
+        auth_mode:     'credentials',
+        auth_username: vals.auth_username,
+        auth_password: vals.auth_password,
+        api_path:      vals.api_path || '',
+        api_key:       vals.api_key  || '',
+      });
 
-        <Form.Item
-          name="api_key"
-          label="API Key"
-          rules={[{ required: true, message: 'API Key is required' }]}
-          extra="Generate via Admin › API Explorer in the Endpoint Central console"
-        >
-          <Input.Password placeholder="Paste API key here" autoComplete="new-password" />
-        </Form.Item>
+      const r = await api.post('/endpoint-central/login');
 
-        <Form.Item
-          name="api_path"
-          label="API Path"
-          extra={
-            <span>
-              Leave blank to auto-detect. Recommended:{' '}
-              <code>/api/1.4/som/computers</code>
-            </span>
-          }
-        >
-          <Select
-            allowClear
-            placeholder="Auto-detect (tries known paths)"
-            showSearch
-            mode="combobox"
-            options={[
-              { value: '/api/1.4/som/computers',               label: '/api/1.4/som/computers (recommended)' },
-              { value: '/api/1.4/inventory/computers',         label: '/api/1.4/inventory/computers' },
-              { value: '/api/1.4/inventory/scancomputers',     label: '/api/1.4/inventory/scancomputers' },
-              { value: '/api/1.4/inventory/compdetailssummary',label: '/api/1.4/inventory/compdetailssummary' },
-              { value: '/api/1.4/patch/allsystems',            label: '/api/1.4/patch/allsystems' },
-              { value: '/api/1.4/patch/systems/allsystems',    label: '/api/1.4/patch/systems/allsystems' },
-              { value: '/api/1.4/computers',                   label: '/api/1.4/computers (legacy)' },
-              { value: '/dcapi/rd/computers',                  label: '/dcapi/rd/computers (legacy)' },
-            ]}
-            onClear={() => form.setFieldValue('api_path', '')}
-          />
-        </Form.Item>
+      if (r.data.otp_required) {
+        setUniqueUserId(r.data.unique_user_id);
+        setOtpOpen(true);
+      } else {
+        setSessionActive(true);
+        setTestResult({ success: true, message: 'Logged in — session is now active' });
+        onSaved();
+      }
+    } catch (e) {
+      setTestResult({ success: false, error: e?.response?.data?.error || 'Login failed' });
+    } finally { setLogging(false); }
+  };
 
-        <Form.Item name="verify_ssl" label="Verify SSL Certificate" valuePropName="checked">
-          <Switch />
-        </Form.Item>
-      </Form>
+  const handleOtpSuccess = () => {
+    setOtpOpen(false);
+    setSessionActive(true);
+    setTestResult({ success: true, message: 'Two-factor authentication complete — session is now active' });
+    onSaved();
+  };
 
-      {testResult && (
+  const apiKeyFields = (
+    <>
+      <Form.Item
+        name="api_key"
+        label={<><KeyOutlined /> API Key</>}
+        rules={authMode === 'api_key' ? [{ required: true, message: 'API Key is required' }] : []}
+        extra="Generate via Admin › API Explorer in the Endpoint Central console"
+      >
+        <Input.Password placeholder="Paste API key here" autoComplete="new-password" />
+      </Form.Item>
+    </>
+  );
+
+  const credentialFields = (
+    <>
+      {sessionActive ? (
         <Alert
-          style={{ marginTop: 8 }}
-          type={testResult.success ? 'success' : 'error'}
+          type="success"
           showIcon
-          message={testResult.success ? testResult.message : testResult.error}
-          description={
-            !testResult.success && testResult.detail
-              ? (
-                <pre style={{ fontSize: 11, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 220, overflowY: 'auto', background: 'transparent', padding: 0 }}>
-                  {testResult.detail}
-                </pre>
-              )
-              : null
-          }
+          icon={<CheckCircleFilled />}
+          message="Session active"
+          description="You are logged in. API calls will use this session token. Re-login to refresh."
+          style={{ marginBottom: 16 }}
+        />
+      ) : (
+        <Alert
+          type="warning"
+          showIcon
+          message="Not logged in"
+          description="Enter your credentials below and click Login to authenticate."
+          style={{ marginBottom: 16 }}
         />
       )}
-    </Modal>
+      <Form.Item
+        name="auth_username"
+        label={<><UserOutlined /> Username</>}
+        rules={authMode === 'credentials' ? [{ required: true, message: 'Username is required' }] : []}
+      >
+        <Input placeholder="admin" autoComplete="username" />
+      </Form.Item>
+      <Form.Item
+        name="auth_password"
+        label={<><LockOutlined /> Password</>}
+        extra={sessionActive ? 'Leave blank to keep the stored password' : undefined}
+        rules={authMode === 'credentials' && !sessionActive ? [{ required: true, message: 'Password is required' }] : []}
+      >
+        <Input.Password placeholder={sessionActive ? '(unchanged)' : 'Your password'} autoComplete="current-password" />
+      </Form.Item>
+      <Button
+        type="primary"
+        icon={<LoginOutlined />}
+        loading={logging}
+        onClick={handleLogin}
+        block
+        style={{ marginBottom: 8 }}
+      >
+        {sessionActive ? 'Re-Login (Refresh Session)' : 'Login'}
+      </Button>
+      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16, textAlign: 'center' }}>
+        If Two-Factor Authentication is enabled, you will be prompted for your authenticator code.
+      </Typography.Text>
+    </>
+  );
+
+  return (
+    <>
+      <Modal
+        open={open}
+        title={<><SettingOutlined /> ME Endpoint Central — Connection Settings</>}
+        onCancel={onClose}
+        footer={[
+          <Button key="test" onClick={handleTest} loading={testing}>Test Connection</Button>,
+          <Button key="cancel" onClick={onClose}>Cancel</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={handleSave}>Save</Button>,
+        ]}
+        width={540}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 12 }}>
+          <Form.Item
+            name="server_url"
+            label="Server URL"
+            rules={[{ required: true, message: 'Server URL is required' }]}
+            extra="e.g. https://meec.corp.local:8383"
+          >
+            <Input placeholder="https://your-me-ec-server:8383" autoComplete="off" />
+          </Form.Item>
+
+          <Form.Item
+            name="customer_id"
+            label="Customer ID"
+            extra="Leave as 1 for default MSP / single-tenant installations"
+          >
+            <Input placeholder="1" style={{ width: 120 }} />
+          </Form.Item>
+
+          <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, margin: '8px 0 16px' }}>
+            Authentication Method
+          </Divider>
+
+          <Radio.Group
+            value={authMode}
+            onChange={e => { setAuthMode(e.target.value); setTestResult(null); }}
+            style={{ marginBottom: 16, display: 'flex', gap: 12 }}
+          >
+            <Radio.Button value="api_key"     style={{ flex: 1, textAlign: 'center' }}>
+              <KeyOutlined /> API Key
+            </Radio.Button>
+            <Radio.Button value="credentials" style={{ flex: 1, textAlign: 'center' }}>
+              <UserOutlined /> Login with Credentials
+            </Radio.Button>
+          </Radio.Group>
+
+          {authMode === 'api_key' ? apiKeyFields : credentialFields}
+
+          <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, margin: '8px 0 16px' }}>
+            Advanced
+          </Divider>
+
+          <Form.Item
+            name="api_path"
+            label="API Path"
+            extra={
+              <span>
+                Leave blank to auto-detect. Recommended:{' '}
+                <code>/api/1.4/som/computers</code>
+              </span>
+            }
+          >
+            <Select
+              allowClear
+              placeholder="Auto-detect (tries known paths)"
+              showSearch
+              mode="combobox"
+              options={[
+                { value: '/api/1.4/som/computers',                label: '/api/1.4/som/computers (recommended)' },
+                { value: '/api/1.4/inventory/computers',          label: '/api/1.4/inventory/computers' },
+                { value: '/api/1.4/inventory/scancomputers',      label: '/api/1.4/inventory/scancomputers' },
+                { value: '/api/1.4/inventory/compdetailssummary', label: '/api/1.4/inventory/compdetailssummary' },
+                { value: '/api/1.4/patch/allsystems',             label: '/api/1.4/patch/allsystems' },
+                { value: '/api/1.4/patch/systems/allsystems',     label: '/api/1.4/patch/systems/allsystems' },
+                { value: '/api/1.4/computers',                    label: '/api/1.4/computers (legacy)' },
+                { value: '/dcapi/rd/computers',                   label: '/dcapi/rd/computers (legacy)' },
+              ]}
+              onClear={() => form.setFieldValue('api_path', '')}
+            />
+          </Form.Item>
+
+          <Form.Item name="verify_ssl" label="Verify SSL Certificate" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+
+        {testResult && (
+          <Alert
+            style={{ marginTop: 8 }}
+            type={testResult.success ? 'success' : 'error'}
+            showIcon
+            message={testResult.success ? testResult.message : testResult.error}
+            description={
+              !testResult.success && testResult.detail
+                ? (
+                  <pre style={{ fontSize: 11, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 220, overflowY: 'auto', background: 'transparent', padding: 0 }}>
+                    {testResult.detail}
+                  </pre>
+                )
+                : null
+            }
+          />
+        )}
+      </Modal>
+
+      <OtpModal
+        open={otpOpen}
+        uniqueUserId={uniqueUserId}
+        onSuccess={handleOtpSuccess}
+        onCancel={() => setOtpOpen(false)}
+      />
+    </>
   );
 }
 
@@ -556,7 +772,7 @@ export default function EndpointCentral() {
       message="Endpoint Central is not configured"
       description={
         isAdmin
-          ? 'Click "Configure" to enter the server URL and API key.'
+          ? 'Click "Configure" to enter the server URL and either an API key or your login credentials.'
           : 'Contact an administrator to configure the Endpoint Central connection.'
       }
       style={{ marginBottom: 16 }}
@@ -583,7 +799,7 @@ export default function EndpointCentral() {
                 <span>
                   {connectionError}
                   {isAdmin && (
-                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update the connection details or regenerate the API key.</>
+                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update the connection details, regenerate the API key, or re-login.</>
                   )}
                 </span>
               }

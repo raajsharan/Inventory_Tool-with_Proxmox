@@ -74,15 +74,167 @@ function httpRequest(urlStr, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// HTTP POST helper (for credential auth endpoints)
+// ---------------------------------------------------------------------------
+
+function httpPost(urlStr, body, options = {}) {
+  return new Promise((resolve, reject) => {
+    const url     = new URL(urlStr);
+    const isHttps = url.protocol === 'https:';
+    const lib     = isHttps ? https : http;
+    const payload = JSON.stringify(body);
+
+    const reqOpts = {
+      hostname: url.hostname,
+      port:     url.port || (isHttps ? 443 : 80),
+      path:     url.pathname + url.search,
+      method:   'POST',
+      headers:  {
+        'Content-Type':   'application/json',
+        'Accept':         'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        ...(options.headers || {}),
+      },
+      ...(isHttps && !options.verifySsl ? { rejectUnauthorized: false } : {}),
+      timeout: options.timeout || 15000,
+    };
+
+    const req = lib.request(reqOpts, (res) => {
+      let data = '';
+      res.on('data', c => { data += c; });
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+
+    req.on('timeout', () => { req.destroy(); reject(new Error('Connection timed out')); });
+    req.on('error',   reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Credential-based authentication (username + password, with optional 2FA)
+// ---------------------------------------------------------------------------
+
+// Step 1: POST username + base64(password) to ME EC auth endpoint.
+// Returns { otp_required: false, auth_token } on direct success, or
+//         { otp_required: true,  unique_user_id } when 2FA is enabled.
+async function loginWithCredentials({ serverUrl, username, password, customerId, verifySsl }) {
+  const base = serverUrl.replace(/\/$/, '');
+  const url  = `${base}/api/1.4/desktop/authentication`;
+
+  const payload = {
+    username,
+    password:  Buffer.from(password).toString('base64'),
+    auth_type: 'local_authentication',
+  };
+  if (customerId && customerId !== '1') {
+    payload.customerid = customerId;
+  }
+
+  let status, body;
+  try {
+    ({ status, body } = await httpPost(url, payload, { verifySsl, timeout: 15000 }));
+  } catch (e) {
+    const err = new Error(`Could not reach Endpoint Central: ${e.message}`);
+    err.status = 502;
+    throw err;
+  }
+
+  let json;
+  try { json = JSON.parse(body); } catch {
+    const err = new Error('Invalid JSON response from Endpoint Central authentication endpoint');
+    err.status = 502;
+    throw err;
+  }
+
+  if (status >= 400 || json.status === 'error' || json.message_type === 'error') {
+    const msg = json.error_description || json.error_msg || json.message || `HTTP ${status}`;
+    const err = new Error(`Authentication failed: ${msg}`);
+    err.status = 401;
+    throw err;
+  }
+
+  // 2FA required — server returns unique_userID to use in OTP step
+  const otpRequired = json.OTP_Validation_Required === true
+                   || json.otp_validation_required === true
+                   || json['OTP_Validation_Required'] === 'true';
+  if (otpRequired) {
+    const uniqueUserId = json.unique_userID ?? json.unique_userid ?? json.uniqueUserID ?? json.user_id;
+    if (!uniqueUserId) {
+      const err = new Error('Server requires OTP but did not return unique_userID');
+      err.status = 502;
+      throw err;
+    }
+    return { otp_required: true, unique_user_id: String(uniqueUserId) };
+  }
+
+  // Direct auth success — token is in the response
+  const authToken = json.auth_token ?? json.authToken ?? json.token ?? json.message_response?.auth_token;
+  if (authToken) {
+    return { otp_required: false, auth_token: String(authToken) };
+  }
+
+  const err = new Error('Unexpected response from Endpoint Central: no auth_token in response');
+  err.status = 502;
+  throw err;
+}
+
+// Step 2: Submit the OTP code with the unique_userID returned from step 1.
+// Returns { auth_token } on success.
+async function validateOtpCode({ serverUrl, unique_user_id, otp, verifySsl }) {
+  const base = serverUrl.replace(/\/$/, '');
+  const url  = `${base}/api/1.4/desktop/authentication/otpValidate`;
+
+  const payload = { unique_userID: unique_user_id, otp: String(otp) };
+
+  let status, body;
+  try {
+    ({ status, body } = await httpPost(url, payload, { verifySsl, timeout: 15000 }));
+  } catch (e) {
+    const err = new Error(`Could not reach Endpoint Central: ${e.message}`);
+    err.status = 502;
+    throw err;
+  }
+
+  let json;
+  try { json = JSON.parse(body); } catch {
+    const err = new Error('Invalid JSON response from Endpoint Central OTP validation endpoint');
+    err.status = 502;
+    throw err;
+  }
+
+  if (status >= 400 || json.status === 'error' || json.message_type === 'error') {
+    const msg = json.error_description || json.error_msg || json.message || `HTTP ${status}`;
+    const err = new Error(`OTP validation failed: ${msg}`);
+    err.status = 401;
+    throw err;
+  }
+
+  const authToken = json.auth_token ?? json.authToken ?? json.token ?? json.message_response?.auth_token;
+  if (!authToken) {
+    const err = new Error('OTP accepted but no auth_token in response');
+    err.status = 502;
+    throw err;
+  }
+
+  return { auth_token: String(authToken) };
+}
+
+// ---------------------------------------------------------------------------
 // Config CRUD
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG = {
-  server_url:  '',
-  customer_id: '1',
-  api_key:     '',
-  api_path:    '',
-  verify_ssl:  false,
+  server_url:    '',
+  customer_id:   '1',
+  api_key:       '',
+  api_path:      '',
+  verify_ssl:    false,
+  auth_mode:     'api_key',
+  auth_username: '',
+  auth_password: '',
+  session_token: '',
 };
 
 async function getConfig() {
@@ -95,21 +247,38 @@ async function getConfig() {
   }
 }
 
-async function saveConfig({ server_url, customer_id, api_key, api_path, verify_ssl }, updatedBy) {
+async function saveConfig({ server_url, customer_id, api_key, api_path, verify_ssl, auth_mode, auth_username, auth_password }, updatedBy) {
   try {
     await db.query(`
       INSERT INTO endpoint_central_config
-        (id, server_url, customer_id, api_key, api_path, verify_ssl, updated_by, updated_at)
-      VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
+        (id, server_url, customer_id, api_key, api_path, verify_ssl,
+         auth_mode, auth_username, auth_password, updated_by, updated_at)
+      VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
       ON CONFLICT (id) DO UPDATE SET
-        server_url  = EXCLUDED.server_url,
-        customer_id = EXCLUDED.customer_id,
-        api_key     = EXCLUDED.api_key,
-        api_path    = EXCLUDED.api_path,
-        verify_ssl  = EXCLUDED.verify_ssl,
-        updated_by  = EXCLUDED.updated_by,
-        updated_at  = NOW()
-    `, [server_url || '', customer_id || '1', api_key || '', api_path || '', !!verify_ssl, updatedBy || null]);
+        server_url    = EXCLUDED.server_url,
+        customer_id   = EXCLUDED.customer_id,
+        api_key       = EXCLUDED.api_key,
+        api_path      = EXCLUDED.api_path,
+        verify_ssl    = EXCLUDED.verify_ssl,
+        auth_mode     = EXCLUDED.auth_mode,
+        auth_username = EXCLUDED.auth_username,
+        auth_password = CASE
+          WHEN EXCLUDED.auth_password = '' THEN endpoint_central_config.auth_password
+          ELSE EXCLUDED.auth_password
+        END,
+        updated_by    = EXCLUDED.updated_by,
+        updated_at    = NOW()
+    `, [
+      server_url    || '',
+      customer_id   || '1',
+      api_key       || '',
+      api_path      || '',
+      !!verify_ssl,
+      auth_mode     || 'api_key',
+      auth_username || '',
+      auth_password || '',
+      updatedBy     || null,
+    ]);
   } catch (e) {
     if (e.code === '42P01' || e.code === '42703') {
       const err = new Error('Database schema not ready — restart the backend to apply schema updates');
@@ -118,6 +287,15 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
     }
     throw e;
   }
+}
+
+async function saveSessionToken(token) {
+  try {
+    await db.query(
+      `UPDATE endpoint_central_config SET session_token = $1, updated_at = NOW() WHERE id = 1`,
+      [token || '']
+    );
+  } catch { /* non-fatal */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +445,26 @@ function authStrategies(base, path, apiKey, customerId) {
   ];
 }
 
+// Session token strategies — used when auth_mode = 'credentials'
+// The token obtained from credential login is sent as a raw Authorization value (no prefix).
+function sessionTokenStrategies(base, path, token, customerId) {
+  const cid = encodeURIComponent(customerId || '1');
+  return [
+    // Raw token (no prefix) — standard for credential-obtained tokens
+    {
+      label:   'session-raw',
+      url:     `${base}${path}?customerid=${cid}`,
+      headers: { 'Authorization': token },
+    },
+    // Also try Authtoken prefix in case the server expects that format
+    {
+      label:   'session-authtoken',
+      url:     `${base}${path}?customerid=${cid}`,
+      headers: { 'Authorization': `Authtoken ${token}` },
+    },
+  ];
+}
+
 // Parse the error detail out of an ME EC error JSON body
 function parseErrorBody(body) {
   try {
@@ -392,17 +590,33 @@ function appendFilterQs(url, filters = {}) {
 
 async function fetchSoftware(filters = {}) {
   const config = await getConfig();
+  const useCredentials = config.auth_mode === 'credentials';
 
-  if (!config.server_url || !config.api_key) {
-    const err = new Error('Endpoint Central is not configured — set Server URL and API Key first');
+  if (!config.server_url) {
+    const err = new Error('Endpoint Central is not configured — set Server URL first');
+    err.status = 400;
+    throw err;
+  }
+  if (!useCredentials && !config.api_key) {
+    const err = new Error('Endpoint Central is not configured — set an API Key or use credential login');
+    err.status = 400;
+    throw err;
+  }
+  if (useCredentials && !config.session_token) {
+    const err = new Error('Not authenticated — open Endpoint Central settings and log in with your credentials');
     err.status = 400;
     throw err;
   }
 
   const base = config.server_url.replace(/\/$/, '');
 
+  const strategies = useCredentials
+    ? sessionTokenStrategies
+    : authStrategies;
+  const stratKey   = useCredentials ? config.session_token : config.api_key;
+
   for (const swPath of SOFTWARE_PATHS) {
-    for (const strat of authStrategies(base, swPath, config.api_key, config.customer_id)) {
+    for (const strat of strategies(base, swPath, stratKey, config.customer_id)) {
       try {
         const url = appendFilterQs(strat.url, filters);
         const { status, body } = await httpRequest(url, {
@@ -437,9 +651,20 @@ async function fetchSoftware(filters = {}) {
 
 async function fetchAgents() {
   const config = await getConfig();
+  const useCredentials = config.auth_mode === 'credentials';
 
-  if (!config.server_url || !config.api_key) {
-    const err = new Error('Endpoint Central is not configured — set Server URL and API Key first');
+  if (!config.server_url) {
+    const err = new Error('Endpoint Central is not configured — set Server URL first');
+    err.status = 400;
+    throw err;
+  }
+  if (!useCredentials && !config.api_key) {
+    const err = new Error('Endpoint Central is not configured — set an API Key or use credential login');
+    err.status = 400;
+    throw err;
+  }
+  if (useCredentials && !config.session_token) {
+    const err = new Error('Not authenticated — open Endpoint Central settings and log in with your credentials');
     err.status = 400;
     throw err;
   }
@@ -447,8 +672,11 @@ async function fetchAgents() {
   const base  = config.server_url.replace(/\/$/, '');
   const paths = config.api_path ? [config.api_path] : KNOWN_PATHS;
 
+  const strategies = useCredentials ? sessionTokenStrategies : authStrategies;
+  const stratKey   = useCredentials ? config.session_token   : config.api_key;
+
   for (const path of paths) {
-    for (const strat of authStrategies(base, path, config.api_key, config.customer_id)) {
+    for (const strat of strategies(base, path, stratKey, config.customer_id)) {
       try {
         const { status, body } = await httpRequest(strat.url, {
           verifySsl: config.verify_ssl,
@@ -475,9 +703,16 @@ async function fetchAgents() {
 
 async function testConnection() {
   const config = await getConfig();
+  const useCredentials = config.auth_mode === 'credentials';
 
-  if (!config.server_url || !config.api_key) {
-    return { success: false, error: 'Server URL and API Key are required' };
+  if (!config.server_url) {
+    return { success: false, error: 'Server URL is required' };
+  }
+  if (!useCredentials && !config.api_key) {
+    return { success: false, error: 'API Key is required (or switch to credential login and log in first)' };
+  }
+  if (useCredentials && !config.session_token) {
+    return { success: false, error: 'Not logged in — use the Login button in settings to authenticate first' };
   }
 
   const base = config.server_url.replace(/\/$/, '');
@@ -486,11 +721,14 @@ async function testConnection() {
   const customPath = config.api_path && !KNOWN_PATHS.includes(config.api_path) ? config.api_path : null;
   const paths = customPath ? [customPath, ...KNOWN_PATHS] : KNOWN_PATHS;
 
+  const strategies = useCredentials ? sessionTokenStrategies : authStrategies;
+  const stratKey   = useCredentials ? config.session_token   : config.api_key;
+
   const tried = [];
   let iamErrorCount = 0;
 
   for (const path of paths) {
-    for (const strat of authStrategies(base, path, config.api_key, config.customer_id)) {
+    for (const strat of strategies(base, path, stratKey, config.customer_id)) {
       try {
         const { status, body } = await httpRequest(strat.url, {
           verifySsl: config.verify_ssl,
@@ -568,4 +806,14 @@ async function testConnection() {
   };
 }
 
-module.exports = { getConfig, saveConfig, fetchAgents, fetchSoftware, testConnection, KNOWN_PATHS };
+module.exports = {
+  getConfig,
+  saveConfig,
+  saveSessionToken,
+  loginWithCredentials,
+  validateOtpCode,
+  fetchAgents,
+  fetchSoftware,
+  testConnection,
+  KNOWN_PATHS,
+};

@@ -127,7 +127,11 @@ const STATEMENTS = [
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `INSERT INTO endpoint_central_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
-  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS api_path TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS api_path      TEXT    NOT NULL DEFAULT ''`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS auth_mode     VARCHAR(16) NOT NULL DEFAULT 'api_key'`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS auth_username TEXT    NOT NULL DEFAULT ''`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS auth_password TEXT    NOT NULL DEFAULT ''`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS session_token TEXT    NOT NULL DEFAULT ''`,
 
   // ── vm_name uniqueness removal (drop_vm_name_unique.sql)
   `ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key`,
