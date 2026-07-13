@@ -118,21 +118,63 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
 // Response extraction — handles different response shapes across ME EC versions
 // ---------------------------------------------------------------------------
 
-function extractComputers(json) {
-  const candidates = [
-    json?.data?.computers,
-    json?.data?.allsystemsdetail,
-    json?.data?.computerdetails,
-    json?.data?.systems,
-    json?.data?.managedendpoints,
-    json?.message_response?.computer,
-    json?.computers,
-    json?.systems,
-  ];
-  for (const c of candidates) {
-    if (Array.isArray(c)) return c;
+// Known JSON key paths to check (tried in order before the recursive fallback)
+const EXTRACT_PATHS = [
+  ['data', 'computers'],
+  ['data', 'allsystemsdetail'],
+  ['data', 'allsystems'],
+  ['data', 'computerdetails'],
+  ['data', 'systems'],
+  ['data', 'managedendpoints'],
+  ['data', 'inventory'],
+  ['data', 'resourcesdata'],
+  ['message_response', 'computer'],
+  ['message_response', 'computers'],
+  ['message_response', 'allsystems'],
+  ['message_response', 'allsystemsdetail'],
+  ['message_response', 'systems'],
+  ['message_response', 'resourcesdata'],
+  ['computers'],
+  ['systems'],
+  ['allsystems'],
+  ['allsystemsdetail'],
+  ['resourcesdata'],
+];
+
+// Does an object look like a ME EC computer/endpoint record?
+function looksLikeComputer(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const up = new Set(Object.keys(obj).map(k => k.toUpperCase()));
+  return up.has('COMPUTERNAME') || up.has('COMPUTER_NAME') || up.has('HOSTNAME')
+      || up.has('RESOURCE_ID')  || up.has('RESOURCEID')
+      || up.has('IPADDRESS')    || up.has('IP_ADDRESS')
+      || up.has('AGENTVERSION') || up.has('AGENT_VERSION')
+      || up.has('MANAGED_STATUS') || up.has('AGENT_STATUS');
+}
+
+// Recursively find the first array whose elements look like computer records
+function deepFindComputerArray(obj, depth) {
+  if (depth > 5 || !obj || typeof obj !== 'object') return null;
+  for (const val of Object.values(obj)) {
+    if (Array.isArray(val)) {
+      if (val.length === 0 || looksLikeComputer(val[0])) return val;
+    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const found = deepFindComputerArray(val, depth + 1);
+      if (found !== null) return found;
+    }
   }
   return null;
+}
+
+function extractComputers(json) {
+  // 1. Try all known key paths first
+  for (const path of EXTRACT_PATHS) {
+    let val = json;
+    for (const k of path) val = val?.[k];
+    if (Array.isArray(val)) return val;
+  }
+  // 2. Recursive fallback — find any array of computer-like objects
+  return deepFindComputerArray(json, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +317,10 @@ async function testConnection() {
               auth_method:  strat.label,
             };
           }
-          tried.push({ path, auth: strat.label, status, note: 'unrecognised response shape' });
+          // Show the top-level keys + a short preview so we can identify the correct key
+          const topKeys = Object.keys(json).join(', ');
+          const preview = JSON.stringify(json).slice(0, 300);
+          tried.push({ path, auth: strat.label, status, note: `200 OK — unknown shape. Top keys: [${topKeys}]. Preview: ${preview}` });
           continue;
         }
 
