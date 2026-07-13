@@ -87,7 +87,7 @@ async function get(req, res, next) {
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
-               COALESCE(tenable_installed, false), COALESCE(os_type, ''), 'Physical Servers',
+               false, COALESCE(os_type, ''), 'Physical Servers',
                asset_username
           FROM physical_esxi_servers
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL

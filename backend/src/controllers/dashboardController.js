@@ -303,7 +303,7 @@ async function summary(_req, res, next) {
           FROM beijing_assets       WHERE deleted_at IS NULL
         UNION ALL
         SELECT asset_password_encrypted, hosted_ip, os_hostname,
-               server_status, eol_status
+               server_status, NULL::text AS eol_status
           FROM physical_esxi_servers WHERE deleted_at IS NULL
       ), dup_hostnames AS (
         SELECT os_hostname FROM vm

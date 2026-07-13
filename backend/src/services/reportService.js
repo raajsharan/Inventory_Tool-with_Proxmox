@@ -30,6 +30,40 @@ const ASSET_FIELDS = [
   { key: 'updated_at', label: 'Last Modified', type: 'date' },
 ];
 
+// physical_esxi_servers had patching_type/eol_status/manage_engine_installed/
+// tenable_installed/server_patch_type/patching_schedule dropped; replaced with
+// hardware/rack fields.
+const PHYS_ESXI_FIELDS = [
+  { key: 'vm_name', label: 'Device Name', type: 'string' },
+  { key: 'os_hostname', label: 'OS Hostname', type: 'string' },
+  { key: 'ip_address', label: 'Hosted IP', type: 'string' },
+  { key: 'hosted_ip', label: 'Hosted IP (alt)', type: 'string' },
+  { key: 'asset_type', label: 'Asset Type', type: 'string' },
+  { key: 'os_type', label: 'OS Type', type: 'string' },
+  { key: 'os_version', label: 'OS Version', type: 'string' },
+  { key: 'assigned_user', label: 'Assigned User', type: 'string' },
+  { key: 'department', label: 'Department', type: 'string' },
+  { key: 'business_purpose', label: 'Business Purpose', type: 'string' },
+  { key: 'server_status', label: 'Server Status', type: 'string' },
+  { key: 'location', label: 'Location', type: 'string' },
+  { key: 'serial_number', label: 'Serial Number', type: 'string' },
+  { key: 'server_model', label: 'Server Model', type: 'string' },
+  { key: 'cpu_cores', label: 'CPU Cores', type: 'number' },
+  { key: 'ram_gb', label: 'RAM (GB)', type: 'number' },
+  { key: 'total_disks', label: 'Total Disks', type: 'number' },
+  { key: 'ome_status', label: 'OME Status', type: 'string' },
+  { key: 'rack_number', label: 'Rack Number', type: 'string' },
+  { key: 'server_position', label: 'Server Position', type: 'string' },
+  { key: 'asset_tag', label: 'Asset Tag', type: 'string' },
+  { key: 'asset_username', label: 'Asset Username', type: 'string' },
+  { key: 'additional_remarks', label: 'Additional Remarks', type: 'string' },
+  { key: 'mac_address', label: 'MAC Address', type: 'string' },
+  { key: 'idrac_enabled', label: 'iDRAC Enabled', type: 'boolean' },
+  { key: 'idrac_ip', label: 'iDRAC IP', type: 'string' },
+  { key: 'created_at', label: 'Date Added', type: 'date' },
+  { key: 'updated_at', label: 'Last Modified', type: 'date' },
+];
+
 async function sources() {
   const { rows: pages } = await db.query(
     `SELECT cp.id, cp.slug, cp.name, COALESCE(json_agg(cpf.* ORDER BY cpf.sort_order) FILTER (WHERE cpf.id IS NOT NULL), '[]') AS fields
@@ -55,7 +89,7 @@ async function sources() {
     { key: 'assets',                label: 'Asset Inventory',          kind: 'table', table: 'assets',                fields: ASSET_FIELDS },
     { key: 'beijing_assets',        label: 'Beijing Asset Inventory',  kind: 'table', table: 'beijing_assets',        fields: ASSET_FIELDS },
     { key: 'ext_assets',            label: 'Ext. Asset Inventory',     kind: 'table', table: 'ext_assets',            fields: ASSET_FIELDS },
-    { key: 'physical_esxi_servers', label: 'Physical & ESXi Servers',  kind: 'table', table: 'physical_esxi_servers', fields: ASSET_FIELDS },
+    { key: 'physical_esxi_servers', label: 'Physical & ESXi Servers',  kind: 'table', table: 'physical_esxi_servers', fields: PHYS_ESXI_FIELDS },
     ...customSources,
   ];
 }
@@ -72,12 +106,12 @@ const OPS = {
   notnull: { sql: 'IS NOT NULL', args: 0 },
 };
 
-function buildAssetWhere(filters, params) {
+function buildAssetWhere(filters, params, fields = ASSET_FIELDS) {
   const where = [];
   for (const f of filters || []) {
     const op = OPS[f.op];
     if (!op) continue;
-    const col = ASSET_FIELDS.find(a => a.key === f.field);
+    const col = fields.find(a => a.key === f.field);
     if (!col) continue;
     if (op.args === 0) {
       where.push(`${col.key} ${op.sql}`);
@@ -97,11 +131,12 @@ async function run({ source, columns = [], filters = [], limit = 5000 }) {
   const cap = Math.min(Number(limit) || 5000, 50000);
 
   if (src.kind === 'table') {
-    const selectableCols = new Set(ASSET_FIELDS.map(f => f.key));
-    const cols = (columns.length ? columns : ASSET_FIELDS.map(f => f.key)).filter(c => selectableCols.has(c));
+    const tableFields = src.fields;
+    const selectableCols = new Set(tableFields.map(f => f.key));
+    const cols = (columns.length ? columns : tableFields.map(f => f.key)).filter(c => selectableCols.has(c));
     if (!cols.length) cols.push('id');
     const params = [];
-    const whereSql = buildAssetWhere(filters, params);
+    const whereSql = buildAssetWhere(filters, params, tableFields);
     const { rows } = await db.query(
       `SELECT ${cols.join(',')} FROM ${src.table} ${whereSql} ORDER BY created_at DESC LIMIT ${cap}`,
       params
