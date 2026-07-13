@@ -39,4 +39,11 @@ async function listAgents(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { getConfig, saveConfig, testConnection, listAgents };
+async function listSoftware(req, res, next) {
+  try {
+    const software = await svc.fetchSoftware();
+    res.json({ software, total: software.length });
+  } catch (e) { next(e); }
+}
+
+module.exports = { getConfig, saveConfig, testConnection, listAgents, listSoftware };

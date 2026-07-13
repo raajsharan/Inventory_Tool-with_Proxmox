@@ -1,23 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert, App, Badge, Button, Card, Col, Descriptions, Form, Input,
-  Modal, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography,
+  Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
-  CheckCircleFilled, CloseCircleFilled, DesktopOutlined,
+  AppstoreOutlined, CheckCircleFilled, CloseCircleFilled, DesktopOutlined,
   ExclamationCircleFilled, QuestionCircleOutlined, ReloadOutlined,
-  SettingOutlined, WifiOutlined,
+  SafetyCertificateOutlined, SettingOutlined, WifiOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 const { Title, Text } = Typography;
 
-// ── Status helpers ─────────────────────────────────────────────────────────
+// ── Endpoint status helpers ────────────────────────────────────────────────
 
 const AGENT_STATUS = {
-  0: { label: 'Online',   color: 'success', icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
-  1: { label: 'Offline',  color: 'default', icon: <CloseCircleFilled style={{ color: '#d9d9d9' }} /> },
+  0: { label: 'Online',  color: 'success', icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
+  1: { label: 'Offline', color: 'default', icon: <CloseCircleFilled style={{ color: '#d9d9d9' }} /> },
 };
 
 const MANAGED_STATUS = {
@@ -50,6 +50,44 @@ function OsTag({ osName }) {
   );
 }
 
+// ── Software status helpers ────────────────────────────────────────────────
+
+const SW_TYPE = {
+  1:  { label: 'Commercial',     color: 'blue'    },
+  2:  { label: 'Non-commercial', color: 'green'   },
+  0:  { label: 'Unidentified',   color: 'default' },
+};
+
+const USAGE_STATUS = {
+  1: { label: 'Allowed',      color: 'success' },
+  2: { label: 'Prohibited',   color: 'error'   },
+  0: { label: 'Not Assigned', color: 'default' },
+};
+
+const COMPLIANCE_STATUS = {
+  2:  { label: 'In Compliance',  color: 'success'  },
+  1:  { label: 'Over Licensed',  color: 'warning'  },
+  0:  { label: 'Under Licensed', color: 'error'    },
+  3:  { label: 'Expired',        color: 'error'    },
+  '-1': { label: 'N/A',          color: 'default'  },
+};
+
+function SwTypeTag({ value }) {
+  const meta = SW_TYPE[value] ?? SW_TYPE[0];
+  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
+}
+
+function UsageTag({ value }) {
+  const meta = USAGE_STATUS[value] ?? USAGE_STATUS[0];
+  return <Badge status={meta.color} text={meta.label} />;
+}
+
+function ComplianceTag({ value }) {
+  const key  = value === -1 ? '-1' : value;
+  const meta = COMPLIANCE_STATUS[key] ?? COMPLIANCE_STATUS['-1'];
+  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
+}
+
 // ── Config modal ───────────────────────────────────────────────────────────
 
 function ConfigModal({ open, onClose, onSaved }) {
@@ -76,7 +114,6 @@ function ConfigModal({ open, onClose, onSaved }) {
   const handleSave = async () => {
     try {
       const vals = await form.validateFields();
-      // Normalise api_path: trim and ensure it starts with /
       if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
       setSaving(true);
       await api.put('/endpoint-central/config', vals);
@@ -99,15 +136,12 @@ function ConfigModal({ open, onClose, onSaved }) {
     setTesting(true);
     setTestResult(null);
     try {
-      // Clear api_path before testing so the backend tries ALL known paths
       await api.put('/endpoint-central/config', { ...vals, api_path: '' });
       const r = await api.post('/endpoint-central/test');
       if (r.data.success && r.data.working_path) {
-        // Auto-fill and persist the discovered path
         form.setFieldValue('api_path', r.data.working_path);
         await api.put('/endpoint-central/config', { ...vals, api_path: r.data.working_path });
       } else {
-        // Restore original api_path after failed test
         await api.put('/endpoint-central/config', vals);
       }
       setTestResult(r.data);
@@ -173,11 +207,11 @@ function ConfigModal({ open, onClose, onSaved }) {
             showSearch
             mode="combobox"
             options={[
-              { value: '/api/1.4/computers',              label: '/api/1.4/computers' },
-              { value: '/api/1.4/patch/allsystems',       label: '/api/1.4/patch/allsystems' },
+              { value: '/api/1.4/computers',                label: '/api/1.4/computers' },
+              { value: '/api/1.4/patch/allsystems',         label: '/api/1.4/patch/allsystems' },
               { value: '/api/1.4/patch/systems/allsystems', label: '/api/1.4/patch/systems/allsystems' },
-              { value: '/api/1.4/inventory/computers',    label: '/api/1.4/inventory/computers' },
-              { value: '/dcapi/rd/computers',             label: '/dcapi/rd/computers' },
+              { value: '/api/1.4/inventory/computers',      label: '/api/1.4/inventory/computers' },
+              { value: '/dcapi/rd/computers',               label: '/dcapi/rd/computers' },
             ]}
             onClear={() => form.setFieldValue('api_path', '')}
           />
@@ -212,16 +246,16 @@ function ConfigModal({ open, onClose, onSaved }) {
 // ── Summary cards ──────────────────────────────────────────────────────────
 
 function SummaryCards({ agents }) {
-  const total       = agents.length;
-  const online      = agents.filter(a => a.agent_status === 0).length;
-  const offline     = agents.filter(a => a.agent_status === 1).length;
-  const notManaged  = agents.filter(a => a.managed_status === 0).length;
+  const total      = agents.length;
+  const online     = agents.filter(a => a.agent_status === 0).length;
+  const offline    = agents.filter(a => a.agent_status === 1).length;
+  const notManaged = agents.filter(a => a.managed_status === 0).length;
 
   const cards = [
-    { label: 'Total Endpoints', value: total,      color: undefined,   icon: <DesktopOutlined /> },
-    { label: 'Online',          value: online,     color: '#52c41a',   icon: <WifiOutlined /> },
-    { label: 'Offline',         value: offline,    color: '#8c8c8c',   icon: <CloseCircleFilled /> },
-    { label: 'Not Managed',     value: notManaged, color: '#ff4d4f',   icon: <ExclamationCircleFilled /> },
+    { label: 'Total Endpoints', value: total,      color: undefined,  icon: <DesktopOutlined /> },
+    { label: 'Online',          value: online,     color: '#52c41a',  icon: <WifiOutlined /> },
+    { label: 'Offline',         value: offline,    color: '#8c8c8c',  icon: <CloseCircleFilled /> },
+    { label: 'Not Managed',     value: notManaged, color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
   ];
 
   return (
@@ -232,9 +266,41 @@ function SummaryCards({ agents }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 22, color: c.color || '#1677ff' }}>{c.icon}</span>
               <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>
-                  {c.value}
-                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
+                <div style={{ fontSize: 12, color: '#8c8c8c' }}>{c.label}</div>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      ))}
+    </Row>
+  );
+}
+
+// ── Software summary cards ─────────────────────────────────────────────────
+
+function SoftwareSummaryCards({ software }) {
+  const total       = software.length;
+  const commercial  = software.filter(s => s.sw_type === 1).length;
+  const prohibited  = software.filter(s => s.is_usage_prohibited === 2).length;
+  const nonCompliant = software.filter(s => s.compliant_status === 0 || s.compliant_status === 3).length;
+
+  const cards = [
+    { label: 'Total Software',    value: total,        color: undefined,  icon: <AppstoreOutlined /> },
+    { label: 'Commercial',        value: commercial,   color: '#1677ff',  icon: <SafetyCertificateOutlined /> },
+    { label: 'Prohibited',        value: prohibited,   color: '#ff4d4f',  icon: <CloseCircleFilled /> },
+    { label: 'Non-Compliant',     value: nonCompliant, color: '#fa8c16',  icon: <ExclamationCircleFilled /> },
+  ];
+
+  return (
+    <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+      {cards.map(c => (
+        <Col xs={12} sm={6} key={c.label}>
+          <Card size="small" styles={{ body: { padding: '10px 16px' } }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 22, color: c.color || '#1677ff' }}>{c.icon}</span>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
                 <div style={{ fontSize: 12, color: '#8c8c8c' }}>{c.label}</div>
               </div>
             </div>
@@ -265,16 +331,29 @@ export default function EndpointCentral() {
   const { message } = App.useApp();
   const isAdmin     = ['admin', 'superadmin'].includes(user?.role);
 
+  // Endpoints tab
   const [agents,     setAgents]     = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [configured, setConfigured] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
-  // Filters
-  const [search,      setSearch]      = useState('');
-  const [statusFilter,setStatusFilter]= useState(null);
-  const [osFilter,    setOsFilter]    = useState(null);
-  const [managedFilt, setManagedFilt] = useState(null);
+  // Software tab
+  const [software,    setSoftware]    = useState([]);
+  const [swLoading,   setSwLoading]   = useState(false);
+  const [swLoaded,    setSwLoaded]    = useState(false);
+  const [activeTab,   setActiveTab]   = useState('endpoints');
+
+  // Endpoint filters
+  const [search,       setSearch]       = useState('');
+  const [statusFilter, setStatusFilter] = useState(null);
+  const [osFilter,     setOsFilter]     = useState(null);
+  const [managedFilt,  setManagedFilt]  = useState(null);
+
+  // Software filters
+  const [swSearch,      setSwSearch]      = useState('');
+  const [swTypeFilter,  setSwTypeFilter]  = useState(null);
+  const [swUsageFilter, setSwUsageFilter] = useState(null);
+  const [swCompliance,  setSwCompliance]  = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -285,7 +364,6 @@ export default function EndpointCentral() {
     } catch (e) {
       const status = e?.response?.status;
       const errMsg = e?.response?.data?.error || '';
-      // 400 = not configured; 503 = schema not ready — both mean "needs setup"
       if (status === 400 || status === 503) {
         setConfigured(false);
         setAgents([]);
@@ -296,11 +374,45 @@ export default function EndpointCentral() {
     } finally { setLoading(false); }
   }, [message]);
 
+  const loadSoftware = useCallback(async () => {
+    setSwLoading(true);
+    try {
+      const r = await api.get('/endpoint-central/software');
+      setSoftware(r.data.software || []);
+      setSwLoaded(true);
+    } catch (e) {
+      const status = e?.response?.status;
+      const errMsg = e?.response?.data?.error || '';
+      if (status === 400 || status === 503) {
+        setSoftware([]);
+        setSwLoaded(false);
+      } else {
+        message.error(errMsg || 'Failed to load software list');
+      }
+    } finally { setSwLoading(false); }
+  }, [message]);
+
   useEffect(() => { load(); }, [load]);
 
-  const filtered = agents.filter(a => {
+  // Load software when user switches to that tab (lazy load)
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+    if (key === 'software' && !swLoaded && configured) {
+      loadSoftware();
+    }
+  };
+
+  // Reload both when config is saved
+  const handleConfigSaved = () => {
+    load();
+    setSwLoaded(false); // force software reload next tab visit
+    if (activeTab === 'software') loadSoftware();
+  };
+
+  // ── Filtered endpoints ─────────────────────────────────────────────────
+  const filteredAgents = agents.filter(a => {
     if (statusFilter !== null && a.agent_status !== statusFilter) return false;
-    if (managedFilt !== null && a.managed_status !== managedFilt) return false;
+    if (managedFilt  !== null && a.managed_status !== managedFilt) return false;
     if (osFilter && osFamily(a.os_name) !== osFilter) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -312,7 +424,22 @@ export default function EndpointCentral() {
     return true;
   });
 
-  const columns = [
+  // ── Filtered software ──────────────────────────────────────────────────
+  const filteredSoftware = software.filter(s => {
+    if (swTypeFilter   !== null && s.sw_type             !== swTypeFilter)   return false;
+    if (swUsageFilter  !== null && s.is_usage_prohibited !== swUsageFilter)  return false;
+    if (swCompliance   !== null && s.compliant_status    !== swCompliance)   return false;
+    if (swSearch) {
+      const q = swSearch.toLowerCase();
+      if (!s.software_name.toLowerCase().includes(q)
+       && !s.manufacturer.toLowerCase().includes(q)
+       && !s.version.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // ── Endpoint columns ───────────────────────────────────────────────────
+  const agentColumns = [
     {
       title: 'Computer Name', dataIndex: 'computer_name', key: 'computer_name',
       fixed: 'left', width: 200, ellipsis: true,
@@ -332,10 +459,11 @@ export default function EndpointCentral() {
     },
     { title: 'Domain',    dataIndex: 'domain',   key: 'domain',   width: 160, ellipsis: true },
     {
-      title: 'OS', dataIndex: 'os_name', key: 'os_name', width: 90,
+      title: 'OS', dataIndex: 'os_name', key: 'os_tag', width: 90,
       render: v => <OsTag osName={v} />,
     },
-    { title: 'OS Name', dataIndex: 'os_name', key: 'os_name_full', width: 220, ellipsis: true,
+    {
+      title: 'OS Name', dataIndex: 'os_name', key: 'os_name', width: 220, ellipsis: true,
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
     },
     {
@@ -360,8 +488,217 @@ export default function EndpointCentral() {
     },
   ];
 
+  // ── Software columns ───────────────────────────────────────────────────
+  const softwareColumns = [
+    {
+      title: 'Software Name', dataIndex: 'software_name', key: 'software_name',
+      fixed: 'left', width: 240, ellipsis: true,
+      render: v => <Text strong style={{ fontSize: 13 }}>{v}</Text>,
+    },
+    { title: 'Version',      dataIndex: 'version',      key: 'version',      width: 130, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : <Text code style={{ fontSize: 12 }}>{v}</Text>,
+    },
+    { title: 'Manufacturer', dataIndex: 'manufacturer', key: 'manufacturer', width: 200, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
+    {
+      title: 'License Type', dataIndex: 'sw_type', key: 'sw_type', width: 140,
+      render: v => <SwTypeTag value={v} />,
+    },
+    {
+      title: 'Usage', dataIndex: 'is_usage_prohibited', key: 'is_usage_prohibited', width: 130,
+      render: v => <UsageTag value={v} />,
+    },
+    {
+      title: 'Compliance', dataIndex: 'compliant_status', key: 'compliant_status', width: 140,
+      render: v => <ComplianceTag value={v} />,
+    },
+    {
+      title: 'Installed', dataIndex: 'installed_count', key: 'installed_count', width: 100, align: 'right',
+      render: v => <Text>{v ?? 0}</Text>,
+    },
+    {
+      title: 'Licensed', dataIndex: 'licensed_count', key: 'licensed_count', width: 100, align: 'right',
+      render: v => (v == null || v === 0) ? <Text type="secondary">—</Text> : <Text>{v}</Text>,
+    },
+  ];
+
+  const notConfiguredAlert = !configured && !loading && (
+    <Alert
+      type="info"
+      showIcon
+      message="Endpoint Central is not configured"
+      description={
+        isAdmin
+          ? 'Click "Configure" to enter the server URL and API key.'
+          : 'Contact an administrator to configure the Endpoint Central connection.'
+      }
+      style={{ marginBottom: 16 }}
+      action={
+        isAdmin
+          ? <Button size="small" type="primary" onClick={() => setConfigOpen(true)}>Configure</Button>
+          : null
+      }
+    />
+  );
+
+  const tabItems = [
+    {
+      key: 'endpoints',
+      label: <span><DesktopOutlined /> Endpoints</span>,
+      children: (
+        <>
+          {configured && (
+            <>
+              <SummaryCards agents={agents} />
+              <Card size="small" style={{ marginBottom: 12 }}>
+                <Space wrap>
+                  <Input.Search
+                    placeholder="Search name / IP / domain / OS…"
+                    allowClear
+                    style={{ width: 280 }}
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                  <Select
+                    allowClear placeholder="Agent Status"
+                    style={{ width: 150 }}
+                    value={statusFilter}
+                    onChange={v => setStatusFilter(v ?? null)}
+                    options={[
+                      { value: 0, label: 'Online'  },
+                      { value: 1, label: 'Offline' },
+                    ]}
+                  />
+                  <Select
+                    allowClear placeholder="Managed Status"
+                    style={{ width: 160 }}
+                    value={managedFilt}
+                    onChange={v => setManagedFilt(v ?? null)}
+                    options={[
+                      { value: 1, label: 'Managed'     },
+                      { value: 0, label: 'Not Managed'  },
+                    ]}
+                  />
+                  <Select
+                    allowClear placeholder="OS Family"
+                    style={{ width: 130 }}
+                    value={osFilter}
+                    onChange={v => setOsFilter(v ?? null)}
+                    options={[
+                      { value: 'Windows', label: 'Windows' },
+                      { value: 'Linux',   label: 'Linux'   },
+                      { value: 'Other',   label: 'Other'   },
+                    ]}
+                  />
+                </Space>
+              </Card>
+              <div style={{ marginBottom: 6 }}>
+                <Text type="secondary">
+                  Showing {filteredAgents.length} of {agents.length} endpoints
+                </Text>
+              </div>
+              <Table
+                rowKey={(r, i) => r.resource_id ?? `${r.computer_name}-${i}`}
+                size="small"
+                loading={loading}
+                dataSource={filteredAgents}
+                columns={agentColumns}
+                pagination={{ pageSize: PAGE_SIZE, showSizeChanger: true, showTotal: t => `${t} endpoints` }}
+                scroll={{ x: 'max-content' }}
+                sticky
+              />
+            </>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'software',
+      label: <span><AppstoreOutlined /> Software Inventory</span>,
+      children: (
+        <>
+          {configured && (
+            <>
+              <SoftwareSummaryCards software={software} />
+              <Card size="small" style={{ marginBottom: 12 }}>
+                <Space wrap>
+                  <Input.Search
+                    placeholder="Search software name / manufacturer…"
+                    allowClear
+                    style={{ width: 300 }}
+                    value={swSearch}
+                    onChange={e => setSwSearch(e.target.value)}
+                  />
+                  <Select
+                    allowClear placeholder="License Type"
+                    style={{ width: 160 }}
+                    value={swTypeFilter}
+                    onChange={v => setSwTypeFilter(v ?? null)}
+                    options={[
+                      { value: 1, label: 'Commercial'     },
+                      { value: 2, label: 'Non-commercial' },
+                      { value: 0, label: 'Unidentified'   },
+                    ]}
+                  />
+                  <Select
+                    allowClear placeholder="Usage"
+                    style={{ width: 150 }}
+                    value={swUsageFilter}
+                    onChange={v => setSwUsageFilter(v ?? null)}
+                    options={[
+                      { value: 1, label: 'Allowed'      },
+                      { value: 2, label: 'Prohibited'   },
+                      { value: 0, label: 'Not Assigned' },
+                    ]}
+                  />
+                  <Select
+                    allowClear placeholder="Compliance"
+                    style={{ width: 170 }}
+                    value={swCompliance}
+                    onChange={v => setSwCompliance(v ?? null)}
+                    options={[
+                      { value:  2, label: 'In Compliance'  },
+                      { value:  1, label: 'Over Licensed'  },
+                      { value:  0, label: 'Under Licensed' },
+                      { value:  3, label: 'Expired'        },
+                      { value: -1, label: 'N/A'            },
+                    ]}
+                  />
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={swLoading}
+                    onClick={loadSoftware}
+                  >
+                    Refresh
+                  </Button>
+                </Space>
+              </Card>
+              <div style={{ marginBottom: 6 }}>
+                <Text type="secondary">
+                  Showing {filteredSoftware.length} of {software.length} software titles
+                </Text>
+              </div>
+              <Table
+                rowKey={(r, i) => r.software_id ?? `${r.software_name}-${i}`}
+                size="small"
+                loading={swLoading}
+                dataSource={filteredSoftware}
+                columns={softwareColumns}
+                pagination={{ pageSize: PAGE_SIZE, showSizeChanger: true, showTotal: t => `${t} titles` }}
+                scroll={{ x: 'max-content' }}
+                sticky
+              />
+            </>
+          )}
+        </>
+      ),
+    },
+  ];
+
   return (
     <div style={{ padding: '16px 20px' }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>
@@ -369,7 +706,7 @@ export default function EndpointCentral() {
             ME Endpoint Central
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            ManageEngine Endpoint Central — agent status per device
+            ManageEngine Endpoint Central — agent status and software inventory
           </Text>
         </div>
         <Space>
@@ -378,107 +715,30 @@ export default function EndpointCentral() {
               Configure
             </Button>
           )}
-          <Button icon={<ReloadOutlined />} loading={loading} onClick={load}>
+          <Button
+            icon={<ReloadOutlined />}
+            loading={activeTab === 'endpoints' ? loading : swLoading}
+            onClick={activeTab === 'endpoints' ? load : loadSoftware}
+          >
             Refresh
           </Button>
         </Space>
       </div>
 
-      {!configured && !loading && (
-        <Alert
-          type="info"
-          showIcon
-          message="Endpoint Central is not configured"
-          description={
-            isAdmin
-              ? 'Click "Configure" to enter the server URL and API key.'
-              : 'Contact an administrator to configure the Endpoint Central connection.'
-          }
-          style={{ marginBottom: 16 }}
-          action={
-            isAdmin
-              ? <Button size="small" type="primary" onClick={() => setConfigOpen(true)}>Configure</Button>
-              : null
-          }
-        />
-      )}
+      {notConfiguredAlert}
 
-      {configured && (
-        <>
-          <SummaryCards agents={agents} />
-
-          {/* Filter bar */}
-          <Card size="small" style={{ marginBottom: 12 }}>
-            <Space wrap>
-              <Input.Search
-                placeholder="Search name / IP / domain / OS…"
-                allowClear
-                style={{ width: 280 }}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-              <Select
-                allowClear placeholder="Agent Status"
-                style={{ width: 150 }}
-                value={statusFilter}
-                onChange={v => setStatusFilter(v ?? null)}
-                options={[
-                  { value: 0, label: 'Online'  },
-                  { value: 1, label: 'Offline' },
-                ]}
-              />
-              <Select
-                allowClear placeholder="Managed Status"
-                style={{ width: 160 }}
-                value={managedFilt}
-                onChange={v => setManagedFilt(v ?? null)}
-                options={[
-                  { value: 1, label: 'Managed'     },
-                  { value: 0, label: 'Not Managed'  },
-                ]}
-              />
-              <Select
-                allowClear placeholder="OS Family"
-                style={{ width: 130 }}
-                value={osFilter}
-                onChange={v => setOsFilter(v ?? null)}
-                options={[
-                  { value: 'Windows', label: 'Windows' },
-                  { value: 'Linux',   label: 'Linux'   },
-                  { value: 'Other',   label: 'Other'   },
-                ]}
-              />
-            </Space>
-          </Card>
-
-          <div style={{ marginBottom: 6 }}>
-            <Text type="secondary">
-              Showing {filtered.length} of {agents.length} endpoints
-            </Text>
-          </div>
-
-          <Table
-            rowKey={(r, i) => r.resource_id ?? `${r.computer_name}-${i}`}
-            size="small"
-            loading={loading}
-            dataSource={filtered}
-            columns={columns}
-            pagination={{
-              pageSize: PAGE_SIZE,
-              showSizeChanger: true,
-              showTotal: t => `${t} endpoints`,
-            }}
-            scroll={{ x: 'max-content' }}
-            sticky
-          />
-        </>
-      )}
+      <Tabs
+        activeKey={activeTab}
+        onChange={handleTabChange}
+        items={tabItems}
+        destroyInactiveTabPane={false}
+      />
 
       {isAdmin && (
         <ConfigModal
           open={configOpen}
           onClose={() => setConfigOpen(false)}
-          onSaved={load}
+          onSaved={handleConfigSaved}
         />
       )}
     </div>

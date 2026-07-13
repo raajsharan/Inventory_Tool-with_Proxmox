@@ -257,6 +257,112 @@ function parseErrorBody(body) {
 }
 
 // ---------------------------------------------------------------------------
+// Software inventory extraction
+// ---------------------------------------------------------------------------
+
+const SOFTWARE_EXTRACT_PATHS = [
+  ['message_response', 'software'],
+  ['message_response', 'softwares'],
+  ['message_response', 'softwarelist'],
+  ['data', 'software'],
+  ['data', 'softwares'],
+  ['data', 'softwarelist'],
+  ['software'],
+  ['softwares'],
+  ['softwarelist'],
+];
+
+function looksLikeSoftware(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const up = new Set(Object.keys(obj).map(k => k.toUpperCase()));
+  return up.has('SOFTWARE_NAME') || up.has('SW_NAME')   || up.has('SOFTWARENAME')
+      || up.has('SW_TYPE')       || up.has('SWTYPE')
+      || up.has('INSTALLED_COUNT') || up.has('INSTALLEDCOUNT')
+      || up.has('COMPLIANT_STATUS') || up.has('COMPLIANCE_STATUS');
+}
+
+function deepFindSoftwareArray(obj, depth) {
+  if (depth > 5 || !obj || typeof obj !== 'object') return null;
+  for (const val of Object.values(obj)) {
+    if (Array.isArray(val)) {
+      if (val.length === 0 || looksLikeSoftware(val[0])) return val;
+    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const found = deepFindSoftwareArray(val, depth + 1);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
+function extractSoftware(json) {
+  if (meErrorFromJson(json)) return null;
+  for (const path of SOFTWARE_EXTRACT_PATHS) {
+    let val = json;
+    for (const k of path) val = val?.[k];
+    if (Array.isArray(val)) return val;
+  }
+  return deepFindSoftwareArray(json, 0);
+}
+
+function normalizeSoftware(sw) {
+  return {
+    software_id:         sw.software_id          ?? sw.SOFTWARE_ID          ?? sw.sw_id            ?? null,
+    software_name:       sw.software_name         ?? sw.SOFTWARE_NAME         ?? sw.sw_name          ?? sw.softwarename  ?? '—',
+    software_code:       sw.software_code         ?? sw.SOFTWARE_CODE         ?? sw.sw_code          ?? '',
+    version:             sw.version               ?? sw.VERSION               ?? sw.sw_version       ?? sw.software_version ?? '—',
+    manufacturer:        sw.manufacturer          ?? sw.MANUFACTURER          ?? sw.vendor           ?? sw.VENDOR          ?? '—',
+    // sw_type: 1=commercial, 2=non-commercial, 0=unidentified
+    sw_type:             sw.sw_type               ?? sw.SW_TYPE               ?? sw.software_type    ?? 0,
+    // is_usage_prohibited: 1=allowed, 2=prohibited, 0=not assigned
+    is_usage_prohibited: sw.is_usage_prohibited   ?? sw.IS_USAGE_PROHIBITED   ?? sw.accesstype       ?? 0,
+    // compliant_status: 0=under licensed, 1=over licensed, 2=in compliance, 3=expired, -1=not available
+    compliant_status:    sw.compliant_status      ?? sw.COMPLIANT_STATUS      ?? sw.compliance_status ?? -1,
+    installed_count:     sw.installed_count       ?? sw.INSTALLED_COUNT       ?? sw.installedcount   ?? 0,
+    licensed_count:      sw.licensed_count        ?? sw.LICENSED_COUNT        ?? sw.licensecount     ?? 0,
+    managed_count:       sw.managed_count         ?? sw.MANAGED_COUNT         ?? 0,
+  };
+}
+
+async function fetchSoftware() {
+  const config = await getConfig();
+
+  if (!config.server_url || !config.api_key) {
+    const err = new Error('Endpoint Central is not configured — set Server URL and API Key first');
+    err.status = 400;
+    throw err;
+  }
+
+  const base = config.server_url.replace(/\/$/, '');
+  const path = '/api/1.4/inventory/software';
+
+  for (const strat of authStrategies(base, path, config.api_key, config.customer_id)) {
+    try {
+      const { status, body } = await httpRequest(strat.url, {
+        verifySsl: config.verify_ssl,
+        headers:   strat.headers,
+        timeout:   20000, // software list can be large
+      });
+      if (status >= 200 && status < 300) {
+        let json;
+        try { json = JSON.parse(body); } catch { continue; }
+        const meErr = meErrorFromJson(json);
+        if (meErr) continue;
+        const software = extractSoftware(json);
+        if (software !== null) return software.map(normalizeSoftware);
+      }
+      if (status === 401 || status === 403) break;
+    } catch { /* try next */ }
+  }
+
+  const err = new Error(
+    'Could not retrieve software list from Endpoint Central. ' +
+    'Check the Server URL and API Key, or use Test Connection for a detailed diagnosis.'
+  );
+  err.status = 502;
+  throw err;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -393,4 +499,4 @@ async function testConnection() {
   };
 }
 
-module.exports = { getConfig, saveConfig, fetchAgents, testConnection, KNOWN_PATHS };
+module.exports = { getConfig, saveConfig, fetchAgents, fetchSoftware, testConnection, KNOWN_PATHS };
