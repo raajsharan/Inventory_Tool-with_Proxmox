@@ -116,6 +116,39 @@ function httpPost(urlStr, body, options = {}) {
 // Credential-based authentication (username + password, with optional 2FA)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Auth response helpers — ME EC wraps auth data inside message_response
+// ---------------------------------------------------------------------------
+
+// Flatten both top-level and message_response fields into a single lookup object.
+// ME EC versions differ: some put auth_token at root, others nest it.
+function flattenAuthResponse(json) {
+  const r = json?.message_response ?? json?.messageResponse ?? {};
+  return { ...r, ...json }; // root keys win over nested (so top-level auth_token is preferred)
+}
+
+function pickAuthToken(flat) {
+  return flat.auth_token   ?? flat.authToken   ?? flat.token
+      ?? flat.AUTH_TOKEN   ?? flat.AuthToken   ?? null;
+}
+
+function pickUniqueUserId(flat) {
+  return flat.unique_userID ?? flat.unique_userid ?? flat.uniqueUserID
+      ?? flat.user_id       ?? flat.userId        ?? flat.userID
+      ?? flat.UNIQUE_USERID ?? null;
+}
+
+function pickOtpRequired(flat) {
+  const v = flat.OTP_Validation_Required ?? flat.otp_validation_required
+         ?? flat.OTPValidationRequired   ?? flat.otpValidationRequired;
+  return v === true || v === 'true' || v === 1;
+}
+
+function pickAuthError(flat, status) {
+  return flat.error_description ?? flat.error_msg  ?? flat.errorDescription
+      ?? flat.message           ?? flat.error       ?? `HTTP ${status}`;
+}
+
 // Step 1: POST username + base64(password) to ME EC auth endpoint.
 // Returns { otp_required: false, auth_token } on direct success, or
 //         { otp_required: true,  unique_user_id } when 2FA is enabled.
@@ -143,39 +176,42 @@ async function loginWithCredentials({ serverUrl, username, password, customerId,
 
   let json;
   try { json = JSON.parse(body); } catch {
-    const err = new Error('Invalid JSON response from Endpoint Central authentication endpoint');
+    const err = new Error(`Invalid response from Endpoint Central (raw: ${body.slice(0, 200)})`);
     err.status = 502;
     throw err;
   }
 
-  if (status >= 400 || json.status === 'error' || json.message_type === 'error') {
-    const msg = json.error_description || json.error_msg || json.message || `HTTP ${status}`;
+  const flat = flattenAuthResponse(json);
+
+  // Detect error response (HTTP error status OR ME EC error body)
+  if (status >= 400 || flat.status === 'error' || flat.message_type === 'failure'
+      || flat.message_type === 'error') {
+    const msg = pickAuthError(flat, status);
     const err = new Error(`Authentication failed: ${msg}`);
-    err.status = 401;
+    err.status = status >= 400 ? status : 401;
     throw err;
   }
 
   // 2FA required — server returns unique_userID to use in OTP step
-  const otpRequired = json.OTP_Validation_Required === true
-                   || json.otp_validation_required === true
-                   || json['OTP_Validation_Required'] === 'true';
-  if (otpRequired) {
-    const uniqueUserId = json.unique_userID ?? json.unique_userid ?? json.uniqueUserID ?? json.user_id;
+  if (pickOtpRequired(flat)) {
+    const uniqueUserId = pickUniqueUserId(flat);
     if (!uniqueUserId) {
-      const err = new Error('Server requires OTP but did not return unique_userID');
+      // Include raw response to aid debugging
+      const err = new Error(`Server requires OTP but did not return unique_userID. Response: ${body.slice(0, 400)}`);
       err.status = 502;
       throw err;
     }
     return { otp_required: true, unique_user_id: String(uniqueUserId) };
   }
 
-  // Direct auth success — token is in the response
-  const authToken = json.auth_token ?? json.authToken ?? json.token ?? json.message_response?.auth_token;
+  // Direct auth success — token in the response
+  const authToken = pickAuthToken(flat);
   if (authToken) {
     return { otp_required: false, auth_token: String(authToken) };
   }
 
-  const err = new Error('Unexpected response from Endpoint Central: no auth_token in response');
+  // Include raw response body so admin can diagnose the unexpected shape
+  const err = new Error(`Endpoint Central responded but no auth_token found. Response: ${body.slice(0, 400)}`);
   err.status = 502;
   throw err;
 }
@@ -199,21 +235,24 @@ async function validateOtpCode({ serverUrl, unique_user_id, otp, verifySsl }) {
 
   let json;
   try { json = JSON.parse(body); } catch {
-    const err = new Error('Invalid JSON response from Endpoint Central OTP validation endpoint');
+    const err = new Error(`Invalid response from OTP validation endpoint (raw: ${body.slice(0, 200)})`);
     err.status = 502;
     throw err;
   }
 
-  if (status >= 400 || json.status === 'error' || json.message_type === 'error') {
-    const msg = json.error_description || json.error_msg || json.message || `HTTP ${status}`;
+  const flat = flattenAuthResponse(json);
+
+  if (status >= 400 || flat.status === 'error' || flat.message_type === 'failure'
+      || flat.message_type === 'error') {
+    const msg = pickAuthError(flat, status);
     const err = new Error(`OTP validation failed: ${msg}`);
-    err.status = 401;
+    err.status = status >= 400 ? status : 401;
     throw err;
   }
 
-  const authToken = json.auth_token ?? json.authToken ?? json.token ?? json.message_response?.auth_token;
+  const authToken = pickAuthToken(flat);
   if (!authToken) {
-    const err = new Error('OTP accepted but no auth_token in response');
+    const err = new Error(`OTP accepted but no auth_token found. Response: ${body.slice(0, 400)}`);
     err.status = 502;
     throw err;
   }
