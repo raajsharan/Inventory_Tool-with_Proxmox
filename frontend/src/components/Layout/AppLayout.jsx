@@ -148,6 +148,7 @@ export default function AppLayout() {
     children: [
       can('admin/users')            && { key: '/admin/users',             icon: <TeamOutlined />,              label: <Link to="/admin/users">Users</Link> },
       can('admin/dropdowns')        && { key: '/admin/dropdowns',         icon: <SettingOutlined />,           label: <Link to="/admin/dropdowns">Dropdowns</Link> },
+      can('admin/server-models')    && { key: '/admin/server-models',     icon: <HddOutlined />,               label: <Link to="/admin/server-models">Server Models</Link> },
       can('admin/tag-ranges')       && { key: '/admin/tag-ranges',        icon: <TagsOutlined />,              label: <Link to="/admin/tag-ranges">Tag Ranges</Link> },
       can('admin/custom-pages')     && { key: '/admin/custom-pages',      icon: <AppstoreAddOutlined />,       label: <Link to="/admin/custom-pages">Custom Pages</Link> },
       can('admin/field-visibility') && { key: '/admin/field-visibility',  icon: <EyeOutlined />,               label: <Link to="/admin/field-visibility">Field Customization</Link> },
@@ -205,7 +206,7 @@ export default function AppLayout() {
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
               flexShrink: 0,
             }}>
-              <img alt="logo" src={branding.logo_data_url} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+              <img alt="logo" src={branding.logo_data_url} style={{ maxWidth: '100%', maxHeight: '100%' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
             </span>
           )}
           {!collapsed && (

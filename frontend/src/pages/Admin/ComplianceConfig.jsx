@@ -76,13 +76,14 @@ const ME_BUCKET_ORDER = [
 // Dashboard card rendering helpers (replicated from Dashboard.jsx exactly)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ratioLine({ label, numerator, denominator, tone }) {
+function ratioLine({ label, numerator = 0, denominator = 0, tone }) {
   const pct = denominator ? (numerator / denominator) * 100 : 0;
-  const toneStyle = {
+  const TONES = {
     blue:   { bg: 'rgba(22,119,255,0.08)',  fg: '#1d4ed8' },
     indigo: { bg: 'rgba(99,102,241,0.10)',  fg: '#4338ca' },
     green:  { bg: 'rgba(34,197,94,0.10)',   fg: '#15803d' },
-  }[tone || 'blue'];
+  };
+  const toneStyle = TONES[tone] ?? TONES.blue;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',

@@ -23,6 +23,7 @@ const STATIC_PAGES = [
   { key: 'reports',               label: 'Report Builder',           group: 'General' },
   { key: 'admin/users',           label: 'Users',                    group: 'Administration' },
   { key: 'admin/dropdowns',       label: 'Dropdowns',                group: 'Administration' },
+  { key: 'admin/server-models',  label: 'Server Models',            group: 'Administration' },
   { key: 'admin/tag-ranges',      label: 'Tag Ranges',               group: 'Administration' },
   { key: 'admin/custom-pages',    label: 'Custom Pages',             group: 'Administration' },
   { key: 'admin/field-visibility',label: 'Field Customization',      group: 'Administration' },

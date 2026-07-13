@@ -112,6 +112,7 @@ body[data-theme="dark"] .ant-typography.ant-typography-secondary { color: #94a3b
 .stat-tile {
   animation: tilePop 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: transform 0.18s, box-shadow 0.18s;
+  will-change: transform, box-shadow;
 }
 .stat-grid-5 > *:nth-child(1)  .stat-tile { animation-delay: 0.02s; }
 .stat-grid-5 > *:nth-child(2)  .stat-tile { animation-delay: 0.06s; }
@@ -188,9 +189,6 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
   transition: transform 0.10s ease, opacity 0.10s ease,
               background-color 0.15s ease, border-color 0.15s ease,
               color 0.15s ease, box-shadow 0.15s ease !important;
-}
-.ant-btn:not(:disabled):active {
-  transform: scale(0.97) !important;
 }
 
 /* ----- Tag enter animation — scoped to options editors ---------------- */
@@ -362,6 +360,8 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
   .ant-tag,
   .ant-form-item-explain-error,
   .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-input-affix-wrapper,
+  .ant-form-item-has-error .ant-input-number,
   .ant-form-item-has-error .ant-select-selector,
   .import-step-content {
     animation: none !important;

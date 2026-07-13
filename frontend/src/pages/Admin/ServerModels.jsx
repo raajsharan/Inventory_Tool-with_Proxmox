@@ -5,7 +5,7 @@ import {
   Row, Col, Table, Tag,
 } from 'antd';
 import {
-  ArrowLeftOutlined, ReloadOutlined, PlusOutlined,
+  ArrowLeftOutlined, ReloadOutlined, PlusOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined,
   HddOutlined, DatabaseOutlined,
 } from '@ant-design/icons';
@@ -16,9 +16,9 @@ const { Text, Title } = Typography;
 
 function StatCard({ icon, value, label, color = '#1677ff' }) {
   return (
-    <Card size="small" style={{ borderRadius: 8 }}>
+    <Card size="small" className="stat-tile" style={{ borderRadius: 8 }}>
       <Space size={16} align="center">
-        <div style={{
+        <div className="stat-tile-icon" style={{
           width: 44, height: 44, borderRadius: 8, background: `${color}15`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, color,
@@ -51,6 +51,7 @@ export default function ServerModels() {
   const [fModelName, setFModelName]       = useState('');
   const [fNotes, setFNotes]               = useState('');
   const [saving, setSaving]               = useState(false);
+  const [deletingId, setDeletingId]       = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -97,12 +98,15 @@ export default function ServerModels() {
   };
 
   const handleDelete = async (id) => {
+    setDeletingId(id);
     try {
       await api.delete(`/server-models/${id}`);
       message.success('Model deleted');
       await load();
     } catch (e) {
       message.error(e.response?.data?.error || 'Failed to delete');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -162,7 +166,7 @@ export default function ServerModels() {
             onConfirm={() => handleDelete(row.id)}
             okText="Delete" okButtonProps={{ danger: true }}
           >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />} loading={deletingId === row.id}>Delete</Button>
           </Popconfirm>
         </Space>
       ) : null,
@@ -302,7 +306,7 @@ export default function ServerModels() {
       {/* ── Search + table ── */}
       <Card style={{ borderRadius: 8 }}>
         <Input
-          prefix={<span style={{ color: '#bfbfbf' }}>&#128269;</span>}
+          prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
           placeholder="Search by manufacturer or model name..."
           value={search}
           onChange={e => setSearch(e.target.value)}
