@@ -38,5 +38,6 @@ router.use('/compliance-config',   authenticate, require('./complianceConfigRout
 router.use('/admin/migration-projects', authenticate, require('./migrationProjectRoutes'));
 router.use('/migration',                authenticate, requirePageAccess('migration_tracker'), require('./migrationRoutes'));
 router.use('/endpoint-central',         authenticate, requirePageAccess('endpoint_central'),   require('./endpointCentralRoutes'));
+router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
 
 module.exports = router;

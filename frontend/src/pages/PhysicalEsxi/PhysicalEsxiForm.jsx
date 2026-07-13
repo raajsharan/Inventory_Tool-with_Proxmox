@@ -35,6 +35,7 @@ export default function PhysicalEsxiForm({ mode }) {
 
   const [form] = Form.useForm();
   const [dd, setDd] = useState({});
+  const [serverModels, setServerModels] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [originalIp, setOriginalIp] = useState(null);
@@ -46,6 +47,7 @@ export default function PhysicalEsxiForm({ mode }) {
   // ── Load dropdowns + record (edit mode) ────────────────────────────────────
   useEffect(() => {
     api.get('/dropdowns').then(r => setDd(r.data.grouped || {}));
+    api.get('/server-models').then(r => setServerModels(r.data || [])).catch(() => {});
     api.get('/departments', { params: { activeOnly: 1 } })
       .then(r => setDepartments(r.data.items || []))
       .catch(() => {});
@@ -261,14 +263,18 @@ export default function PhysicalEsxiForm({ mode }) {
             {/* Server Model */}
             <Col xs={24} md={8}>
               <Form.Item name="serverModel" label="Server Model">
-                <Select allowClear showSearch optionFilterProp="label"
+                <Select
+                  allowClear showSearch optionFilterProp="label"
                   placeholder="Select model..."
-                  options={opts('server_model')}
+                  options={serverModels.map(m => ({
+                    label: m.manufacturer ? `${m.manufacturer} ${m.model_name}` : m.model_name,
+                    value: m.model_name,
+                  }))}
                 />
               </Form.Item>
               {isAdmin && (
                 <div style={{ marginTop: -18, marginBottom: 16 }}>
-                  <Link onClick={() => nav('/admin/dropdowns')}>Manage models →</Link>
+                  <Link onClick={() => nav('/admin/server-models')}>Manage models →</Link>
                 </div>
               )}
             </Col>

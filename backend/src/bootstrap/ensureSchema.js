@@ -414,6 +414,18 @@ const STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_migration_field_vals_record ON migration_field_values(record_type, record_id)`,
 
+  // ── Server Models catalogue (dedicated table for Physical Server registration)
+  `CREATE TABLE IF NOT EXISTS server_models (
+      id           SERIAL PRIMARY KEY,
+      manufacturer VARCHAR(255),
+      model_name   VARCHAR(255) NOT NULL,
+      notes        TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_server_models_manufacturer ON server_models(manufacturer)`,
+  `CREATE INDEX IF NOT EXISTS idx_server_models_name        ON server_models(model_name)`,
+
   // ── Physical Server dedicated fields (add_physical_server_fields.sql)
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_model   VARCHAR(255)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cpu_cores      INTEGER NOT NULL DEFAULT 0`,

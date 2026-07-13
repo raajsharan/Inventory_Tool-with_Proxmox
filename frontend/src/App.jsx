@@ -54,6 +54,7 @@ import TenableReport from './pages/TenableReport/index.jsx';
 import DbImport from './pages/Admin/DbImport.jsx';
 import MigrationTracker from './pages/MigrationTracker/index.jsx';
 import EndpointCentral from './pages/EndpointCentral/index.jsx';
+import ServerModels from './pages/Admin/ServerModels.jsx';
 
 export default function App() {
   return (
@@ -124,6 +125,7 @@ export default function App() {
         <Route path="/admin/roles" element={<Roles />} />
         <Route path="/admin/install-config"        element={<InstallConfig />} />
         <Route path="/admin/nessus-install-config" element={<NessusInstallConfig />} />
+        <Route path="/admin/server-models"         element={<ServerModels />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
