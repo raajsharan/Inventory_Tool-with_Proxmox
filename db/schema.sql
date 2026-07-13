@@ -277,6 +277,13 @@ CREATE TABLE IF NOT EXISTS physical_esxi_servers (
     manage_engine_installed  BOOLEAN NOT NULL DEFAULT FALSE,
     tenable_installed        BOOLEAN NOT NULL DEFAULT FALSE,
     idrac_enabled            BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Physical server hardware / rack fields
+    server_model             VARCHAR(255),
+    cpu_cores                INTEGER NOT NULL DEFAULT 0,
+    ram_gb                   INTEGER NOT NULL DEFAULT 0,
+    total_disks              INTEGER NOT NULL DEFAULT 0,
+    rack_number              VARCHAR(100),
+    server_position          VARCHAR(100),
     created_by               UUID REFERENCES users(id) ON DELETE SET NULL,
     updated_by               UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -286,6 +293,24 @@ CREATE INDEX IF NOT EXISTS idx_phx_vm_name    ON physical_esxi_servers(vm_name);
 CREATE INDEX IF NOT EXISTS idx_phx_ip         ON physical_esxi_servers(ip_address);
 CREATE INDEX IF NOT EXISTS idx_phx_asset_tag  ON physical_esxi_servers(asset_tag);
 CREATE INDEX IF NOT EXISTS idx_phx_department ON physical_esxi_servers(department);
+
+-- ---------------------------------------------------------------------
+-- server_models
+--   Catalogue of physical server hardware models. Referenced by
+--   physical_esxi_servers.server_model (stored as model_name string).
+--   Tracks manufacturer, model name, and optional notes; the service
+--   computes servers_using counts at query time via a LEFT JOIN.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS server_models (
+    id           SERIAL PRIMARY KEY,
+    manufacturer VARCHAR(255),
+    model_name   VARCHAR(255) NOT NULL,
+    notes        TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_server_models_manufacturer ON server_models(manufacturer);
+CREATE INDEX IF NOT EXISTS idx_server_models_name         ON server_models(model_name);
 
 -- ---------------------------------------------------------------------
 -- custom_pages
@@ -479,6 +504,14 @@ ALTER TABLE assets                 ADD COLUMN IF NOT EXISTS mac_address VARCHAR(
 ALTER TABLE beijing_assets         ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
 ALTER TABLE ext_assets             ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
 ALTER TABLE physical_esxi_servers  ADD COLUMN IF NOT EXISTS mac_address VARCHAR(255);
+
+-- Physical server hardware / rack fields (added with server_models feature)
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_model    VARCHAR(255);
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cpu_cores       INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS ram_gb          INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks     INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number     VARCHAR(100);
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100);
 
 -- ---------------------------------------------------------------------
 -- app_branding (singleton row id=1) and user profile fields.
