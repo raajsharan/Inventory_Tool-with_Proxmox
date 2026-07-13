@@ -11,7 +11,8 @@ const ASSET_COLUMNS = [
   'assigned_user','department','business_purpose','server_status','patching_type',
   'server_patch_type','patching_schedule','location','eol_status','serial_number',
   'ome_status','hosted_ip','asset_tag','asset_username','additional_remarks',
-  'mac_address','manage_engine_installed','tenable_installed','idrac_enabled','idrac_ip'
+  'mac_address','manage_engine_installed','tenable_installed','idrac_enabled','idrac_ip',
+  'server_model','cpu_cores','ram_gb','total_disks','rack_number','server_position',
 ];
 
 function mapBody(body) {

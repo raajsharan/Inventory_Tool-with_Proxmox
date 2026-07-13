@@ -413,6 +413,14 @@ const STATEMENTS = [
       UNIQUE(field_def_id, record_id)
    )`,
   `CREATE INDEX IF NOT EXISTS idx_migration_field_vals_record ON migration_field_values(record_type, record_id)`,
+
+  // ── Physical Server dedicated fields (add_physical_server_fields.sql)
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_model   VARCHAR(255)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cpu_cores      INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS ram_gb         INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks    INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number    VARCHAR(100)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100)`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get
