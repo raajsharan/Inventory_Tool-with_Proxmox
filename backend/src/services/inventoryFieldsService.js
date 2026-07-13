@@ -10,6 +10,8 @@ const DEFAULT_GROUPS = [
   'Credentials',
   'Tools',
   'iDRAC',
+  'Hardware',
+  'Rack',
 ];
 
 // Map fieldVisibilityService.PAGES section → display group.
@@ -45,6 +47,13 @@ const FIELD_GROUP_MAP = {
   serial_number:           'iDRAC',
   ome_status:              'iDRAC',
   idrac_ip:                'iDRAC',
+  // Physical Server dedicated fields
+  server_model:    'Hardware',
+  cpu_cores:       'Hardware',
+  ram_gb:          'Hardware',
+  total_disks:     'Hardware',
+  rack_number:     'Rack',
+  server_position: 'Rack',
 };
 
 // Default input types for each built-in field. DB-linked fields stay
@@ -78,6 +87,13 @@ const FIELD_DEFAULTS = {
   tenable_installed:       { label: 'Tenable Installed',       type: 'toggle' },
   idrac_enabled:           { label: 'iDRAC Enabled',           type: 'toggle' },
   idrac_ip:                { label: 'iDRAC IP Address',        type: 'text' },
+  // Physical Server dedicated fields
+  server_model:    { label: 'Server Model',       type: 'dropdown', linked_to_table: true, frozen: true, frozen_reason: 'Linked to dropdown_master (server_model)' },
+  cpu_cores:       { label: 'CPU Cores',          type: 'number' },
+  ram_gb:          { label: 'RAM (GB)',            type: 'number' },
+  total_disks:     { label: 'Total Disks',        type: 'number' },
+  rack_number:     { label: 'Rack Number',        type: 'text' },
+  server_position: { label: 'Server Position (U)', type: 'text' },
 };
 
 const PAGE_KEYS = new Set(['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers']);
