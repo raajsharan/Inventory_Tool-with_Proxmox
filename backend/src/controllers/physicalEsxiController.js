@@ -70,7 +70,7 @@ async function list(req, res, next) {
       osType: req.query.osType,
       serverStatus: req.query.serverStatus,
       location: req.query.location,
-      eolStatus: req.query.eolStatus,
+      serverModel: req.query.serverModel,
       page: Number(req.query.page) || 1,
       pageSize: Math.min(Number(req.query.pageSize) || 20, 200),
       sortBy: req.query.sortBy,
@@ -191,7 +191,7 @@ async function exportAssets(req, res, next) {
       osType: req.query.osType,
       serverStatus: req.query.serverStatus,
       location: req.query.location,
-      eolStatus: req.query.eolStatus,
+      serverModel: req.query.serverModel,
       page: 1, pageSize: 100000,
     });
     const wb = new ExcelJS.Workbook();
