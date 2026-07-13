@@ -95,19 +95,20 @@ function ConfigModal({ open, onClose, onSaved }) {
       setTestResult({ success: false, error: 'Enter Server URL and API Key first' });
       return;
     }
-    // Normalise api_path
     if (vals.api_path && !vals.api_path.startsWith('/')) vals.api_path = '/' + vals.api_path;
     setTesting(true);
     setTestResult(null);
     try {
-      // Save current settings first, then run test (backend reads from DB)
-      await api.put('/endpoint-central/config', vals);
+      // Clear api_path before testing so the backend tries ALL known paths
+      await api.put('/endpoint-central/config', { ...vals, api_path: '' });
       const r = await api.post('/endpoint-central/test');
-      // Auto-fill the working path + save it if auto-discovered
       if (r.data.success && r.data.working_path) {
+        // Auto-fill and persist the discovered path
         form.setFieldValue('api_path', r.data.working_path);
-        // Persist the discovered path so page load uses it directly
         await api.put('/endpoint-central/config', { ...vals, api_path: r.data.working_path });
+      } else {
+        // Restore original api_path after failed test
+        await api.put('/endpoint-central/config', vals);
       }
       setTestResult(r.data);
     } catch (e) {
@@ -196,7 +197,7 @@ function ConfigModal({ open, onClose, onSaved }) {
           description={
             !testResult.success && testResult.detail
               ? (
-                <pre style={{ fontSize: 11, marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 160, overflowY: 'auto' }}>
+                <pre style={{ fontSize: 11, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 220, overflowY: 'auto', background: 'transparent', padding: 0 }}>
                   {testResult.detail}
                 </pre>
               )

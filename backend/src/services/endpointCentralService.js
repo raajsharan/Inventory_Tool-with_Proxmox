@@ -3,14 +3,13 @@
  * --------------------------
  * Connects to ManageEngine Endpoint Central (formerly Desktop Central) REST API.
  *
- * Auth methods tried (in order):
- *   1. Query param:   ?apikey=<KEY>&customerid=<ID>           (older versions)
- *   2. Auth header:   Authorization: Authtoken <KEY>          (newer v11+ versions)
+ * Auth methods tried automatically:
+ *   1. Query param:  ?apikey=<KEY>&customerid=<ID>       (older versions)
+ *   2. Auth header:  Authorization: Authtoken <KEY>      (v11+ versions)
+ *   3. Header only:  Authorization: Authtoken <KEY>      (no customerid)
  *
- * API paths tried during auto-discovery (in order):
- *   /api/1.4/computers, /api/1.4/patch/allsystems,
- *   /api/1.4/inventory/computers, /dcapi/rd/computers,
- *   /api/1.4/patch/systems/allsystems
+ * Common IAM0027 cause: API key was generated without URL scope permissions.
+ * Fix in ME EC: Admin → API Explorer → (re)generate key → select modules.
  */
 
 const https = require('https');
@@ -18,15 +17,18 @@ const http  = require('http');
 const db    = require('../config/db');
 
 // ---------------------------------------------------------------------------
-// Known API paths to try during auto-discovery
+// Known API paths — tested across multiple ME EC versions
 // ---------------------------------------------------------------------------
 
 const KNOWN_PATHS = [
   '/api/1.4/computers',
   '/api/1.4/patch/allsystems',
   '/api/1.4/inventory/computers',
-  '/dcapi/rd/computers',
   '/api/1.4/patch/systems/allsystems',
+  '/dcapi/rd/computers',
+  '/api/1.3/computers',
+  '/api/1.4/computers/filter',
+  '/api/1.4/inventory/managedendpoints',
 ];
 
 // ---------------------------------------------------------------------------
@@ -45,8 +47,8 @@ function httpRequest(urlStr, options = {}) {
       path:     url.pathname + url.search,
       method:   options.method || 'GET',
       headers:  {
-        'Content-Type':  'application/json',
-        'Accept':        'application/json',
+        'Content-Type': 'application/json',
+        'Accept':       'application/json',
         ...(options.headers || {}),
       },
       ...(isHttps && !options.verifySsl ? { rejectUnauthorized: false } : {}),
@@ -59,7 +61,7 @@ function httpRequest(urlStr, options = {}) {
       res.on('end', () => resolve({ status: res.statusCode, body }));
     });
 
-    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('Connection timed out')); });
     req.on('error',   reject);
     req.end();
   });
@@ -117,17 +119,14 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
 // ---------------------------------------------------------------------------
 
 function extractComputers(json) {
-  // v10.x:           { data: { computers: [...] } }
-  // v11 patch API:   { data: { allsystemsdetail: [...] } }
-  // older DC:        { message_response: { computer: [...] } }
-  // some versions:   { computers: [...] } or { data: { computerdetails: [...] } }
   const candidates = [
     json?.data?.computers,
     json?.data?.allsystemsdetail,
     json?.data?.computerdetails,
+    json?.data?.systems,
+    json?.data?.managedendpoints,
     json?.message_response?.computer,
     json?.computers,
-    json?.data?.systems,
     json?.systems,
   ];
   for (const c of candidates) {
@@ -141,8 +140,6 @@ function extractComputers(json) {
 // ---------------------------------------------------------------------------
 
 function normalizeComputer(c) {
-  // agent_status: 0 = Online/Live, 1 = Offline/Dead (ME EC convention)
-  // managed_status: 0 = Not Managed, 1 = Managed
   return {
     resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? null,
     computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? c.COMPUTER_NAME  ?? '—',
@@ -152,73 +149,48 @@ function normalizeComputer(c) {
     os_platform:    c.osplatform     ?? c.OS_PLATFORM    ?? null,
     agent_version:  c.agentversion   ?? c.AGENT_VERSION  ?? c.agent_version ?? c.AGENTVERSION   ?? '—',
     managed_status: c.managed_status ?? c.MANAGED_STATUS ?? c.managedstatus ?? 1,
+    // agent_status: 0 = Online/Live, 1 = Offline/Dead
     agent_status:   c.agent_status   ?? c.AGENT_STATUS   ?? c.agentstatus   ?? 1,
     last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC       ?? null,
-    office:         c.resourceoffice ?? c.RESOURCE_OFFICE?? c.office        ?? '—',
+    office:         c.resourceoffice ?? c.RESOURCE_OFFICE ?? c.office       ?? '—',
     resource_type:  c.resourcetype   ?? c.RESOURCE_TYPE  ?? 0,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Authentication strategies
+// Authentication strategies to try per path
 // ---------------------------------------------------------------------------
 
-// Build the two auth strategies to try for a given path
-function authStrategies(serverUrl, path, apiKey, customerId) {
-  const base = serverUrl.replace(/\/$/, '');
+function authStrategies(base, path, apiKey, customerId) {
+  const cid = encodeURIComponent(customerId || '1');
+  const key = encodeURIComponent(apiKey);
   return [
     {
-      // Strategy 1: API key in query parameter (older/legacy)
-      label: 'query-param',
-      url:   `${base}${path}?apikey=${encodeURIComponent(apiKey)}&customerid=${encodeURIComponent(customerId || '1')}`,
+      label:   'query-param',
+      url:     `${base}${path}?apikey=${key}&customerid=${cid}`,
       headers: {},
     },
     {
-      // Strategy 2: API key in Authorization header (newer v11+)
-      label: 'auth-header',
-      url:   `${base}${path}?customerid=${encodeURIComponent(customerId || '1')}`,
+      label:   'auth-header',
+      url:     `${base}${path}?customerid=${cid}`,
       headers: { 'Authorization': `Authtoken ${apiKey}` },
     },
     {
-      // Strategy 3: Header auth without customerid (some single-tenant setups)
-      label: 'auth-header-no-cid',
-      url:   `${base}${path}`,
+      label:   'auth-header-no-cid',
+      url:     `${base}${path}`,
       headers: { 'Authorization': `Authtoken ${apiKey}` },
     },
   ];
 }
 
-// Try one path with all auth strategies. Returns { computers, path, authLabel } or null.
-async function tryPath(serverUrl, path, apiKey, customerId, verifySsl) {
-  for (const strat of authStrategies(serverUrl, path, apiKey, customerId)) {
-    try {
-      const { status, body } = await httpRequest(strat.url, {
-        verifySsl,
-        headers: strat.headers,
-        timeout: 10000,
-      });
-
-      if (status >= 200 && status < 300) {
-        let json;
-        try { json = JSON.parse(body); } catch { continue; }
-        const computers = extractComputers(json);
-        if (computers !== null) {
-          return { computers, path, authLabel: strat.label };
-        }
-        // 200 but unrecognised structure — keep trying other auth methods
-        continue;
-      }
-
-      // Hard auth failure — no point trying more auth methods for this path
-      if (status === 401 || status === 403) break;
-
-      // 404 or IAM error on this path — try next auth method (might be auth-related)
-      // unless it's a clear server error
-      if (status >= 500) break;
-
-    } catch { /* connection error — try next */ }
+// Parse the error detail out of an ME EC error JSON body
+function parseErrorBody(body) {
+  try {
+    const j = JSON.parse(body);
+    return { code: j.errorCode || j.error_code, msg: j.errorMsg || j.message || j.error || body.slice(0, 120) };
+  } catch {
+    return { code: null, msg: body.slice(0, 120) };
   }
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,19 +206,30 @@ async function fetchAgents() {
     throw err;
   }
 
+  const base  = config.server_url.replace(/\/$/, '');
   const paths = config.api_path ? [config.api_path] : KNOWN_PATHS;
 
   for (const path of paths) {
-    const result = await tryPath(
-      config.server_url, path, config.api_key, config.customer_id, config.verify_ssl
-    );
-    if (result) return result.computers.map(normalizeComputer);
+    for (const strat of authStrategies(base, path, config.api_key, config.customer_id)) {
+      try {
+        const { status, body } = await httpRequest(strat.url, {
+          verifySsl: config.verify_ssl,
+          headers:   strat.headers,
+        });
+        if (status >= 200 && status < 300) {
+          let json;
+          try { json = JSON.parse(body); } catch { continue; }
+          const computers = extractComputers(json);
+          if (computers !== null) return computers.map(normalizeComputer);
+        }
+        if (status === 401 || status === 403) break; // auth failure — skip other auth methods
+      } catch { /* connection error — try next */ }
+    }
   }
 
-  const tried = paths.join(', ');
   const err = new Error(
-    `Could not retrieve agents from Endpoint Central. Tried paths: ${tried}. ` +
-    'Check the Server URL, verify the API key is valid, or try clearing the API Path to auto-detect.'
+    'Could not retrieve agents from Endpoint Central. ' +
+    'Check the Server URL and API Key, or use Test Connection for a detailed diagnosis.'
   );
   err.status = 502;
   throw err;
@@ -259,12 +242,17 @@ async function testConnection() {
     return { success: false, error: 'Server URL and API Key are required' };
   }
 
-  const paths = config.api_path ? [config.api_path] : KNOWN_PATHS;
+  const base = config.server_url.replace(/\/$/, '');
+
+  // Always try ALL known paths during test, plus any custom configured path first
+  const customPath = config.api_path && !KNOWN_PATHS.includes(config.api_path) ? config.api_path : null;
+  const paths = customPath ? [customPath, ...KNOWN_PATHS] : KNOWN_PATHS;
+
   const tried = [];
+  let iamErrorCount = 0;
 
   for (const path of paths) {
-    // Try all auth strategies for this path so we can report the exact failure
-    for (const strat of authStrategies(config.server_url, path, config.api_key, config.customer_id)) {
+    for (const strat of authStrategies(base, path, config.api_key, config.customer_id)) {
       try {
         const { status, body } = await httpRequest(strat.url, {
           verifySsl: config.verify_ssl,
@@ -276,7 +264,7 @@ async function testConnection() {
           let json;
           try { json = JSON.parse(body); } catch {
             tried.push({ path, auth: strat.label, status, note: 'non-JSON response' });
-            break; // wrong path, try next
+            break;
           }
           const computers = extractComputers(json);
           if (computers !== null) {
@@ -291,30 +279,39 @@ async function testConnection() {
           continue;
         }
 
-        // Parse the error body for a useful message
-        let detail = `HTTP ${status}`;
-        try {
-          const j = JSON.parse(body);
-          detail = j.errorMsg || j.message || j.error || detail;
-        } catch { /* ignore */ }
-
-        tried.push({ path, auth: strat.label, status, note: detail });
+        const { code, msg } = parseErrorBody(body);
+        if (code === 'IAM0027') iamErrorCount++;
+        tried.push({ path, auth: strat.label, status, note: msg });
 
         if (status === 401 || status === 403) break; // wrong credentials — skip remaining auth methods
-
       } catch (e) {
         tried.push({ path, auth: strat.label, status: 0, note: e.message });
-        break; // connection error — skip remaining auth methods for this path
+        break; // connection error — skip remaining auth methods
       }
     }
   }
 
-  // Build a concise error summary
-  const summary = tried.map(t => `${t.path} [${t.auth}] → ${t.note}`).join('\n');
+  // Build diagnostic summary (group by path to keep it readable)
+  const byPath = {};
+  for (const t of tried) {
+    if (!byPath[t.path]) byPath[t.path] = [];
+    byPath[t.path].push(`[${t.auth}] HTTP ${t.status || 'ERR'}: ${t.note}`);
+  }
+  const detail = Object.entries(byPath)
+    .map(([path, results]) => `${path}\n  ${results.join('\n  ')}`)
+    .join('\n');
+
+  // Detect the IAM0027 / URL-not-allowed pattern and give specific guidance
+  const allIam = iamErrorCount > 0 && iamErrorCount >= tried.length * 0.6;
+  const guidance = allIam
+    ? '\n\n⚠ IAM0027 errors indicate your API key has no endpoint permissions.\n' +
+      'Fix in ME EC: Admin → API Explorer → generate/edit the API key → enable module access (Computers / Patch Management).'
+    : '';
+
   return {
     success: false,
-    error:   'Could not connect to Endpoint Central. Results per path:',
-    detail:  summary,
+    error:   'Could not connect to Endpoint Central:',
+    detail:  detail + guidance,
   };
 }
 
