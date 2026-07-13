@@ -166,7 +166,19 @@ function deepFindComputerArray(obj, depth) {
   return null;
 }
 
+// Returns null if the response is an ME EC error body (even when HTTP 200)
+function meErrorFromJson(json) {
+  if (!json || typeof json !== 'object') return null;
+  if (json.status === 'error' && json.error_code) {
+    return { code: json.error_code, msg: json.error_description || json.status };
+  }
+  return null;
+}
+
 function extractComputers(json) {
+  // Bail out early if ME EC returned an error body (HTTP 200 but auth failed)
+  if (meErrorFromJson(json)) return null;
+
   // 1. Try all known key paths first
   for (const path of EXTRACT_PATHS) {
     let val = json;
@@ -207,20 +219,29 @@ function authStrategies(base, path, apiKey, customerId) {
   const cid = encodeURIComponent(customerId || '1');
   const key = encodeURIComponent(apiKey);
   return [
+    // ME EC v11+ API key via Authorization header (most common for newer versions)
+    {
+      label:   'authtoken-header',
+      url:     `${base}${path}?customerid=${cid}`,
+      headers: { 'Authorization': `Authtoken ${apiKey}` },
+    },
+    // Bearer token (OAuth-style — some ME EC setups require this format)
+    {
+      label:   'bearer-header',
+      url:     `${base}${path}?customerid=${cid}`,
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    },
+    // Bearer without customerid
+    {
+      label:   'bearer-no-cid',
+      url:     `${base}${path}`,
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    },
+    // Legacy: API key as query parameter (older Desktop Central)
     {
       label:   'query-param',
       url:     `${base}${path}?apikey=${key}&customerid=${cid}`,
       headers: {},
-    },
-    {
-      label:   'auth-header',
-      url:     `${base}${path}?customerid=${cid}`,
-      headers: { 'Authorization': `Authtoken ${apiKey}` },
-    },
-    {
-      label:   'auth-header-no-cid',
-      url:     `${base}${path}`,
-      headers: { 'Authorization': `Authtoken ${apiKey}` },
     },
   ];
 }
@@ -308,6 +329,18 @@ async function testConnection() {
             tried.push({ path, auth: strat.label, status, note: 'non-JSON response' });
             break;
           }
+
+          // ME EC often returns HTTP 200 even for auth errors — check the body
+          const meErr = meErrorFromJson(json);
+          if (meErr) {
+            const hint = meErr.code === '10002'
+              ? `Token invalid/expired (${meErr.code}) — regenerate the API key in ME EC: Admin → API Explorer`
+              : `ME EC error ${meErr.code}: ${meErr.msg}`;
+            tried.push({ path, auth: strat.label, status, note: hint });
+            // Don't break — try the next auth method (Bearer might work where Authtoken doesn't)
+            continue;
+          }
+
           const computers = extractComputers(json);
           if (computers !== null) {
             return {
@@ -317,10 +350,10 @@ async function testConnection() {
               auth_method:  strat.label,
             };
           }
-          // Show the top-level keys + a short preview so we can identify the correct key
+          // Shape unrecognised — show top-level keys and preview for debugging
           const topKeys = Object.keys(json).join(', ');
           const preview = JSON.stringify(json).slice(0, 300);
-          tried.push({ path, auth: strat.label, status, note: `200 OK — unknown shape. Top keys: [${topKeys}]. Preview: ${preview}` });
+          tried.push({ path, auth: strat.label, status, note: `200 OK — unknown shape. Keys: [${topKeys}] — ${preview}` });
           continue;
         }
 
