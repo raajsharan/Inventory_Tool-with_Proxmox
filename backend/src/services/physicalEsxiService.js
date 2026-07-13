@@ -8,11 +8,13 @@ const TABLE = 'physical_esxi_servers';
 
 const ASSET_COLUMNS = [
   'vm_name','os_hostname','ip_address','asset_type','os_type','os_version',
-  'assigned_user','department','business_purpose','server_status','patching_type',
-  'server_patch_type','patching_schedule','location','eol_status','serial_number',
-  'ome_status','hosted_ip','asset_tag','asset_username','additional_remarks',
-  'mac_address','manage_engine_installed','tenable_installed','idrac_enabled','idrac_ip',
+  'assigned_user','department','business_purpose','server_status',
+  'location','serial_number','ome_status','hosted_ip','asset_tag',
+  'asset_username','additional_remarks','mac_address','idrac_enabled','idrac_ip',
   'server_model','cpu_cores','ram_gb','total_disks','rack_number','server_position',
+  // Intentionally excluded: manage_engine_installed, tenable_installed,
+  // eol_status, patching_type, server_patch_type, patching_schedule
+  // (columns dropped — not applicable to physical server registration).
 ];
 
 function mapBody(body) {

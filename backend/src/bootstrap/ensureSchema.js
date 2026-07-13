@@ -427,12 +427,20 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_server_models_name        ON server_models(model_name)`,
 
   // ── Physical Server dedicated fields (add_physical_server_fields.sql)
-  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_model   VARCHAR(255)`,
-  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cpu_cores      INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS ram_gb         INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks    INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number    VARCHAR(100)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_model    VARCHAR(255)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cpu_cores       INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS ram_gb          INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks     INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number     VARCHAR(100)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100)`,
+
+  // ── Remove fields not applicable to physical/ESXi servers
+  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed`,
+  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS tenable_installed`,
+  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS eol_status`,
+  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_type`,
+  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS server_patch_type`,
+  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_schedule`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get

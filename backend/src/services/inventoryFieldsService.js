@@ -98,6 +98,13 @@ const FIELD_DEFAULTS = {
 
 const PAGE_KEYS = new Set(['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers']);
 
+// Fields that exist in the global FIELD_DEFAULTS but have been dropped from
+// the physical_esxi_servers table — exclude them from its field editor.
+const PHYSICAL_ESXI_EXCLUDED = new Set([
+  'manage_engine_installed', 'tenable_installed',
+  'eol_status', 'patching_type', 'server_patch_type', 'patching_schedule',
+]);
+
 function slugifyKey(label) {
   return String(label || '')
     .toLowerCase().trim()
@@ -123,8 +130,10 @@ async function get(pageKey) {
   const overrideMap = {};
   for (const r of overrideRows) overrideMap[r.field_key] = r;
 
-  // Built-in fields (in registry order).
-  const builtIns = Object.keys(FIELD_DEFAULTS).map((key, idx) => {
+  // Built-in fields (in registry order), excluding columns that don't
+  // exist in this page's table (e.g. dropped physical_esxi_servers cols).
+  const excluded = pageKey === 'physical_esxi_servers' ? PHYSICAL_ESXI_EXCLUDED : new Set();
+  const builtIns = Object.keys(FIELD_DEFAULTS).filter(k => !excluded.has(k)).map((key, idx) => {
     const def = FIELD_DEFAULTS[key];
     const ov = overrideMap[key];
     return {

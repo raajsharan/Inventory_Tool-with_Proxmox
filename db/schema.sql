@@ -274,8 +274,6 @@ CREATE TABLE IF NOT EXISTS physical_esxi_servers (
     asset_username           VARCHAR(255),
     asset_password_encrypted TEXT,
     additional_remarks       TEXT,
-    manage_engine_installed  BOOLEAN NOT NULL DEFAULT FALSE,
-    tenable_installed        BOOLEAN NOT NULL DEFAULT FALSE,
     idrac_enabled            BOOLEAN NOT NULL DEFAULT FALSE,
     -- Physical server hardware / rack fields
     server_model             VARCHAR(255),
@@ -288,6 +286,9 @@ CREATE TABLE IF NOT EXISTS physical_esxi_servers (
     updated_by               UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    -- NOTE: manage_engine_installed, tenable_installed, eol_status,
+    --       patching_type, server_patch_type, patching_schedule are
+    --       intentionally omitted — not applicable to physical servers.
 );
 CREATE INDEX IF NOT EXISTS idx_phx_vm_name    ON physical_esxi_servers(vm_name);
 CREATE INDEX IF NOT EXISTS idx_phx_ip         ON physical_esxi_servers(ip_address);
@@ -416,9 +417,11 @@ CREATE TABLE IF NOT EXISTS page_field_visibility (
 
 -- ManageEngine + Tenable are not applicable on Physical & ESXi by default.
 -- Admins can re-enable individual fields via Administration → Field Customization.
+-- Fields that are either dropped or not applicable for physical servers
+-- are hidden in the inventory-fields editor so admins don't see them.
 INSERT INTO page_field_visibility (page_key, hidden)
-VALUES ('physical_esxi_servers', '["manage_engine_installed","tenable_installed"]'::jsonb)
-ON CONFLICT (page_key) DO NOTHING;
+VALUES ('physical_esxi_servers', '["manage_engine_installed","tenable_installed","eol_status","patching_type","server_patch_type","patching_schedule"]'::jsonb)
+ON CONFLICT (page_key) DO UPDATE SET hidden = EXCLUDED.hidden;
 
 -- ---------------------------------------------------------------------
 -- page_access
@@ -512,6 +515,15 @@ ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS ram_gb          INTEG
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks     INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number     VARCHAR(100);
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100);
+
+-- Remove fields not applicable to physical servers (patching / tools / EOL
+-- are handled at the VM / OS layer, not on bare-metal host registration).
+ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed;
+ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS tenable_installed;
+ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS eol_status;
+ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_type;
+ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS server_patch_type;
+ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_schedule;
 
 -- ---------------------------------------------------------------------
 -- app_branding (singleton row id=1) and user profile fields.
