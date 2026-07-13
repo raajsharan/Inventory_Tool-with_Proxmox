@@ -214,7 +214,7 @@ export default function ServerModels() {
               {editingId ? 'Edit Server Model' : '+ New Server Model'}
             </Text>
           </Space>
-          <Row gutter={12} align="bottom">
+          <Row gutter={[12, 12]}>
             <Col xs={24} md={7}>
               <div style={{ marginBottom: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>Manufacturer</Text>
@@ -251,7 +251,9 @@ export default function ServerModels() {
                 onPressEnter={handleSave}
               />
             </Col>
-            <Col xs={24} md={3}>
+          </Row>
+          <Row style={{ marginTop: 14 }}>
+            <Col>
               <Space>
                 <Button
                   type="primary"
@@ -260,7 +262,7 @@ export default function ServerModels() {
                   onClick={handleSave}
                   style={{ background: '#389e0d', borderColor: '#389e0d' }}
                 >
-                  {editingId ? 'Save' : 'Add Model'}
+                  {editingId ? 'Save Changes' : 'Add Model'}
                 </Button>
                 <Button icon={<CloseOutlined />} onClick={resetForm}>Cancel</Button>
               </Space>
