@@ -341,10 +341,11 @@ export default function EndpointCentral() {
   const [configOpen,      setConfigOpen]      = useState(false);
 
   // Software tab
-  const [software,    setSoftware]    = useState([]);
-  const [swLoading,   setSwLoading]   = useState(false);
-  const [swLoaded,    setSwLoaded]    = useState(false);
-  const [activeTab,   setActiveTab]   = useState('endpoints');
+  const [software,         setSoftware]         = useState([]);
+  const [swLoading,        setSwLoading]        = useState(false);
+  const [swLoaded,         setSwLoaded]         = useState(false);
+  const [swConnectionError,setSwConnectionError]= useState(null);
+  const [activeTab,        setActiveTab]        = useState('endpoints');
 
   // Endpoint filters
   const [search,       setSearch]       = useState('');
@@ -390,6 +391,7 @@ export default function EndpointCentral() {
 
   const loadSoftware = useCallback(async () => {
     setSwLoading(true);
+    setSwConnectionError(null);
     try {
       const r = await api.get('/endpoint-central/software');
       setSoftware(r.data.software || []);
@@ -397,9 +399,16 @@ export default function EndpointCentral() {
     } catch (e) {
       const status = e?.response?.status;
       const errMsg = e?.response?.data?.error || '';
-      if (status === 400 || status === 503) {
+      if (status === 400) {
         setSoftware([]);
         setSwLoaded(false);
+      } else if (status === 503) {
+        setSoftware([]);
+        setSwLoaded(false);
+        message.warning('Backend schema not ready — please restart the backend server');
+      } else if (status === 502) {
+        setSoftware([]);
+        setSwConnectionError(errMsg || 'Could not retrieve software list from Endpoint Central — check the API key');
       } else {
         message.error(errMsg || 'Failed to load software list');
       }
@@ -408,18 +417,21 @@ export default function EndpointCentral() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load software when user switches to that tab (lazy load)
+  // Load software when user switches to that tab (lazy load).
+  // Skip if agents already got a connection error — same server, same failure.
   const handleTabChange = (key) => {
     setActiveTab(key);
-    if (key === 'software' && !swLoaded && configured) {
+    if (key === 'software' && !swLoaded && configured && !connectionError) {
       loadSoftware();
     }
   };
 
-  // Reload both when config is saved
+  // Reload both when config is saved — clear all error states first
   const handleConfigSaved = () => {
+    setConnectionError(null);
+    setSwConnectionError(null);
+    setSwLoaded(false);
     load();
-    setSwLoaded(false); // force software reload next tab visit
     if (activeTab === 'software') loadSoftware();
   };
 
@@ -651,7 +663,27 @@ export default function EndpointCentral() {
       label: <span><AppstoreOutlined /> Software Inventory</span>,
       children: (
         <>
-          {configured && (
+          {/* Connection error — same root cause as agents tab (auth/network) */}
+          {configured && (connectionError || swConnectionError) && (
+            <Alert
+              type="error"
+              showIcon
+              message="Could not reach Endpoint Central"
+              description={
+                <span>
+                  {swConnectionError || connectionError}
+                  {isAdmin && (
+                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update credentials.</>
+                  )}
+                </span>
+              }
+              style={{ marginBottom: 16 }}
+              action={
+                <Button size="small" icon={<ReloadOutlined />} onClick={loadSoftware}>Retry</Button>
+              }
+            />
+          )}
+          {configured && !connectionError && !swConnectionError && (
             <>
               <SoftwareSummaryCards software={software} />
               <Card size="small" style={{ marginBottom: 12 }}>
