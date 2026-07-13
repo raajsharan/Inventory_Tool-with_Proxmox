@@ -279,16 +279,42 @@ function parseErrorBody(body) {
 
 // ---------------------------------------------------------------------------
 // Software inventory extraction
+// API: GET /api/1.4/inventory/software
+// Documented filter params: domainFilter, licensetypefilter, accesstypefilter,
+//   compliancestatusfilter
+// Documented response fields: sw_type, is_usage_prohibited, compliant_status
 // ---------------------------------------------------------------------------
 
+// Paths to try in order — primary + installedsoftware as fallback
+const SOFTWARE_PATHS = [
+  '/api/1.4/inventory/software',
+  '/api/1.4/inventory/installedsoftware',
+];
+
+// Known JSON key paths to check (tried before recursive fallback)
 const SOFTWARE_EXTRACT_PATHS = [
+  // Primary documented endpoint
   ['message_response', 'software'],
+  ['message_response', 'Software'],
+  ['message_response', 'SoftwareDetails'],
+  ['message_response', 'softwareDetails'],
+  ['message_response', 'software_list'],
   ['message_response', 'softwares'],
   ['message_response', 'softwarelist'],
+  // installedsoftware endpoint
+  ['message_response', 'installedsoftware'],
+  ['message_response', 'InstalledSoftware'],
+  ['message_response', 'installedSoftware'],
+  // data-wrapped variants
   ['data', 'software'],
+  ['data', 'Software'],
+  ['data', 'installedsoftware'],
   ['data', 'softwares'],
   ['data', 'softwarelist'],
+  // Top-level arrays
   ['software'],
+  ['Software'],
+  ['installedsoftware'],
   ['softwares'],
   ['softwarelist'],
 ];
@@ -296,10 +322,11 @@ const SOFTWARE_EXTRACT_PATHS = [
 function looksLikeSoftware(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
   const up = new Set(Object.keys(obj).map(k => k.toUpperCase()));
-  return up.has('SOFTWARE_NAME') || up.has('SW_NAME')   || up.has('SOFTWARENAME')
-      || up.has('SW_TYPE')       || up.has('SWTYPE')
-      || up.has('INSTALLED_COUNT') || up.has('INSTALLEDCOUNT')
-      || up.has('COMPLIANT_STATUS') || up.has('COMPLIANCE_STATUS');
+  return up.has('SOFTWARE_NAME') || up.has('SW_NAME')        || up.has('SOFTWARENAME')
+      || up.has('SW_TYPE')       || up.has('SWTYPE')         || up.has('SOFTWARE_TYPE')
+      || up.has('INSTALLED_COUNT')  || up.has('INSTALLEDCOUNT')
+      || up.has('COMPLIANT_STATUS') || up.has('COMPLIANCE_STATUS')
+      || up.has('IS_USAGE_PROHIBITED');
 }
 
 function deepFindSoftwareArray(obj, depth) {
@@ -317,9 +344,9 @@ function deepFindSoftwareArray(obj, depth) {
 
 function extractSoftware(json) {
   if (meErrorFromJson(json)) return null;
-  for (const path of SOFTWARE_EXTRACT_PATHS) {
+  for (const kpath of SOFTWARE_EXTRACT_PATHS) {
     let val = json;
-    for (const k of path) val = val?.[k];
+    for (const k of kpath) val = val?.[k];
     if (Array.isArray(val)) return val;
   }
   return deepFindSoftwareArray(json, 0);
@@ -327,24 +354,43 @@ function extractSoftware(json) {
 
 function normalizeSoftware(sw) {
   return {
-    software_id:         sw.software_id          ?? sw.SOFTWARE_ID          ?? sw.sw_id            ?? null,
-    software_name:       sw.software_name         ?? sw.SOFTWARE_NAME         ?? sw.sw_name          ?? sw.softwarename  ?? '—',
-    software_code:       sw.software_code         ?? sw.SOFTWARE_CODE         ?? sw.sw_code          ?? '',
-    version:             sw.version               ?? sw.VERSION               ?? sw.sw_version       ?? sw.software_version ?? '—',
-    manufacturer:        sw.manufacturer          ?? sw.MANUFACTURER          ?? sw.vendor           ?? sw.VENDOR          ?? '—',
-    // sw_type: 1=commercial, 2=non-commercial, 0=unidentified
-    sw_type:             sw.sw_type               ?? sw.SW_TYPE               ?? sw.software_type    ?? 0,
-    // is_usage_prohibited: 1=allowed, 2=prohibited, 0=not assigned
-    is_usage_prohibited: sw.is_usage_prohibited   ?? sw.IS_USAGE_PROHIBITED   ?? sw.accesstype       ?? 0,
-    // compliant_status: 0=under licensed, 1=over licensed, 2=in compliance, 3=expired, -1=not available
-    compliant_status:    sw.compliant_status      ?? sw.COMPLIANT_STATUS      ?? sw.compliance_status ?? -1,
-    installed_count:     sw.installed_count       ?? sw.INSTALLED_COUNT       ?? sw.installedcount   ?? 0,
-    licensed_count:      sw.licensed_count        ?? sw.LICENSED_COUNT        ?? sw.licensecount     ?? 0,
-    managed_count:       sw.managed_count         ?? sw.MANAGED_COUNT         ?? 0,
+    software_id:   sw.software_id    ?? sw.SOFTWARE_ID    ?? sw.sw_id           ?? null,
+    software_name: sw.software_name  ?? sw.SOFTWARE_NAME  ?? sw.sw_name         ?? sw.softwarename
+                ?? sw.SoftwareName   ?? sw.SOFTWARENAME   ?? '—',
+    software_code: sw.software_code  ?? sw.SOFTWARE_CODE  ?? sw.sw_code         ?? '',
+    version:       sw.version        ?? sw.VERSION        ?? sw.sw_version      ?? sw.software_version
+                ?? sw.SoftwareVersion ?? '—',
+    manufacturer:  sw.manufacturer   ?? sw.MANUFACTURER   ?? sw.vendor          ?? sw.VENDOR
+                ?? sw.Publisher      ?? sw.PUBLISHER      ?? '—',
+    // sw_type: 0=unidentified, 1=commercial, 2=non-commercial
+    sw_type:             sw.sw_type            ?? sw.SW_TYPE            ?? sw.software_type    ?? 0,
+    // is_usage_prohibited: 0=not assigned, 1=allowed, 2=prohibited
+    is_usage_prohibited: sw.is_usage_prohibited ?? sw.IS_USAGE_PROHIBITED ?? sw.accesstype      ?? 0,
+    // compliant_status: -1=not available, 0=under licensed, 1=over licensed, 2=in compliance, 3=expired
+    compliant_status:    sw.compliant_status   ?? sw.COMPLIANT_STATUS   ?? sw.compliance_status ?? -1,
+    installed_count:     sw.installed_count    ?? sw.INSTALLED_COUNT    ?? sw.installedcount    ?? 0,
+    licensed_count:      sw.licensed_count     ?? sw.LICENSED_COUNT     ?? sw.licensecount      ?? 0,
+    managed_count:       sw.managed_count      ?? sw.MANAGED_COUNT      ?? 0,
   };
 }
 
-async function fetchSoftware() {
+// Build a query string to append to a URL that already has '?...' params
+function appendFilterQs(url, filters = {}) {
+  const parts = [];
+  // Documented ME EC filter parameters for /api/1.4/inventory/software
+  if (filters.domainFilter != null && filters.domainFilter !== '')
+    parts.push(`domainFilter=${encodeURIComponent(filters.domainFilter)}`);
+  if (filters.licensetypefilter != null && filters.licensetypefilter !== '')
+    parts.push(`licensetypefilter=${encodeURIComponent(filters.licensetypefilter)}`);
+  if (filters.accesstypefilter != null && filters.accesstypefilter !== '')
+    parts.push(`accesstypefilter=${encodeURIComponent(filters.accesstypefilter)}`);
+  if (filters.compliancestatusfilter != null && filters.compliancestatusfilter !== '')
+    parts.push(`compliancestatusfilter=${encodeURIComponent(filters.compliancestatusfilter)}`);
+  if (!parts.length) return url;
+  return url + (url.includes('?') ? '&' : '?') + parts.join('&');
+}
+
+async function fetchSoftware(filters = {}) {
   const config = await getConfig();
 
   if (!config.server_url || !config.api_key) {
@@ -354,25 +400,27 @@ async function fetchSoftware() {
   }
 
   const base = config.server_url.replace(/\/$/, '');
-  const path = '/api/1.4/inventory/software';
 
-  for (const strat of authStrategies(base, path, config.api_key, config.customer_id)) {
-    try {
-      const { status, body } = await httpRequest(strat.url, {
-        verifySsl: config.verify_ssl,
-        headers:   strat.headers,
-        timeout:   20000, // software list can be large
-      });
-      if (status >= 200 && status < 300) {
-        let json;
-        try { json = JSON.parse(body); } catch { continue; }
-        const meErr = meErrorFromJson(json);
-        if (meErr) continue;
-        const software = extractSoftware(json);
-        if (software !== null) return software.map(normalizeSoftware);
-      }
-      if (status === 401 || status === 403) break;
-    } catch { /* try next */ }
+  for (const swPath of SOFTWARE_PATHS) {
+    for (const strat of authStrategies(base, swPath, config.api_key, config.customer_id)) {
+      try {
+        const url = appendFilterQs(strat.url, filters);
+        const { status, body } = await httpRequest(url, {
+          verifySsl: config.verify_ssl,
+          headers:   strat.headers,
+          timeout:   30000, // software list can be large
+        });
+        if (status >= 200 && status < 300) {
+          let json;
+          try { json = JSON.parse(body); } catch { continue; }
+          const meErr = meErrorFromJson(json);
+          if (meErr) continue;
+          const software = extractSoftware(json);
+          if (software !== null) return software.map(normalizeSoftware);
+        }
+        if (status === 401 || status === 403) break;
+      } catch { /* try next */ }
+    }
   }
 
   const err = new Error(

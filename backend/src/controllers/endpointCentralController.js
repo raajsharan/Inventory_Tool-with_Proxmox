@@ -41,7 +41,14 @@ async function listAgents(req, res, next) {
 
 async function listSoftware(req, res, next) {
   try {
-    const software = await svc.fetchSoftware();
+    // Forward documented ME EC filter params if provided by the client
+    const { domainFilter, licensetypefilter, accesstypefilter, compliancestatusfilter } = req.query;
+    const filters = {};
+    if (domainFilter)            filters.domainFilter            = domainFilter;
+    if (licensetypefilter        != null && licensetypefilter        !== '') filters.licensetypefilter        = licensetypefilter;
+    if (accesstypefilter         != null && accesstypefilter         !== '') filters.accesstypefilter         = accesstypefilter;
+    if (compliancestatusfilter   != null && compliancestatusfilter   !== '') filters.compliancestatusfilter   = compliancestatusfilter;
+    const software = await svc.fetchSoftware(filters);
     res.json({ software, total: software.length });
   } catch (e) { next(e); }
 }
