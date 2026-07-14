@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme } from 'antd';
+import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme, Popover, List } from 'antd';
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined,
   DatabaseOutlined, ClusterOutlined,
@@ -111,7 +111,28 @@ export default function MigrationOverview({ projectId }) {
               />
               <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {d.in_progress > 0 && (
-                  <Tag color="processing" icon={<SyncOutlined spin />}>{d.in_progress} In Progress</Tag>
+                  <Popover
+                    title={<span><SyncOutlined spin style={{ color: '#1677ff', marginRight: 6 }} />In Progress VMs</span>}
+                    content={
+                      <List
+                        size="small"
+                        dataSource={d.in_progress_vms || []}
+                        style={{ maxHeight: 260, overflowY: 'auto', minWidth: 200, maxWidth: 320 }}
+                        renderItem={vm => (
+                          <List.Item style={{ padding: '3px 0', fontSize: 12 }}>
+                            <Text ellipsis style={{ maxWidth: 300 }}>{vm}</Text>
+                          </List.Item>
+                        )}
+                      />
+                    }
+                    trigger="hover"
+                    placement="bottomLeft"
+                    getPopupContainer={() => document.body}
+                  >
+                    <Tag color="processing" icon={<SyncOutlined spin />} style={{ cursor: 'pointer' }}>
+                      {d.in_progress} In Progress
+                    </Tag>
+                  </Popover>
                 )}
                 {d.blocked > 0 && (
                   <Tag color="error">{d.blocked} Blocked</Tag>

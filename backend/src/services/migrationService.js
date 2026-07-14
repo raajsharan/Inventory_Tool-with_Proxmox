@@ -348,7 +348,8 @@ async function vmSummary(table, projectId = null) {
       COUNT(*) FILTER (WHERE migration_status = 'Blocked' AND cleared_at IS NULL)::int        AS blocked,
       COUNT(*) FILTER (WHERE LOWER(powerstate) != 'poweredon' AND cleared_at IS NULL)::int    AS powered_off,
       COALESCE(SUM(cpus) FILTER (WHERE cleared_at IS NULL),0)::int                            AS total_vcpus,
-      COALESCE(SUM(memory_mib) FILTER (WHERE cleared_at IS NULL),0)::bigint                   AS total_memory_mib
+      COALESCE(SUM(memory_mib) FILTER (WHERE cleared_at IS NULL),0)::bigint                   AS total_memory_mib,
+      COALESCE(ARRAY_AGG(vm ORDER BY vm) FILTER (WHERE migration_status = 'In Progress' AND cleared_at IS NULL), '{}') AS in_progress_vms
     FROM ${table} WHERE TRUE ${pidAnd}`, vals);
   return rows[0];
 }
