@@ -43,6 +43,7 @@ export default function FieldValueCell({ fieldDef, value, onSave, readOnly = fal
         style={{ minWidth: 120, maxWidth: 200 }}
         onChange={val => onSave(val ?? null)}
         options={opts.map(o => ({ value: o, label: o }))}
+        getPopupContainer={() => document.body}
       />
     );
   }

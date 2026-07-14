@@ -16,17 +16,14 @@ const { Text } = Typography;
 const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Completed', 'Blocked'];
 
 function StatusSelect({ value, onChange }) {
-  const ref = useRef(null);
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <Select
-        size="small" value={value || 'Not Started'} onChange={onChange}
-        style={{ width: 130 }}
-        options={STATUS_OPTIONS.map(v => ({ value: v, label: v }))}
-        labelRender={({ label }) => <span>{label}</span>}
-        getPopupContainer={() => ref.current || document.body}
-      />
-    </div>
+    <Select
+      size="small" value={value || 'Not Started'} onChange={onChange}
+      style={{ width: 130 }}
+      options={STATUS_OPTIONS.map(v => ({ value: v, label: v }))}
+      labelRender={({ label }) => <span>{label}</span>}
+      getPopupContainer={() => document.body}
+    />
   );
 }
 
