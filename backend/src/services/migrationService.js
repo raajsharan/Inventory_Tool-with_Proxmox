@@ -378,6 +378,18 @@ const patchBomgarVM     = (id, f) => patchVM('migration_bomgar_vms',     id, f);
 const patchSecurityVM   = (id, f) => patchVM('migration_security_vms',   id, f);
 const patchStandaloneVM = (id, f) => patchVM('migration_standalone_esxi', id, f);
 
+// ── DELETE SINGLE RECORD ─────────────────────────────────────────────────────
+async function deleteRecord(table, id) {
+  const { rowCount } = await db.query(`DELETE FROM ${table} WHERE id = $1`, [parseInt(id, 10)]);
+  return rowCount > 0;
+}
+
+const deleteBomgarVM     = (id) => deleteRecord('migration_bomgar_vms',      id);
+const deleteSecurityVM   = (id) => deleteRecord('migration_security_vms',    id);
+const deleteStandaloneVM = (id) => deleteRecord('migration_standalone_esxi', id);
+const deleteHostRecord   = (id) => deleteRecord('migration_hosts',           id);
+const deleteCustomVMRecord = (id) => deleteRecord('migration_custom_vms',   id);
+
 // ── OVERVIEW ─────────────────────────────────────────────────────────────────
 async function overview(projectId = null) {
   const [hosts, bomgar, security, standalone] = await Promise.all([
@@ -1084,10 +1096,11 @@ module.exports = {
   listCustomVMs, patchCustomVM, customVMSummary, customFilterOptions,
   getFieldDefs, createFieldDef, updateFieldDef, deleteFieldDef,
   getFieldValues, setFieldValue,
-  listHosts, getHostCredentials, hostsSummary, patchHost,
-  listBomgarVMs, bomgarSummary, patchBomgarVM,
-  listSecurityVMs, securitySummary, patchSecurityVM,
-  listStandaloneVMs, standaloneSummary, patchStandaloneVM,
+  listHosts, getHostCredentials, hostsSummary, patchHost, deleteHostRecord,
+  listBomgarVMs, bomgarSummary, patchBomgarVM, deleteBomgarVM,
+  listSecurityVMs, securitySummary, patchSecurityVM, deleteSecurityVM,
+  listStandaloneVMs, standaloneSummary, patchStandaloneVM, deleteStandaloneVM,
+  deleteCustomVMRecord,
   overview,
   previewImport, confirmImport, exportCSV,
   filterOptions,

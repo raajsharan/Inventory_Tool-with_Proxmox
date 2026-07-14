@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Table, Button, Select, Typography, Space, message } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { Table, Button, Select, Typography, Space, message, Popconfirm } from 'antd';
+import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
@@ -50,6 +50,13 @@ export default function SecurityVMsTab({ projectId, hiddenColumns = [] }) {
       await api.patch(`/migration/security-vms/${id}`, fields);
       reload();
     } catch { message.error('Update failed'); }
+  };
+
+  const remove = async (id) => {
+    try {
+      await api.delete(`/migration/security-vms/${id}`);
+      reload();
+    } catch { message.error('Delete failed'); }
   };
 
   const FILTER_DEFS = [
@@ -121,7 +128,21 @@ export default function SecurityVMsTab({ projectId, hiddenColumns = [] }) {
     ),
   }));
 
-  const columns = [...baseColumns, ...customFieldCols];
+  const actionCol = canEdit ? [{
+    title: '', key: 'actions', width: 52, fixed: 'right',
+    render: (_, r) => (
+      <Popconfirm
+        title="Remove this VM?"
+        description="This will permanently delete the record."
+        onConfirm={() => remove(r.id)}
+        okText="Delete" okButtonProps={{ danger: true }} cancelText="Cancel"
+      >
+        <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+      </Popconfirm>
+    ),
+  }] : [];
+
+  const columns = [...baseColumns, ...customFieldCols, ...actionCol];
 
   const summaryCards = summary ? [
     { label: 'Total VMs',    value: summary.total },

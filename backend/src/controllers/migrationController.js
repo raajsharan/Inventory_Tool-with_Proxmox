@@ -154,6 +154,47 @@ async function patchStandalone(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── DELETE SINGLE RECORD ──────────────────────────────────────────────────────
+async function deleteBomgar(req, res, next) {
+  try {
+    const ok = await svc.deleteBomgarVM(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Record not found' });
+    res.status(204).end();
+  } catch (e) { next(e); }
+}
+
+async function deleteSecurity(req, res, next) {
+  try {
+    const ok = await svc.deleteSecurityVM(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Record not found' });
+    res.status(204).end();
+  } catch (e) { next(e); }
+}
+
+async function deleteStandalone(req, res, next) {
+  try {
+    const ok = await svc.deleteStandaloneVM(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Record not found' });
+    res.status(204).end();
+  } catch (e) { next(e); }
+}
+
+async function deleteHost(req, res, next) {
+  try {
+    const ok = await svc.deleteHostRecord(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Record not found' });
+    res.status(204).end();
+  } catch (e) { next(e); }
+}
+
+async function deleteCustomVM(req, res, next) {
+  try {
+    const ok = await svc.deleteCustomVMRecord(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Record not found' });
+    res.status(204).end();
+  } catch (e) { next(e); }
+}
+
 // ── FILTER OPTIONS ────────────────────────────────────────────────────────────
 async function filterOptions(req, res, next) {
   try { res.json(await svc.filterOptions(req.params.type, req.query.project_id)); } catch (e) { next(e); }
@@ -338,11 +379,11 @@ module.exports = {
   listProjects, getTabConfig, listCustomTabs,
   getFieldDefs, getFieldValues, setFieldValue,
   overview,
-  listHosts, hostsSummary, getHostCredentials, patchHost,
-  listBomgar, bomgarSummary, patchBomgar,
-  listSecurity, securitySummary, patchSecurity,
-  listStandalone, standaloneSummary, patchStandalone,
-  listCustomVMs, customVMSummary, patchCustomVM, customFilterOptions,
+  listHosts, hostsSummary, getHostCredentials, patchHost, deleteHost,
+  listBomgar, bomgarSummary, patchBomgar, deleteBomgar,
+  listSecurity, securitySummary, patchSecurity, deleteSecurity,
+  listStandalone, standaloneSummary, patchStandalone, deleteStandalone,
+  listCustomVMs, customVMSummary, patchCustomVM, customFilterOptions, deleteCustomVM,
   filterOptions, csvExport,
   downloadTemplate,
   importPreview, importConfirm,
