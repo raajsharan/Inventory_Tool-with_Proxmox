@@ -13,7 +13,10 @@ import { useCustomFields } from './useCustomFields.js';
 import FieldValueCell    from './FieldValueCell.jsx';
 
 const { Text } = Typography;
-const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Completed', 'Deleted'];
+const STATUS_OPTIONS = [
+  'Not Started', 'Awaiting confirmation', 'In Progress',
+  'Completed', 'Cleaned up', 'To be Deleted', 'Deleted',
+];
 
 function StatusSelect({ value, onChange }) {
   return (

@@ -93,9 +93,10 @@ async function saveConfig(fields) {
 
 function colorForStatus(status) {
   const s = String(status || '').toLowerCase();
-  if (s === 'completed' || s === 'migrated') return 'Good';
-  if (s === 'blocked'   || s.includes('decom'))   return 'Attention';
+  if (s === 'completed' || s === 'cleaned up' || s === 'migrated') return 'Good';
+  if (s === 'blocked' || s === 'to be deleted' || s.includes('decom')) return 'Attention';
   if (s === 'in progress') return 'Accent';
+  if (s === 'awaiting confirmation') return 'Warning';
   return 'Default';
 }
 

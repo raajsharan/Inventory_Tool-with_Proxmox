@@ -9,17 +9,23 @@ const db       = require('../config/db');
 const { encrypt, decrypt } = require('../utils/crypto');
 const ExcelJS  = require('exceljs');
 
-const VALID_MIGRATION_STATUSES = ['Not Started', 'In Progress', 'Completed', 'Blocked'];
+const VALID_MIGRATION_STATUSES = [
+  'Not Started', 'Awaiting confirmation', 'In Progress',
+  'Completed', 'Cleaned up', 'To be Deleted', 'Blocked', 'Deleted',
+];
 const VALID_STAGE_STATUSES     = ['Pending', 'In Progress', 'Completed'];
 
 function normaliseMigrationStatus(raw) {
   if (!raw || !raw.toString().trim()) return 'Not Started';
   const v = raw.toString().trim();
-  if (/^complet/i.test(v)) return 'Completed';
-  if (/^in.?prog/i.test(v)) return 'In Progress';
-  if (/^block/i.test(v))   return 'Blocked';
-  if (/^delet/i.test(v))   return 'Not Started'; // imported "Deleted" rows start fresh
-  if (/^pend/i.test(v))    return 'Pending';
+  if (/^complet/i.test(v))            return 'Completed';
+  if (/^clean/i.test(v))             return 'Cleaned up';
+  if (/^in.?prog/i.test(v))          return 'In Progress';
+  if (/^await/i.test(v))             return 'Awaiting confirmation';
+  if (/^to.?be.?del/i.test(v))       return 'To be Deleted';
+  if (/^block/i.test(v))             return 'Blocked';
+  if (/^delet/i.test(v))             return 'Not Started'; // imported "Deleted" rows start fresh
+  if (/^pend/i.test(v))              return 'Pending';
   return VALID_MIGRATION_STATUSES.includes(v) ? v : 'Not Started';
 }
 

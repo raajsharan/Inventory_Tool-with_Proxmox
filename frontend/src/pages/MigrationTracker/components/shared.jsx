@@ -14,12 +14,15 @@ const { Text } = Typography;
 
 // ── MIGRATION STATUS ──────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  'Completed':   { color: 'success',   icon: <CheckCircleOutlined /> },
-  'In Progress': { color: 'processing', icon: <SyncOutlined spin />  },
-  'Not Started': { color: 'default',   icon: <ClockCircleOutlined /> },
-  'Blocked':     { color: 'error',     icon: <StopOutlined />        },
-  'Deleted':     { color: 'default',   icon: <DeleteOutlined />      },
-  'Pending':     { color: 'default',   icon: <ClockCircleOutlined /> },
+  'Completed':             { color: 'success',    icon: <CheckCircleOutlined /> },
+  'Cleaned up':            { color: 'cyan',       icon: <CheckCircleOutlined /> },
+  'In Progress':           { color: 'processing', icon: <SyncOutlined spin />   },
+  'Awaiting confirmation': { color: 'warning',    icon: <ClockCircleOutlined /> },
+  'Not Started':           { color: 'default',    icon: <ClockCircleOutlined /> },
+  'Blocked':               { color: 'error',      icon: <StopOutlined />        },
+  'To be Deleted':         { color: 'orange',     icon: <DeleteOutlined />      },
+  'Deleted':               { color: 'default',    icon: <DeleteOutlined />      },
+  'Pending':               { color: 'default',    icon: <ClockCircleOutlined /> },
 };
 
 export function MigrationStatusBadge({ status }) {
