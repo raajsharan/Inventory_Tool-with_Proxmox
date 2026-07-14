@@ -6,7 +6,8 @@
  * decommission_log — the permanent report of who decommissioned what, when,
  * from where, and why. Reactivation clears the stamp and closes the log row.
  */
-const db = require('../config/db');
+const db    = require('../config/db');
+const teams = require('./teamsNotificationService');
 
 const isDecomStatus = (s) => /^decom/i.test(String(s || '').trim());
 
@@ -29,10 +30,11 @@ async function logDecommission(source, row, userId, reason) {
      row.serial_number, row.os_type, row.location, row.hosted_ip,
      reason || null, userId || null, name],
   );
+  teams.notifyDecommission(source, row, reason).catch(() => {});
 }
 
 // Close the newest open log row for this asset (reactivation).
-async function logReactivation(source, assetId, userId) {
+async function logReactivation(source, assetId, userId, assetName) {
   const name = await userName(userId);
   await db.query(
     `UPDATE decommission_log
@@ -44,6 +46,7 @@ async function logReactivation(source, assetId, userId) {
       )`,
     [source, assetId, userId || null, name],
   );
+  teams.notifyReactivation(source, assetId, assetName).catch(() => {});
 }
 
 module.exports = { isDecomStatus, logDecommission, logReactivation };

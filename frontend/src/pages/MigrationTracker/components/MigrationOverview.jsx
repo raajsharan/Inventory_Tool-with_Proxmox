@@ -65,7 +65,7 @@ export default function MigrationOverview({ projectId }) {
           { title: 'Total Hosts',         value: hosts.total_hosts,          icon: <DatabaseOutlined />,     color: undefined },
           { title: 'Fully Migrated',       value: hosts.fully_migrated,       icon: <CheckCircleOutlined />,  color: '#52c41a' },
           { title: 'Pending Vacate',       value: hosts.pending_vacate,       icon: <ClockCircleOutlined />,  color: '#fa8c16' },
-          { title: 'VMs to Migrate',       value: hosts.total_vms_to_migrate, icon: <ClusterOutlined />,      color: undefined },
+          { title: 'VMs to Migrate',       value: totalVMs,                   icon: <ClusterOutlined />,      color: undefined },
         ].map(s => (
           <Col key={s.title} xs={12} sm={6}>
             <Card size="small">

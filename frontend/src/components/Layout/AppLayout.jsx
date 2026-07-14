@@ -12,7 +12,7 @@ import {
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
-  ProjectOutlined,
+  ProjectOutlined, NotificationOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -159,6 +159,7 @@ export default function AppLayout() {
       can('admin/data-health')      && { key: '/admin/data-health',       icon: <HeartOutlined />,             label: <Link to="/admin/data-health">Data Health</Link> },
       can('admin/compliance-config')  && { key: '/admin/compliance-config',  icon: <ControlOutlined />,         label: <Link to="/admin/compliance-config">Compliance Config</Link> },
       can('admin/migration-config')   && { key: '/admin/migration-config',   icon: <ProjectOutlined />,          label: <Link to="/admin/migration-config">Migration Config</Link> },
+      can('admin/teams-notifications') && { key: '/admin/teams-notifications', icon: <NotificationOutlined />,    label: <Link to="/admin/teams-notifications">Teams Notifications</Link> },
       can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
       can('admin/imports')          && { key: '/admin/db-import',         icon: <DatabaseOutlined />,          label: <Link to="/admin/db-import">DB Import</Link> },
       can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },

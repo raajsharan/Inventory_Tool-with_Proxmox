@@ -1,6 +1,7 @@
 const multer  = require('multer');
 const ExcelJS = require('exceljs');
 const svc     = require('../services/migrationService');
+const teams   = require('../services/teamsNotificationService');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -48,6 +49,9 @@ async function patchCustomVM(req, res, next) {
   try {
     const row = await svc.patchCustomVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'VM not found' });
+    if (req.body.migration_status) {
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Custom VMs', req.body.migration_status).catch(() => {});
+    }
     res.json(row);
   } catch (e) { next(e); }
 }
@@ -83,6 +87,10 @@ async function patchHost(req, res, next) {
   try {
     const row = await svc.patchHost(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Host not found or no valid fields provided' });
+    if (req.body.migration_status || req.body.vms_vacate || req.body.proxmox_install || req.body.vm_migration_back) {
+      const status = req.body.migration_status || req.body.vms_vacate || req.body.proxmox_install || req.body.vm_migration_back;
+      teams.notifyMigrationStatus(row.host || `Host #${row.id}`, 'Hosts', status).catch(() => {});
+    }
     res.json({ ok: true });
   } catch (e) { next(e); }
 }
@@ -98,6 +106,9 @@ async function patchBomgar(req, res, next) {
   try {
     const row = await svc.patchBomgarVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Record not found' });
+    if (req.body.migration_status) {
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Bomgar VMs', req.body.migration_status).catch(() => {});
+    }
     res.json({ ok: true });
   } catch (e) { next(e); }
 }
@@ -113,6 +124,9 @@ async function patchSecurity(req, res, next) {
   try {
     const row = await svc.patchSecurityVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Record not found' });
+    if (req.body.migration_status) {
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Security VMs', req.body.migration_status).catch(() => {});
+    }
     res.json({ ok: true });
   } catch (e) { next(e); }
 }
@@ -128,6 +142,9 @@ async function patchStandalone(req, res, next) {
   try {
     const row = await svc.patchStandaloneVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Record not found' });
+    if (req.body.migration_status) {
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Standalone ESXi', req.body.migration_status).catch(() => {});
+    }
     res.json({ ok: true });
   } catch (e) { next(e); }
 }

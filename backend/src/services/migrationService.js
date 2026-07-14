@@ -302,7 +302,7 @@ async function patchHost(id, fields) {
   if (!sets.length) return null;
   sets.push(`updated_at = NOW()`);
   vals.push(id);
-  const { rows } = await db.query(`UPDATE migration_hosts SET ${sets.join(', ')} WHERE id = $${i} RETURNING id`, vals);
+  const { rows } = await db.query(`UPDATE migration_hosts SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, host`, vals);
   return rows[0] || null;
 }
 
@@ -357,7 +357,7 @@ async function patchVM(table, id, fields) {
   if (!sets.length) return null;
   sets.push(`updated_at = NOW()`);
   vals.push(id);
-  const { rows } = await db.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = $${i} RETURNING id`, vals);
+  const { rows } = await db.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, vm`, vals);
   return rows[0] || null;
 }
 

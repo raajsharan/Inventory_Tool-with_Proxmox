@@ -1,8 +1,9 @@
 const ExcelJS = require('exceljs');
 const db = require('../config/db');
-const svc = require('../services/physicalEsxiService');
+const svc     = require('../services/physicalEsxiService');
 const deptSvc = require('../services/departmentService');
-const audit = require('../services/auditService');
+const audit   = require('../services/auditService');
+const teams   = require('../services/teamsNotificationService');
 
 const ENTITY = 'physical_esxi_server';
 const SHEET_NAME = 'Physical & ESXi Servers';
@@ -88,6 +89,7 @@ async function create(req, res, next) {
   try {
     const asset = await svc.create(req.body, req.user.id);
     await audit.log({ user: req.user, action: 'CREATE', entityType: ENTITY, entityId: asset.id, details: { vm_name: asset.vm_name }, ipAddress: req.ip });
+    teams.notifyNewAsset(asset, 'physical_esxi_servers').catch(() => {});
     res.status(201).json(asset);
   } catch (e) { next(e); }
 }
@@ -96,6 +98,7 @@ async function update(req, res, next) {
   try {
     const asset = await svc.update(req.params.id, req.body, req.user.id);
     await audit.log({ user: req.user, action: 'UPDATE', entityType: ENTITY, entityId: asset.id, details: { vm_name: asset.vm_name }, ipAddress: req.ip });
+    teams.notifyAssetUpdate(asset, 'physical_esxi_servers').catch(() => {});
     res.json(asset);
   } catch (e) { next(e); }
 }

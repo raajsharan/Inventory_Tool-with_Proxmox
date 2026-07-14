@@ -55,6 +55,7 @@ import DbImport from './pages/Admin/DbImport.jsx';
 import MigrationTracker from './pages/MigrationTracker/index.jsx';
 import EndpointCentral from './pages/EndpointCentral/index.jsx';
 import ServerModels from './pages/Admin/ServerModels.jsx';
+import TeamsNotifications from './pages/Admin/TeamsNotifications.jsx';
 
 export default function App() {
   return (
@@ -118,7 +119,8 @@ export default function App() {
         <Route path="/admin/recycle-bin" element={<RecycleBin />} />
         <Route path="/admin/data-health" element={<DataHealth />} />
         <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
-        <Route path="/admin/migration-config"   element={<MigrationConfig />} />
+        <Route path="/admin/migration-config"         element={<MigrationConfig />} />
+        <Route path="/admin/teams-notifications"      element={<TeamsNotifications />} />
         <Route path="/decommissioned" element={<Decommissioned />} />
         <Route path="/admin/nav-order" element={<NavOrder />} />
         <Route path="/admin/user-page-control" element={<UserPageControl />} />

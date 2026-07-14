@@ -445,6 +445,19 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_type`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS server_patch_type`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_schedule`,
+
+  // ── Microsoft Teams notification config (single-row, singleton guard) ─────────
+  `CREATE TABLE IF NOT EXISTS teams_notification_config (
+      id                      SERIAL PRIMARY KEY,
+      singleton               BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
+      webhook_url             TEXT    NOT NULL DEFAULT '',
+      enabled                 BOOLEAN NOT NULL DEFAULT FALSE,
+      notify_new_asset        BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_asset_update     BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_decommission     BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_migration_status BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get
