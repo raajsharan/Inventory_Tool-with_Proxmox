@@ -447,6 +447,13 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_schedule`,
 
   // ── Microsoft Teams notification config (single-row, singleton guard) ─────────
+  // ── soft-delete (cleared before migration) column on all migration VM/host tables
+  `ALTER TABLE migration_bomgar_vms      ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+  `ALTER TABLE migration_security_vms    ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+  `ALTER TABLE migration_standalone_esxi ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+  `ALTER TABLE migration_hosts           ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+  `ALTER TABLE migration_custom_vms      ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+
   `CREATE TABLE IF NOT EXISTS teams_notification_config (
       id                      SERIAL PRIMARY KEY,
       singleton               BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,

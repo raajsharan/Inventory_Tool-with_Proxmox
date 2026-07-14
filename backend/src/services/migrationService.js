@@ -236,7 +236,7 @@ async function listHosts(params) {
   const offset   = (page - 1) * pageSize;
   const { where, values, nextIdx } = buildWhereClause(params, HOST_SEARCH_COLS);
 
-  const countQ = await db.query(`SELECT COUNT(*)::int AS total FROM migration_hosts WHERE ${where}`, values);
+  const countQ = await db.query(`SELECT COUNT(*)::int AS total FROM migration_hosts WHERE ${where} AND cleared_at IS NULL`, values);
   const total  = countQ.rows[0]?.total ?? 0;
 
   const dataQ = await db.query(
@@ -245,7 +245,7 @@ async function listHosts(params) {
             min_cores, license_expiry_date, assigned_to, vms_to_migrate,
             powered_off_vms, host_owner, vms_vacate, proxmox_install,
             vm_migration_back, notes, project_id, created_at, updated_at
-       FROM migration_hosts WHERE ${where}
+       FROM migration_hosts WHERE ${where} AND cleared_at IS NULL
       ORDER BY datacenter NULLS LAST, host
       LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
     [...values, pageSize, offset]);
@@ -270,12 +270,14 @@ async function hostsSummary(projectId = null) {
   const { rows } = await db.query(`
     SELECT
       COUNT(*)::int                                                                AS total_hosts,
-      COUNT(*) FILTER (WHERE vms_vacate='Completed'
+      COUNT(*) FILTER (WHERE (vms_vacate='Completed'
                          AND proxmox_install='Completed'
-                         AND vm_migration_back='Completed')::int                  AS fully_migrated,
-      COUNT(*) FILTER (WHERE vms_vacate != 'Completed')::int                     AS pending_vacate,
-      COALESCE(SUM(vms_to_migrate),0)::int                                        AS total_vms_to_migrate,
-      COALESCE(SUM(powered_off_vms),0)::int                                       AS total_powered_off
+                         AND vm_migration_back='Completed')
+                          OR cleared_at IS NOT NULL)::int                         AS fully_migrated,
+      COUNT(*) FILTER (WHERE vms_vacate != 'Completed'
+                         AND cleared_at IS NULL)::int                             AS pending_vacate,
+      COALESCE(SUM(vms_to_migrate) FILTER (WHERE cleared_at IS NULL),0)::int     AS total_vms_to_migrate,
+      COALESCE(SUM(powered_off_vms) FILTER (WHERE cleared_at IS NULL),0)::int    AS total_powered_off
     FROM migration_hosts WHERE TRUE ${pidAnd}`, vals);
 
   const byDc = await db.query(`
@@ -313,12 +315,12 @@ async function listVMs(table, searchCols, params) {
   const offset   = (page - 1) * pageSize;
   const { where, values, nextIdx } = buildWhereClause(params, searchCols);
 
-  const countQ = await db.query(`SELECT COUNT(*)::int AS total FROM ${table} WHERE ${where}`, values);
+  const countQ = await db.query(`SELECT COUNT(*)::int AS total FROM ${table} WHERE ${where} AND cleared_at IS NULL`, values);
   const total  = countQ.rows[0]?.total ?? 0;
 
   const dataQ = await db.query(
     `SELECT * FROM ${table}
-      WHERE ${where}
+      WHERE ${where} AND cleared_at IS NULL
       ORDER BY CASE migration_status WHEN 'Completed' THEN 1 ELSE 0 END, vm
       LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
     [...values, pageSize, offset]);
@@ -332,14 +334,14 @@ async function vmSummary(table, projectId = null) {
 
   const { rows } = await db.query(`
     SELECT
-      COUNT(*)::int                                                           AS total,
-      COUNT(*) FILTER (WHERE migration_status = 'Completed')::int           AS migrated,
-      COUNT(*) FILTER (WHERE migration_status != 'Completed')::int          AS pending,
-      COUNT(*) FILTER (WHERE migration_status = 'In Progress')::int         AS in_progress,
-      COUNT(*) FILTER (WHERE migration_status = 'Blocked')::int             AS blocked,
-      COUNT(*) FILTER (WHERE LOWER(powerstate) != 'poweredon')::int         AS powered_off,
-      COALESCE(SUM(cpus),0)::int                                             AS total_vcpus,
-      COALESCE(SUM(memory_mib),0)::bigint                                    AS total_memory_mib
+      COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                                         AS total,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)::int   AS migrated,
+      COUNT(*) FILTER (WHERE migration_status != 'Completed' AND cleared_at IS NULL)::int     AS pending,
+      COUNT(*) FILTER (WHERE migration_status = 'In Progress' AND cleared_at IS NULL)::int    AS in_progress,
+      COUNT(*) FILTER (WHERE migration_status = 'Blocked' AND cleared_at IS NULL)::int        AS blocked,
+      COUNT(*) FILTER (WHERE LOWER(powerstate) != 'poweredon' AND cleared_at IS NULL)::int    AS powered_off,
+      COALESCE(SUM(cpus) FILTER (WHERE cleared_at IS NULL),0)::int                            AS total_vcpus,
+      COALESCE(SUM(memory_mib) FILTER (WHERE cleared_at IS NULL),0)::bigint                   AS total_memory_mib
     FROM ${table} WHERE TRUE ${pidAnd}`, vals);
   return rows[0];
 }
@@ -378,17 +380,25 @@ const patchBomgarVM     = (id, f) => patchVM('migration_bomgar_vms',     id, f);
 const patchSecurityVM   = (id, f) => patchVM('migration_security_vms',   id, f);
 const patchStandaloneVM = (id, f) => patchVM('migration_standalone_esxi', id, f);
 
-// ── DELETE SINGLE RECORD ─────────────────────────────────────────────────────
+// ── SOFT-DELETE (cleared before migration — counts as migrated) ───────────────
 async function deleteRecord(table, id) {
-  const { rowCount } = await db.query(`DELETE FROM ${table} WHERE id = $1`, [parseInt(id, 10)]);
+  const isHost = table === 'migration_hosts';
+  const statusSet = isHost
+    ? `, vms_vacate = 'Completed', proxmox_install = 'Completed', vm_migration_back = 'Completed'`
+    : `, migration_status = 'Completed'`;
+  const { rowCount } = await db.query(
+    `UPDATE ${table} SET cleared_at = NOW()${statusSet}, updated_at = NOW()
+      WHERE id = $1 AND cleared_at IS NULL`,
+    [parseInt(id, 10)],
+  );
   return rowCount > 0;
 }
 
-const deleteBomgarVM     = (id) => deleteRecord('migration_bomgar_vms',      id);
-const deleteSecurityVM   = (id) => deleteRecord('migration_security_vms',    id);
-const deleteStandaloneVM = (id) => deleteRecord('migration_standalone_esxi', id);
-const deleteHostRecord   = (id) => deleteRecord('migration_hosts',           id);
-const deleteCustomVMRecord = (id) => deleteRecord('migration_custom_vms',   id);
+const deleteBomgarVM       = (id) => deleteRecord('migration_bomgar_vms',      id);
+const deleteSecurityVM     = (id) => deleteRecord('migration_security_vms',    id);
+const deleteStandaloneVM   = (id) => deleteRecord('migration_standalone_esxi', id);
+const deleteHostRecord     = (id) => deleteRecord('migration_hosts',           id);
+const deleteCustomVMRecord = (id) => deleteRecord('migration_custom_vms',      id);
 
 // ── OVERVIEW ─────────────────────────────────────────────────────────────────
 async function overview(projectId = null) {
@@ -894,6 +904,7 @@ async function listCustomVMs(params) {
     if (params[col]) { values.push(params[col]); conds.push(`${col} = $${idx++}`); }
   }
 
+  conds.push(`cleared_at IS NULL`);
   const where = `WHERE ${conds.join(' AND ')}`;
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM migration_custom_vms ${where}`, values),
@@ -934,12 +945,12 @@ async function customVMSummary(tabId) {
   if (isNaN(tid)) return { total: 0, migrated: 0, pending: 0, in_progress: 0, blocked: 0, powered_off: 0 };
   const { rows } = await db.query(`
     SELECT
-      COUNT(*)                                                 AS total,
-      COUNT(*) FILTER (WHERE migration_status = 'Completed')  AS migrated,
-      COUNT(*) FILTER (WHERE migration_status = 'Not Started') AS pending,
-      COUNT(*) FILTER (WHERE migration_status = 'In Progress') AS in_progress,
-      COUNT(*) FILTER (WHERE migration_status = 'Blocked')    AS blocked,
-      COUNT(*) FILTER (WHERE powerstate ILIKE '%off%')        AS powered_off
+      COUNT(*) FILTER (WHERE cleared_at IS NULL)                                        AS total,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)  AS migrated,
+      COUNT(*) FILTER (WHERE migration_status = 'Not Started' AND cleared_at IS NULL)   AS pending,
+      COUNT(*) FILTER (WHERE migration_status = 'In Progress' AND cleared_at IS NULL)   AS in_progress,
+      COUNT(*) FILTER (WHERE migration_status = 'Blocked' AND cleared_at IS NULL)       AS blocked,
+      COUNT(*) FILTER (WHERE powerstate ILIKE '%off%' AND cleared_at IS NULL)           AS powered_off
     FROM migration_custom_vms WHERE custom_tab_id = $1
   `, [tid]);
   const r = rows[0];
