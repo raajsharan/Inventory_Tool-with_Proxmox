@@ -341,14 +341,18 @@ async function vmSummary(table, projectId = null) {
 
   const { rows } = await db.query(`
     SELECT
-      COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                                         AS total,
-      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)::int   AS migrated,
-      COUNT(*) FILTER (WHERE migration_status != 'Completed' AND cleared_at IS NULL)::int     AS pending,
-      COUNT(*) FILTER (WHERE migration_status = 'In Progress' AND cleared_at IS NULL)::int    AS in_progress,
-      COUNT(*) FILTER (WHERE migration_status = 'Blocked' AND cleared_at IS NULL)::int        AS blocked,
-      COUNT(*) FILTER (WHERE LOWER(powerstate) != 'poweredon' AND cleared_at IS NULL)::int    AS powered_off,
-      COALESCE(SUM(cpus) FILTER (WHERE cleared_at IS NULL),0)::int                            AS total_vcpus,
-      COALESCE(SUM(memory_mib) FILTER (WHERE cleared_at IS NULL),0)::bigint                   AS total_memory_mib,
+      COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                                                        AS total,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)::int                  AS migrated,
+      COUNT(*) FILTER (WHERE migration_status != 'Completed' AND cleared_at IS NULL)::int                    AS pending,
+      COUNT(*) FILTER (WHERE migration_status = 'Not Started'           AND cleared_at IS NULL)::int         AS not_started,
+      COUNT(*) FILTER (WHERE migration_status = 'Awaiting confirmation' AND cleared_at IS NULL)::int         AS awaiting_confirmation,
+      COUNT(*) FILTER (WHERE migration_status = 'In Progress'           AND cleared_at IS NULL)::int         AS in_progress,
+      COUNT(*) FILTER (WHERE migration_status = 'Cleaned up'            AND cleared_at IS NULL)::int         AS cleaned_up,
+      COUNT(*) FILTER (WHERE migration_status = 'To be Deleted'         AND cleared_at IS NULL)::int         AS to_be_deleted,
+      COUNT(*) FILTER (WHERE migration_status = 'Blocked'               AND cleared_at IS NULL)::int         AS blocked,
+      COUNT(*) FILTER (WHERE LOWER(powerstate) != 'poweredon'           AND cleared_at IS NULL)::int         AS powered_off,
+      COALESCE(SUM(cpus)       FILTER (WHERE cleared_at IS NULL),0)::int                                     AS total_vcpus,
+      COALESCE(SUM(memory_mib) FILTER (WHERE cleared_at IS NULL),0)::bigint                                  AS total_memory_mib,
       COALESCE(ARRAY_AGG(vm ORDER BY vm) FILTER (WHERE migration_status = 'In Progress' AND cleared_at IS NULL), '{}') AS in_progress_vms
     FROM ${table} WHERE TRUE ${pidAnd}`, vals);
   return rows[0];

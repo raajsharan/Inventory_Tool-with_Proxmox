@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme, Popover, List } from 'antd';
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined,
-  DatabaseOutlined, ClusterOutlined,
+  DatabaseOutlined, ClusterOutlined, StopOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -109,7 +109,13 @@ export default function MigrationOverview({ projectId }) {
                 style={{ marginTop: 8 }}
                 strokeColor="#52c41a"
               />
-              <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {d.not_started > 0 && (
+                  <Tag color="default" icon={<ClockCircleOutlined />}>{d.not_started} Not Started</Tag>
+                )}
+                {d.awaiting_confirmation > 0 && (
+                  <Tag color="warning" icon={<ClockCircleOutlined />}>{d.awaiting_confirmation} Awaiting</Tag>
+                )}
                 {d.in_progress > 0 && (
                   <Popover
                     title={<span><SyncOutlined spin style={{ color: '#1677ff', marginRight: 6 }} />In Progress VMs</span>}
@@ -134,11 +140,14 @@ export default function MigrationOverview({ projectId }) {
                     </Tag>
                   </Popover>
                 )}
-                {d.blocked > 0 && (
-                  <Tag color="error">{d.blocked} Blocked</Tag>
+                {d.cleaned_up > 0 && (
+                  <Tag color="cyan" icon={<CheckCircleOutlined />}>{d.cleaned_up} Cleaned up</Tag>
                 )}
-                {d.pending > 0 && (
-                  <Tag color="default">{d.pending - (d.blocked || 0)} Pending</Tag>
+                {d.to_be_deleted > 0 && (
+                  <Tag color="orange" icon={<DeleteOutlined />}>{d.to_be_deleted} To be Deleted</Tag>
+                )}
+                {d.blocked > 0 && (
+                  <Tag color="error" icon={<StopOutlined />}>{d.blocked} Blocked</Tag>
                 )}
               </div>
             </Card>
