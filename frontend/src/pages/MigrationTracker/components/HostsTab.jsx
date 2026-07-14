@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select, Input, Popconfirm } from 'antd';
-import { DownloadOutlined, WarningOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select, Input } from 'antd';
+import { DownloadOutlined, WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
@@ -216,19 +216,6 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
       .filter(k => visible.has(k))
       .map(k => allColumns.find(c => c.key === k))
       .filter(Boolean),
-    ...(canEdit ? [{
-      title: '', key: 'actions', width: 52, fixed: 'right',
-      render: (_, r) => (
-        <Popconfirm
-          title="Remove this host?"
-          description="This will permanently delete the record."
-          onConfirm={() => remove(r.id)}
-          okText="Delete" okButtonProps={{ danger: true }} cancelText="Cancel"
-        >
-          <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-        </Popconfirm>
-      ),
-    }] : []),
   ];
 
   const summaryCards = summary ? [

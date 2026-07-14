@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Table, Button, Select, Typography, Space, message, Tooltip, Tag, Popconfirm } from 'antd';
-import { DownloadOutlined, LinkOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Select, Typography, Space, message, Tooltip, Tag } from 'antd';
+import { DownloadOutlined, LinkOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
@@ -183,21 +183,7 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
     ),
   }));
 
-  const actionCol = canEdit ? [{
-    title: '', key: 'actions', width: 52, fixed: 'right',
-    render: (_, r) => (
-      <Popconfirm
-        title="Remove this VM?"
-        description="This will permanently delete the record."
-        onConfirm={() => remove(r.id)}
-        okText="Delete" okButtonProps={{ danger: true }} cancelText="Cancel"
-      >
-        <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-      </Popconfirm>
-    ),
-  }] : [];
-
-  const columns = [...baseColumns, ...customFieldCols, ...actionCol];
+  const columns = [...baseColumns, ...customFieldCols];
 
   const summaryCards = summary2 ? [
     { label: 'Total VMs',    value: summary2.total },
