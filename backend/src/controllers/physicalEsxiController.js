@@ -89,7 +89,7 @@ async function create(req, res, next) {
   try {
     const asset = await svc.create(req.body, req.user.id);
     await audit.log({ user: req.user, action: 'CREATE', entityType: ENTITY, entityId: asset.id, details: { vm_name: asset.vm_name }, ipAddress: req.ip });
-    teams.notifyNewAsset(asset, 'physical_esxi_servers').catch(() => {});
+    teams.notifyNewAsset(asset, 'physical_esxi_servers', req.user?.full_name || req.user?.email).catch(() => {});
     res.status(201).json(asset);
   } catch (e) { next(e); }
 }
@@ -98,7 +98,7 @@ async function update(req, res, next) {
   try {
     const asset = await svc.update(req.params.id, req.body, req.user.id);
     await audit.log({ user: req.user, action: 'UPDATE', entityType: ENTITY, entityId: asset.id, details: { vm_name: asset.vm_name }, ipAddress: req.ip });
-    teams.notifyAssetUpdate(asset, 'physical_esxi_servers').catch(() => {});
+    teams.notifyAssetUpdate(asset, 'physical_esxi_servers', req.user?.full_name || req.user?.email).catch(() => {});
     res.json(asset);
   } catch (e) { next(e); }
 }

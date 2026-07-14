@@ -30,12 +30,22 @@ async function logDecommission(source, row, userId, reason) {
      row.serial_number, row.os_type, row.location, row.hosted_ip,
      reason || null, userId || null, name],
   );
-  teams.notifyDecommission(source, row, reason).catch(() => {});
+  teams.notifyDecommission(source, row, reason, name).catch(() => {});
 }
 
 // Close the newest open log row for this asset (reactivation).
-async function logReactivation(source, assetId, userId, assetName) {
+async function logReactivation(source, assetId, userId) {
   const name = await userName(userId);
+
+  // Fetch the open log row before closing it so we have vm_name + ip_address for the notification.
+  const { rows: logRows } = await db.query(
+    `SELECT vm_name, ip_address FROM decommission_log
+      WHERE source = $1 AND asset_id = $2 AND reactivated_at IS NULL
+      ORDER BY decommissioned_at DESC LIMIT 1`,
+    [source, assetId],
+  );
+  const logRow = logRows[0] || {};
+
   await db.query(
     `UPDATE decommission_log
         SET reactivated_at = NOW(), reactivated_by = $3, reactivated_by_name = $4
@@ -46,7 +56,7 @@ async function logReactivation(source, assetId, userId, assetName) {
       )`,
     [source, assetId, userId || null, name],
   );
-  teams.notifyReactivation(source, assetId, assetName).catch(() => {});
+  teams.notifyReactivation(source, logRow.vm_name, logRow.ip_address, name).catch(() => {});
 }
 
 module.exports = { isDecomStatus, logDecommission, logReactivation };

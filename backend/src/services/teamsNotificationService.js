@@ -148,107 +148,116 @@ async function send(card) {
   await postJson(cfg.webhook_url, card);
 }
 
+// ── Source label helper ───────────────────────────────────────────────────────
+
+function sourceLabel(source) {
+  return {
+    assets:                'Asset Inventory',
+    beijing_assets:        'Beijing Assets',
+    ext_assets:            'Ext. Assets',
+    physical_esxi_servers: 'Physical / ESXi',
+  }[source] || source;
+}
+
 // ── Public notify* functions ──────────────────────────────────────────────────
 
-async function notifyNewAsset(asset, source = 'assets') {
+async function notifyNewAsset(asset, source = 'assets', updatedBy = null) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_new_asset || !cfg.webhook_url) return;
 
-  const sourceLabel = {
-    assets: 'Asset Inventory',
-    beijing_assets: 'Beijing Assets',
-    ext_assets: 'Ext. Assets',
-    physical_esxi_servers: 'Physical / ESXi',
-  }[source] || source;
-
   const card = buildCard({
-    subtitle: sourceLabel,
+    subtitle: `📋 ${sourceLabel(source)}`,
     title: `New Asset Registered: ${asset.vm_name || asset.hostname || asset.id}`,
     color: 'Accent',
     facts: [
+      { title: 'Asset Name',  value: asset.vm_name || asset.hostname },
       { title: 'IP Address',  value: asset.ip_address },
+      { title: 'Inventory',   value: sourceLabel(source) },
       { title: 'OS Type',     value: asset.os_type },
       { title: 'Location',    value: asset.location },
       { title: 'Department',  value: asset.department },
       { title: 'Asset Tag',   value: asset.asset_tag },
+      { title: 'Registered By', value: updatedBy },
     ],
   });
   await send(card);
 }
 
-async function notifyAssetUpdate(asset, source = 'assets') {
+async function notifyAssetUpdate(asset, source = 'assets', updatedBy = null) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_asset_update || !cfg.webhook_url) return;
 
-  const sourceLabel = {
-    assets: 'Asset Inventory',
-    beijing_assets: 'Beijing Assets',
-    ext_assets: 'Ext. Assets',
-    physical_esxi_servers: 'Physical / ESXi',
-  }[source] || source;
-
   const card = buildCard({
-    subtitle: sourceLabel,
+    subtitle: `✏️ ${sourceLabel(source)}`,
     title: `Asset Updated: ${asset.vm_name || asset.hostname || asset.id}`,
     color: 'Default',
     facts: [
+      { title: 'Asset Name',  value: asset.vm_name || asset.hostname },
       { title: 'IP Address',  value: asset.ip_address },
+      { title: 'Inventory',   value: sourceLabel(source) },
       { title: 'Status',      value: asset.server_status },
       { title: 'OS Type',     value: asset.os_type },
       { title: 'Location',    value: asset.location },
       { title: 'Department',  value: asset.department },
+      { title: 'Updated By',  value: updatedBy },
     ],
   });
   await send(card);
 }
 
-async function notifyDecommission(source, row, reason) {
+async function notifyDecommission(source, row, reason, decommissionedBy = null) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_decommission || !cfg.webhook_url) return;
 
   const card = buildCard({
-    subtitle: 'Decommission Event',
+    subtitle: `🔴 ${sourceLabel(source)}`,
     title: `Decommissioned: ${row.vm_name || row.id}`,
     color: 'Attention',
     facts: [
-      { title: 'IP Address', value: row.ip_address },
-      { title: 'Location',   value: row.location },
-      { title: 'OS Type',    value: row.os_type },
-      { title: 'Reason',     value: reason },
-      { title: 'Source',     value: source },
+      { title: 'Asset Name',        value: row.vm_name },
+      { title: 'IP Address',        value: row.ip_address },
+      { title: 'Inventory',         value: sourceLabel(source) },
+      { title: 'OS Type',           value: row.os_type },
+      { title: 'Location',          value: row.location },
+      { title: 'Reason',            value: reason },
+      { title: 'Decommissioned By', value: decommissionedBy },
     ],
   });
   await send(card);
 }
 
-async function notifyReactivation(source, assetId, assetName) {
+async function notifyReactivation(source, assetName, ipAddress = null, reactivatedBy = null) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_decommission || !cfg.webhook_url) return;
 
   const card = buildCard({
-    subtitle: 'Reactivation Event',
-    title: `Asset Reactivated: ${assetName || `#${assetId}`}`,
+    subtitle: `🟢 ${sourceLabel(source)}`,
+    title: `Asset Reactivated: ${assetName}`,
     color: 'Good',
     facts: [
-      { title: 'Source', value: source },
-      { title: 'ID',     value: String(assetId) },
+      { title: 'Asset Name',    value: assetName },
+      { title: 'IP Address',    value: ipAddress },
+      { title: 'Inventory',     value: sourceLabel(source) },
+      { title: 'Reactivated By', value: reactivatedBy },
     ],
   });
   await send(card);
 }
 
-async function notifyMigrationStatus(vmName, category, newStatus) {
+async function notifyMigrationStatus(vmName, category, newStatus, updatedBy = null, ipAddress = null) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_migration_status || !cfg.webhook_url) return;
 
   const card = buildCard({
-    subtitle: 'Migration Tracker',
+    subtitle: '🔄 Migration Tracker',
     title: `Migration Status Changed: ${vmName}`,
     color: colorForStatus(newStatus),
     facts: [
-      { title: 'VM / Host', value: vmName },
-      { title: 'Category',  value: category },
+      { title: 'VM / Host',  value: vmName },
+      { title: 'IP Address', value: ipAddress },
+      { title: 'Category',   value: category },
       { title: 'New Status', value: newStatus },
+      { title: 'Updated By', value: updatedBy },
     ],
   });
   await send(card);

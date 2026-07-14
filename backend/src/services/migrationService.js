@@ -357,7 +357,7 @@ async function patchVM(table, id, fields) {
   if (!sets.length) return null;
   sets.push(`updated_at = NOW()`);
   vals.push(id);
-  const { rows } = await db.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, vm`, vals);
+  const { rows } = await db.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, vm, primary_ip`, vals);
   return rows[0] || null;
 }
 

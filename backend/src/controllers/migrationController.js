@@ -50,7 +50,8 @@ async function patchCustomVM(req, res, next) {
     const row = await svc.patchCustomVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'VM not found' });
     if (req.body.migration_status) {
-      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Custom VMs', req.body.migration_status).catch(() => {});
+      const by = req.user?.full_name || req.user?.email;
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Custom VMs', req.body.migration_status, by, row.primary_ip).catch(() => {});
     }
     res.json(row);
   } catch (e) { next(e); }
@@ -89,7 +90,8 @@ async function patchHost(req, res, next) {
     if (!row) return res.status(404).json({ error: 'Host not found or no valid fields provided' });
     if (req.body.migration_status || req.body.vms_vacate || req.body.proxmox_install || req.body.vm_migration_back) {
       const status = req.body.migration_status || req.body.vms_vacate || req.body.proxmox_install || req.body.vm_migration_back;
-      teams.notifyMigrationStatus(row.host || `Host #${row.id}`, 'Hosts', status).catch(() => {});
+      const by = req.user?.full_name || req.user?.email;
+      teams.notifyMigrationStatus(row.host || `Host #${row.id}`, 'Hosts', status, by, null).catch(() => {});
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -107,7 +109,8 @@ async function patchBomgar(req, res, next) {
     const row = await svc.patchBomgarVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Record not found' });
     if (req.body.migration_status) {
-      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Bomgar VMs', req.body.migration_status).catch(() => {});
+      const by = req.user?.full_name || req.user?.email;
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Bomgar VMs', req.body.migration_status, by, row.primary_ip).catch(() => {});
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -125,7 +128,8 @@ async function patchSecurity(req, res, next) {
     const row = await svc.patchSecurityVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Record not found' });
     if (req.body.migration_status) {
-      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Security VMs', req.body.migration_status).catch(() => {});
+      const by = req.user?.full_name || req.user?.email;
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Security VMs', req.body.migration_status, by, row.primary_ip).catch(() => {});
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -143,7 +147,8 @@ async function patchStandalone(req, res, next) {
     const row = await svc.patchStandaloneVM(req.params.id, req.body);
     if (!row) return res.status(404).json({ error: 'Record not found' });
     if (req.body.migration_status) {
-      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Standalone ESXi', req.body.migration_status).catch(() => {});
+      const by = req.user?.full_name || req.user?.email;
+      teams.notifyMigrationStatus(row.vm || `VM #${row.id}`, 'Standalone ESXi', req.body.migration_status, by, row.primary_ip).catch(() => {});
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
