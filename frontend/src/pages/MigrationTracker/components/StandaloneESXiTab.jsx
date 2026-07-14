@@ -122,17 +122,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
     { title: 'OS (tools)',   dataIndex: 'os_tools',      key: 'os_tools',     width: 200, ellipsis: true, render: cell },
   ];
 
-  const toggleableCols = allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key));
-  const { visible, toggle, reset, order, reorder } = useColumnVisibility('standalone-esxi', toggleableCols.map(c => c.key));
-
-  const baseColumns = [
-    allColumns[0], // vm — always visible, never reordered
-    ...order
-      .filter(k => visible.has(k))
-      .map(k => allColumns.find(c => c.key === k))
-      .filter(Boolean),
-  ];
-
+  const staticToggleable = allColumns.filter(c => c.key !== 'vm' && !hiddenColumns.includes(c.key));
   const customFieldCols = fieldDefs.map(fd => ({
     key:   `cf_${fd.id}`,
     title: fd.label,
@@ -146,8 +136,16 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
       />
     ),
   }));
+  const allToggleable = [...staticToggleable, ...customFieldCols];
+  const { visible, toggle, reset, order, reorder } = useColumnVisibility('standalone-esxi', allToggleable.map(c => c.key));
 
-  const columns = [...baseColumns, ...customFieldCols];
+  const columns = [
+    allColumns[0], // vm — always visible, never reordered
+    ...order
+      .filter(k => visible.has(k))
+      .map(k => allToggleable.find(c => c.key === k))
+      .filter(Boolean),
+  ];
 
   const summaryCards = summary ? [
     { label: 'Total VMs',    value: summary.total },
@@ -182,7 +180,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
         onClear={clearFilters}
         extra={
           <Space>
-            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
+            <ColumnToggleButton columns={allToggleable} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
             <Button icon={<DownloadOutlined />}
               onClick={() => downloadCSV('standalone-esxi', { ...filters, search })}>
               Export CSV

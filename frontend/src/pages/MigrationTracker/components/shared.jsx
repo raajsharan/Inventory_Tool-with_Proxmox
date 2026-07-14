@@ -385,6 +385,29 @@ export function useColumnVisibility(storageKey, allKeys) {
     return [...keysRef.current];
   });
 
+  // React to new / removed keys (e.g. custom fields that load async or get deleted)
+  useEffect(() => {
+    const keySet  = new Set(allKeys);
+    const prevSet = new Set(keysRef.current);
+    const added   = allKeys.filter(k => !prevSet.has(k));
+    const removed = keysRef.current.filter(k => !keySet.has(k));
+    if (!added.length && !removed.length) return;
+
+    keysRef.current = allKeys;
+
+    setOrder(prev => {
+      const next = [...prev.filter(k => keySet.has(k)), ...added];
+      localStorage.setItem(`col-ord:${storageKey}`, JSON.stringify(next));
+      return next;
+    });
+    setVisible(prev => {
+      const next = new Set([...prev].filter(k => keySet.has(k)));
+      added.forEach(k => next.add(k)); // new fields visible by default
+      localStorage.setItem(`col-vis:${storageKey}`, JSON.stringify([...next]));
+      return next;
+    });
+  }, [allKeys.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggle = (key, checked) => {
     setVisible(prev => {
       const next = new Set(prev);

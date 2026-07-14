@@ -199,20 +199,7 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
   };
 
   const allBuilt = buildColumns(hiddenColumns, canEdit, patch, remove);
-  const toggleableCols = allBuilt.filter(c => c.key !== 'vm');
-  const { visible, toggle, reset, order, reorder } = useColumnVisibility(
-    `custom-vms-${tabId || 'default'}`,
-    toggleableCols.map(c => c.key)
-  );
-
-  const baseColumns = [
-    allBuilt[0], // vm — always visible, never reordered
-    ...order
-      .filter(k => visible.has(k))
-      .map(k => allBuilt.find(c => c.key === k))
-      .filter(Boolean),
-  ];
-
+  const staticToggleable = allBuilt.filter(c => c.key !== 'vm');
   const customFieldCols = fieldDefs.map(fd => ({
     key:   `cf_${fd.id}`,
     title: fd.label,
@@ -226,8 +213,19 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
       />
     ),
   }));
+  const allToggleable = [...staticToggleable, ...customFieldCols];
+  const { visible, toggle, reset, order, reorder } = useColumnVisibility(
+    `custom-vms-${tabId || 'default'}`,
+    allToggleable.map(c => c.key)
+  );
 
-  const columns = [...baseColumns, ...customFieldCols];
+  const columns = [
+    allBuilt[0], // vm — always visible, never reordered
+    ...order
+      .filter(k => visible.has(k))
+      .map(k => allToggleable.find(c => c.key === k))
+      .filter(Boolean),
+  ];
 
   const summaryCards = summary ? [
     { label: 'Total VMs',   value: summary.total },
@@ -251,7 +249,7 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
         onClear={clearFilters}
         extra={
           <Space>
-            <ColumnToggleButton columns={toggleableCols} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
+            <ColumnToggleButton columns={allToggleable} visible={visible} onToggle={toggle} onReset={reset} order={order} onReorder={reorder} />
             <Button icon={<DownloadOutlined />}
               onClick={() => downloadCSV('custom-vms', { ...filters, search, tab_id: tabId })}>
               Export CSV
