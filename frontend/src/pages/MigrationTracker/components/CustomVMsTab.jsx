@@ -13,7 +13,7 @@ import { useCustomFields } from './useCustomFields.js';
 import FieldValueCell    from './FieldValueCell.jsx';
 
 const { Text } = Typography;
-const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Completed', 'Blocked'];
+const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Completed', 'Deleted'];
 
 function StatusSelect({ value, onChange }) {
   return (
@@ -110,7 +110,7 @@ function useCustomTable(tabId, projectId) {
 }
 
 // ── Column builder ─────────────────────────────────────────────────────────────
-function buildColumns(hiddenColumns, canEdit, patch) {
+function buildColumns(hiddenColumns, canEdit, patch, remove) {
   const hidden = new Set(hiddenColumns);
 
   const all = [
@@ -122,7 +122,7 @@ function buildColumns(hiddenColumns, canEdit, patch) {
     !hidden.has('migration_status') && {
       title: 'Status', dataIndex: 'migration_status', key: 'migration_status', width: 140,
       render: (v, r) => canEdit
-        ? <StatusSelect value={v} onChange={val => patch(r.id, { migration_status: val })} />
+        ? <StatusSelect value={v} onChange={val => val === 'Deleted' ? remove(r.id) : patch(r.id, { migration_status: val })} />
         : <MigrationStatusBadge status={v} />,
     },
     !hidden.has('powerstate') && {
@@ -195,7 +195,7 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
     } catch { message.error('Delete failed'); }
   };
 
-  const allBuilt = buildColumns(hiddenColumns, canEdit, patch);
+  const allBuilt = buildColumns(hiddenColumns, canEdit, patch, remove);
   const toggleableCols = allBuilt.filter(c => c.key !== 'vm');
   const { visible, toggle, reset, order, reorder } = useColumnVisibility(
     `custom-vms-${tabId || 'default'}`,

@@ -6,6 +6,7 @@ import { Tag, Tooltip, Button, Space, Typography, theme, Popover, Checkbox, Divi
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, StopOutlined,
   EyeOutlined, EyeInvisibleOutlined, CopyOutlined, SettingOutlined, HolderOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -17,6 +18,7 @@ const STATUS_CFG = {
   'In Progress': { color: 'processing', icon: <SyncOutlined spin />  },
   'Not Started': { color: 'default',   icon: <ClockCircleOutlined /> },
   'Blocked':     { color: 'error',     icon: <StopOutlined />        },
+  'Deleted':     { color: 'default',   icon: <DeleteOutlined />      },
   'Pending':     { color: 'default',   icon: <ClockCircleOutlined /> },
 };
 

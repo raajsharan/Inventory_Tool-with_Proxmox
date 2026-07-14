@@ -18,6 +18,7 @@ function normaliseMigrationStatus(raw) {
   if (/^complet/i.test(v)) return 'Completed';
   if (/^in.?prog/i.test(v)) return 'In Progress';
   if (/^block/i.test(v))   return 'Blocked';
+  if (/^delet/i.test(v))   return 'Not Started'; // imported "Deleted" rows start fresh
   if (/^pend/i.test(v))    return 'Pending';
   return VALID_MIGRATION_STATUSES.includes(v) ? v : 'Not Started';
 }
