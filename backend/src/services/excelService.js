@@ -27,8 +27,10 @@ const COLUMNS = [
   { key: 'asset_password',           header: 'Asset Password',           width: 18 },
   { key: 'additional_remarks',       header: 'Additional Remarks',       width: 28 },
   { key: 'manage_engine_installed',  header: 'ManageEngine Installed',   width: 22 },
-  { key: 'tenable_installed',         header: 'Tenable Installed',       width: 20 },
+  { key: 'tenable_installed',        header: 'Tenable Installed',        width: 20 },
   { key: 'idrac_enabled',            header: 'iDRAC Enabled',            width: 16 },
+  { key: 'idrac_ip',                 header: 'iDRAC IP',                 width: 16 },
+  { key: 'mac_address',              header: 'MAC Address',              width: 18 },
 ];
 
 function styleHeader(ws) {
@@ -56,7 +58,8 @@ async function buildTemplate() {
     patching_schedule: 'Monthly', location: 'Data Center 1', eol_status: 'Supported',
     serial_number: 'SN-EX-001', ome_status: 'OK', hosted_ip: '', asset_tag: 'AT-EX-001',
     asset_username: 'svc_admin', asset_password: 'secret', additional_remarks: 'remove this row before import',
-    manage_engine_installed: 'TRUE', tenable_installed: 'TRUE', idrac_enabled: 'FALSE',
+    manage_engine_installed: 'TRUE', tenable_installed: 'TRUE',
+    idrac_enabled: 'FALSE', idrac_ip: '', mac_address: '',
   });
 
   const ws2 = wb.addWorksheet('Allowed Values');
