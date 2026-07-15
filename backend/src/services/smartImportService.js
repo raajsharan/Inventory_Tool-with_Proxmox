@@ -4,9 +4,9 @@ const deptSvc  = require('./departmentService');
 const cryptoUtil = require('../utils/crypto');
 
 const COLUMN_ALIASES = {
-  vm_name: ['vm name', 'vmname', 'name', 'hostname (vm)'],
+  vm_name: ['vm name', 'vmname', 'name', 'hostname (vm)', 'device name'],
   os_hostname: ['os hostname', 'hostname', 'host name'],
-  ip_address: ['ip address', 'ip', 'ipv4'],
+  ip_address: ['ip address', 'ip', 'ipv4', 'hosted ip'],
   asset_type: ['asset type', 'type'],
   os_type: ['os type', 'operating system', 'os'],
   os_version: ['os version', 'version'],
