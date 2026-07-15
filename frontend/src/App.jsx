@@ -47,6 +47,7 @@ import Roles from './pages/Admin/Roles.jsx';
 import InstallConfig from './pages/Admin/InstallConfig.jsx';
 import VMwareDiscovery from './pages/VMwareDiscovery/index.jsx';
 import ProxmoxDiscovery from './pages/ProxmoxDiscovery/index.jsx';
+import HyperVDiscovery  from './pages/HyperVDiscovery/index.jsx';
 import SoftwareStatus from './pages/SoftwareStatus/index.jsx';
 import NessusStatus from './pages/NessusStatus/index.jsx';
 import NessusInstallConfig from './pages/Admin/NessusInstallConfig.jsx';
@@ -101,6 +102,7 @@ export default function App() {
         <Route path="/tenable-report"   element={<TenableReport />} />
         <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
         <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
+        <Route path="/hyperv-discovery"   element={<HyperVDiscovery />} />
         <Route path="/migration-tracker"  element={<MigrationTracker />} />
         <Route path="/endpoint-central"   element={<EndpointCentral />} />
 

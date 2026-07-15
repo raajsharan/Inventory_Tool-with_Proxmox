@@ -12,7 +12,7 @@ import {
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
-  ProjectOutlined, NotificationOutlined,
+  ProjectOutlined, NotificationOutlined, WindowsOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -123,8 +123,9 @@ export default function AppLayout() {
         return [{
           key: 'vm-discovery', icon: <CloudServerOutlined />, label: 'VM Discovery',
           children: [
-            { key: '/vmware-discovery',  icon: <ApartmentOutlined />, label: <Link to="/vmware-discovery">VMware Discovery</Link> },
-            { key: '/proxmox-discovery', icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },
+            { key: '/vmware-discovery',   icon: <ApartmentOutlined />, label: <Link to="/vmware-discovery">VMware Discovery</Link> },
+            { key: '/proxmox-discovery',  icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },
+            { key: '/hyperv-discovery',   icon: <WindowsOutlined />,   label: <Link to="/hyperv-discovery">Hyper-V Discovery</Link> },
           ],
         }];
       case 'migration-tracker':
@@ -223,7 +224,7 @@ export default function AppLayout() {
           mode="inline"
           selectedKeys={[loc.pathname]}
           defaultOpenKeys={[
-            ...['/vmware-discovery', '/proxmox-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
+            ...['/vmware-discovery', '/proxmox-discovery', '/hyperv-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
             ...['/software-status', '/nessus-status', '/tenable-report', '/endpoint-central'].includes(loc.pathname) ? ['software-services'] : [],
           ]}
           items={items}

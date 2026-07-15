@@ -25,6 +25,7 @@ router.use('/branding',         require('./brandingRoutes'));
 router.use('/recycle-bin',      authenticate, requirePageAccess('admin/recycle-bin'),     require('./recycleBinRoutes'));
 router.use('/vmware',              require('./vmwareRoutes'));
 router.use('/proxmox',             require('./proxmoxRoutes'));
+router.use('/hyperv',              require('./hypervRoutes'));
 router.use('/user-page-control',   authenticate, require('./userPageAccessRoutes'));
 router.use('/roles',               require('./customRolesRoutes'));
 router.use('/software-status',     require('./softwareStatusRoutes'));
