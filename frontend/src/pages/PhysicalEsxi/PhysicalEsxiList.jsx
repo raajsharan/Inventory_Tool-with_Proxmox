@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card, Table, Input, Select, Space, Button, Tag, App,
-  Row, Col, Typography, Tooltip, Modal, Form,
+  Row, Col, Typography, Tooltip, Modal, Form, Statistic,
 } from 'antd';
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined,
   EyeOutlined, EyeInvisibleOutlined, LockOutlined, UnlockOutlined,
-  CheckCircleFilled, CloseCircleFilled,
+  CheckCircleFilled, CloseCircleFilled, SyncOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -68,6 +68,10 @@ export default function PhysicalEsxiList() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkWorking, setBulkWorking]     = useState(false);
   const [bulkResetKey, setBulkResetKey]   = useState(0);
+
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
+  const [syncing, setSyncing]                 = useState(false);
+  const [syncResult, setSyncResult]           = useState(null);
 
   const canWrite      = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const isAdmin       = ['admin', 'superadmin'].includes(user?.role);
@@ -152,6 +156,18 @@ export default function PhysicalEsxiList() {
     const a = document.createElement('a'); a.href = url;
     a.download = 'physical-esxi-export.xlsx'; a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function onSyncFromDiscovery() {
+    setSyncing(true);
+    try {
+      const { data } = await api.post('/physical-esxi/sync-from-discovery');
+      setSyncResult(data);
+      setSyncConfirmOpen(false);
+      if (data.created > 0) load();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Sync failed');
+    } finally { setSyncing(false); }
   }
 
   async function togglePassword(id, hasPassword) {
@@ -398,6 +414,11 @@ export default function PhysicalEsxiList() {
           <Button icon={<DownloadOutlined />} onClick={onExport}>Export</Button>
           {canWrite && <Link to="/physical-esxi/import"><Button icon={<UploadOutlined />}>Import</Button></Link>}
           {canWrite && (
+            <Button icon={<SyncOutlined />} onClick={() => { setSyncResult(null); setSyncConfirmOpen(true); }}>
+              Copy from VM Discovery
+            </Button>
+          )}
+          {canWrite && (
             <Link to="/physical-esxi/new">
               <Button type="primary" icon={<PlusOutlined />}>Register Server</Button>
             </Link>
@@ -561,6 +582,63 @@ export default function PhysicalEsxiList() {
             <Input.Password autoComplete="new-password" autoFocus />
           </Form.Item>
         </Form>
+      </Modal>
+      {/* ── Sync confirm modal ── */}
+      <Modal
+        title="Copy from VM Discovery"
+        open={syncConfirmOpen}
+        onCancel={() => setSyncConfirmOpen(false)}
+        onOk={onSyncFromDiscovery}
+        okText="Copy Now"
+        confirmLoading={syncing}
+        okButtonProps={{ icon: <SyncOutlined /> }}
+      >
+        <Typography.Paragraph>
+          This will copy <b>all VMs from the latest VMware ESXi and Proxmox VE discovery runs</b> into
+          Physical &amp; ESXi Servers.
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          Records with an IP address already present in this list will be skipped automatically.
+          Fields populated: Device Name, Hosted IP, OS Type, OS Version, CPU Cores, RAM (GB),
+          Server Status, MAC Address (VMware), and source note in Additional Remarks.
+        </Typography.Paragraph>
+      </Modal>
+
+      {/* ── Sync result modal ── */}
+      <Modal
+        title="Copy from VM Discovery — Results"
+        open={!!syncResult}
+        onCancel={() => setSyncResult(null)}
+        footer={<Button type="primary" onClick={() => setSyncResult(null)}>Close</Button>}
+      >
+        {syncResult && (
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Statistic title="VMware VMs Found" value={syncResult.vmwareTotal} />
+              </Col>
+              <Col span={8}>
+                <Statistic title="Proxmox VMs Found" value={syncResult.proxmoxTotal} />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Statistic title="Created" value={syncResult.created} valueStyle={{ color: '#16a34a' }} />
+              </Col>
+              <Col span={8}>
+                <Statistic title="Skipped (already exist)" value={syncResult.skipped} valueStyle={{ color: '#6b7280' }} />
+              </Col>
+            </Row>
+            {syncResult.errors?.length > 0 && (
+              <>
+                <Typography.Text type="secondary">Errors ({syncResult.errors.length}):</Typography.Text>
+                {syncResult.errors.map((e, i) => (
+                  <Tag key={i} color="red">[{e.source}] {e.name} ({e.ip}): {e.error}</Tag>
+                ))}
+              </>
+            )}
+          </Space>
+        )}
       </Modal>
     </Card>
   );

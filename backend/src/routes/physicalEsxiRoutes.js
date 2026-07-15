@@ -24,6 +24,8 @@ router.post(
   c.importAssets
 );
 
+router.post('/sync-from-discovery', authenticate, authorize(...writeRoles), c.syncFromDiscovery);
+
 router.post('/smart-import/preview', authenticate, authorize(...writeRoles),
   upload.single('file'), smartCtrl.makePreview('physical_esxi_servers'));
 router.post('/smart-import',         authenticate, authorize(...writeRoles),

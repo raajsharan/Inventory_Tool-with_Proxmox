@@ -265,4 +265,126 @@ async function importAssets(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { list, get, create, update, remove, tagStats, checkIp, downloadTemplate, exportAssets, importAssets, viewPassword };
+// ── Sync from VM Discovery (VMware + Proxmox latest runs) ────────────────────
+async function syncFromDiscovery(req, res, next) {
+  try {
+    const userId = req.user?.id || null;
+
+    // Collect IPs already in physical_esxi_servers (skip these)
+    const { rows: existing } = await db.query(
+      `SELECT ip_address FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL`
+    );
+    const existingIps = new Set(existing.map(r => r.ip_address));
+
+    let created = 0, skipped = 0;
+    const errors = [];
+
+    // ── Helper: insert one record ──────────────────────────────────────────
+    async function insertOne(fields) {
+      const cols = Object.keys(fields);
+      const vals = Object.values(fields);
+      const ph   = cols.map((_, i) => `$${i + 1}`).join(', ');
+      await db.query(
+        `INSERT INTO physical_esxi_servers (${cols.join(', ')}) VALUES (${ph})`,
+        vals
+      );
+    }
+
+    // ── VMware: latest successful run per host ─────────────────────────────
+    const { rows: vmwareVms } = await db.query(`
+      SELECT v.name, v.hostname, v.ips, v.macs, v.os_type, v.os_version,
+             v.num_cpu, v.memory_mb, v.power_state, v.source_host
+      FROM vmware_discovered_vms v
+      JOIN (
+        SELECT DISTINCT ON (host_id) id AS run_id
+        FROM vmware_discovery_runs
+        WHERE status = 'success'
+        ORDER BY host_id, run_at DESC
+      ) lr ON v.run_id = lr.run_id
+    `);
+
+    for (const vm of vmwareVms) {
+      const ip   = Array.isArray(vm.ips) ? vm.ips[0] : null;
+      const name = vm.name;
+      if (!ip || !name) { skipped++; continue; }
+      if (existingIps.has(ip)) { skipped++; continue; }
+      try {
+        const status = vm.power_state === 'poweredOn' ? 'Active' : 'Inactive';
+        await insertOne({
+          vm_name:            name,
+          ip_address:         ip,
+          os_hostname:        vm.hostname || null,
+          os_type:            vm.os_type  || null,
+          os_version:         vm.os_version || null,
+          cpu_cores:          vm.num_cpu  || 0,
+          ram_gb:             vm.memory_mb ? Math.round(vm.memory_mb / 1024) : 0,
+          mac_address:        Array.isArray(vm.macs) ? (vm.macs[0] || null) : null,
+          server_status:      status,
+          additional_remarks: `Synced from VMware Discovery (${vm.source_host})`,
+          created_by:         userId,
+          updated_by:         userId,
+        });
+        existingIps.add(ip);
+        created++;
+      } catch (e) {
+        errors.push({ source: 'vmware', name, ip, error: e.message });
+        skipped++;
+      }
+    }
+
+    // ── Proxmox: latest successful run per host ────────────────────────────
+    const { rows: proxmoxVms } = await db.query(`
+      SELECT v.name, v.ips, v.os_type, v.cpu_count, v.memory_mb,
+             v.disk_gb, v.status, v.source_host, v.node, v.vm_type
+      FROM proxmox_discovered_vms v
+      JOIN (
+        SELECT DISTINCT ON (host_id) id AS run_id
+        FROM proxmox_discovery_runs
+        WHERE status = 'success'
+        ORDER BY host_id, run_at DESC
+      ) lr ON v.run_id = lr.run_id
+    `);
+
+    for (const vm of proxmoxVms) {
+      const ip   = Array.isArray(vm.ips) ? vm.ips[0] : null;
+      const name = vm.name;
+      if (!ip || !name) { skipped++; continue; }
+      if (existingIps.has(ip)) { skipped++; continue; }
+      try {
+        const status = vm.status === 'running' ? 'Active' : 'Inactive';
+        await insertOne({
+          vm_name:            name,
+          ip_address:         ip,
+          os_type:            vm.os_type || null,
+          cpu_cores:          vm.cpu_count || 0,
+          ram_gb:             vm.memory_mb ? Math.round(vm.memory_mb / 1024) : 0,
+          server_status:      status,
+          additional_remarks: `Synced from Proxmox Discovery (${vm.source_host}, node: ${vm.node || ''})`,
+          created_by:         userId,
+          updated_by:         userId,
+        });
+        existingIps.add(ip);
+        created++;
+      } catch (e) {
+        errors.push({ source: 'proxmox', name, ip, error: e.message });
+        skipped++;
+      }
+    }
+
+    await audit.log({
+      user: req.user, action: 'SYNC_FROM_DISCOVERY', entityType: ENTITY,
+      details: { vmware: vmwareVms.length, proxmox: proxmoxVms.length, created, skipped },
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      vmwareTotal:  vmwareVms.length,
+      proxmoxTotal: proxmoxVms.length,
+      created,
+      skipped,
+      errors,
+    });
+  } catch (e) { next(e); }
+}
+
+module.exports = { list, get, create, update, remove, tagStats, checkIp, downloadTemplate, exportAssets, importAssets, viewPassword, syncFromDiscovery };
