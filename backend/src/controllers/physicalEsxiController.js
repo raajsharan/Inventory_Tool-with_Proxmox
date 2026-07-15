@@ -14,10 +14,9 @@ const EXAMPLE_PREFIX = 'PHYS';
 const EXAMPLE_LOCATION = 'Data Center 1';
 const EXAMPLE_NOTE = 'Example physical server';
 
-// Column order mirrors the Register Physical Server form sections:
-// Hardware Info → Rack Info → iDRAC → secondary/optional fields
+// Columns match the Register Physical Server form exactly:
+// Hardware Info → Rack Info → iDRAC
 const COLUMNS = [
-  // ── Primary / Hardware Information ─────────────────────────────────────────
   { key: 'vm_name',            header: 'Device Name *',      width: 22 },
   { key: 'ip_address',         header: 'Hosted IP *',         width: 18 },
   { key: 'server_status',      header: 'Server Status',       width: 16 },
@@ -29,25 +28,11 @@ const COLUMNS = [
   { key: 'ram_gb',             header: 'RAM (GB)',            width: 12 },
   { key: 'total_disks',        header: 'Total Disks',         width: 14 },
   { key: 'ome_status',         header: 'OME Status',          width: 14 },
-  // ── Rack Information ───────────────────────────────────────────────────────
   { key: 'rack_number',        header: 'Rack Number',         width: 16 },
   { key: 'server_position',    header: 'Server Position',     width: 16 },
   { key: 'additional_remarks', header: 'Additional Remarks',  width: 28 },
-  // ── iDRAC ──────────────────────────────────────────────────────────────────
   { key: 'idrac_ip',           header: 'iDRAC IP',            width: 16 },
   { key: 'idrac_enabled',      header: 'iDRAC Enabled',       width: 16 },
-  // ── Secondary / optional fields ────────────────────────────────────────────
-  { key: 'os_hostname',        header: 'OS Hostname',         width: 22 },
-  { key: 'hosted_ip',          header: 'Hosted IP (alt)',     width: 18 },
-  { key: 'asset_type',         header: 'Asset Type',          width: 18 },
-  { key: 'os_type',            header: 'OS Type',             width: 14 },
-  { key: 'os_version',         header: 'OS Version',          width: 22 },
-  { key: 'assigned_user',      header: 'Assigned User',       width: 18 },
-  { key: 'business_purpose',   header: 'Business Purpose',    width: 28 },
-  { key: 'asset_tag',          header: 'Asset Tag',           width: 16 },
-  { key: 'mac_address',        header: 'MAC Address',         width: 18 },
-  { key: 'asset_username',     header: 'Asset Username',      width: 18 },
-  { key: 'asset_password',     header: 'Asset Password',      width: 18 },
 ];
 
 const IP_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -160,11 +145,6 @@ async function downloadTemplate(_req, res, next) {
       rack_number: 'RACK-A1', server_position: 'U12',
       additional_remarks: 'remove this row before import',
       idrac_ip: '', idrac_enabled: 'FALSE',
-      os_hostname: `${EXAMPLE_PREFIX.toLowerCase()}-ex-01.corp.local`,
-      hosted_ip: '10.40.1.99', asset_type: 'Physical Server',
-      os_type: 'Linux', os_version: 'Ubuntu 22.04',
-      assigned_user: 'Example User', business_purpose: EXAMPLE_NOTE,
-      asset_tag: '', mac_address: '', asset_username: 'svc_admin', asset_password: 'secret',
     });
 
     const ws2 = wb.addWorksheet('Department Tag Ranges');
