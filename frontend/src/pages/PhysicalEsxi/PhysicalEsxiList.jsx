@@ -226,13 +226,16 @@ export default function PhysicalEsxiList() {
     );
   };
 
-  // ── Columns ───────────────────────────────────────────────────────────────
+  // ── Columns — order mirrors the Register Physical Server form ─────────────
   const allColumns = [
+    // ── Fixed: Device Name ──────────────────────────────────────────────────
     {
       key: 'vm_name', dataIndex: 'vm_name', fixed: 'left', width: 180,
       title: labelOf('vm_name', 'Device Name'),
       render: (v, r) => <Link to={`/physical-esxi/${r.id}`}>{v || '(unnamed)'}</Link>,
     },
+
+    // ── HARDWARE INFORMATION (top section of form) ──────────────────────────
     {
       key: 'ip_address', dataIndex: 'ip_address', width: 140,
       title: labelOf('ip_address', 'Hosted IP'), render: dash,
@@ -254,6 +257,10 @@ export default function PhysicalEsxiList() {
       title: labelOf('server_model', 'Server Model'), render: dash,
     },
     {
+      key: 'serial_number', dataIndex: 'serial_number', width: 150,
+      title: labelOf('serial_number', 'Serial Number'), render: dash,
+    },
+    {
       key: 'cpu_cores', dataIndex: 'cpu_cores', width: 100,
       title: labelOf('cpu_cores', 'CPU Cores'), align: 'right', render: numCell,
     },
@@ -262,33 +269,40 @@ export default function PhysicalEsxiList() {
       title: labelOf('ram_gb', 'RAM (GB)'), align: 'right', render: numCell,
     },
     {
-      key: 'total_disks', dataIndex: 'total_disks', width: 100,
-      title: labelOf('total_disks', 'Disks'), align: 'right', render: numCell,
+      key: 'total_disks', dataIndex: 'total_disks', width: 110,
+      title: labelOf('total_disks', 'Total Disks'), align: 'right', render: numCell,
     },
     {
-      key: 'ome_status', dataIndex: 'ome_status', width: 130,
-      title: labelOf('ome_status', 'OME Support'), render: omeTag,
+      key: 'ome_status', dataIndex: 'ome_status', width: 150,
+      title: labelOf('ome_status', 'OME Support Status'), render: omeTag,
+    },
+
+    // ── RACK INFORMATION (second section of form) ───────────────────────────
+    {
+      key: 'rack_number', dataIndex: 'rack_number', width: 130,
+      title: labelOf('rack_number', 'Rack Number'), render: dash,
     },
     {
-      key: 'rack_number', dataIndex: 'rack_number', width: 120,
-      title: labelOf('rack_number', 'Rack'), render: dash,
+      key: 'server_position', dataIndex: 'server_position', width: 140,
+      title: labelOf('server_position', 'Server Position (U)'), render: dash,
     },
     {
-      key: 'server_position', dataIndex: 'server_position', width: 110,
-      title: labelOf('server_position', 'Position (U)'), render: dash,
+      key: 'additional_remarks', dataIndex: 'additional_remarks', width: 220,
+      title: labelOf('additional_remarks', 'Additional Notes'), ellipsis: true,
+      render: v => v ? <Tooltip title={v}>{v}</Tooltip> : dash(v),
     },
+
+    // ── iDRAC (bottom hardware section of form) ─────────────────────────────
     {
-      key: 'serial_number', dataIndex: 'serial_number', width: 150,
-      title: labelOf('serial_number', 'Serial Number'), render: dash,
-    },
-    {
-      key: 'idrac_enabled', dataIndex: 'idrac_enabled', width: 90,
-      title: labelOf('idrac_enabled', 'iDRAC'), align: 'center', render: yesNo,
-    },
-    {
-      key: 'idrac_ip', dataIndex: 'idrac_ip', width: 130,
+      key: 'idrac_ip', dataIndex: 'idrac_ip', width: 140,
       title: labelOf('idrac_ip', 'iDRAC IP'), render: dash,
     },
+    {
+      key: 'idrac_enabled', dataIndex: 'idrac_enabled', width: 110,
+      title: labelOf('idrac_enabled', 'iDRAC Enabled'), align: 'center', render: yesNo,
+    },
+
+    // ── Secondary / extended fields ─────────────────────────────────────────
     {
       key: 'os_type', dataIndex: 'os_type', width: 110,
       title: labelOf('os_type', 'OS Type'), render: dash,
@@ -299,7 +313,7 @@ export default function PhysicalEsxiList() {
     },
     {
       key: 'os_hostname', dataIndex: 'os_hostname', width: 180,
-      title: labelOf('os_hostname', 'Hostname'), render: dash,
+      title: labelOf('os_hostname', 'OS Hostname'), render: dash,
     },
     {
       key: 'asset_type', dataIndex: 'asset_type', width: 140,
@@ -331,17 +345,16 @@ export default function PhysicalEsxiList() {
       title: labelOf('asset_password', 'Asset Password'),
       render: pwCell,
     },
-    {
-      key: 'additional_remarks', dataIndex: 'additional_remarks', width: 220,
-      title: labelOf('additional_remarks', 'Notes'), ellipsis: true,
-      render: v => v ? <Tooltip title={v}>{v}</Tooltip> : dash(v),
-    },
+
+    // ── Audit ───────────────────────────────────────────────────────────────
     { key: 'created_by_name', dataIndex: 'created_by_name', width: 160, title: 'Submitted By', render: dash },
     { key: 'created_at', dataIndex: 'created_at', width: 170, title: 'Created',
       render: v => v ? new Date(v).toLocaleString() : dash(v) },
     { key: 'updated_by_name', dataIndex: 'updated_by_name', width: 160, title: 'Modified By', render: dash },
     { key: 'updated_at', dataIndex: 'updated_at', width: 170, title: 'Modified',
       render: v => v ? new Date(v).toLocaleString() : dash(v) },
+
+    // ── Fixed: Actions ──────────────────────────────────────────────────────
     {
       key: '__actions__', title: 'Actions', fixed: 'right', width: 110,
       render: (_, r) => (
