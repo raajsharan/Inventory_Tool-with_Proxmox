@@ -17,6 +17,7 @@ export default function PhysicalEsxiImport() {
       title="Import Physical & ESXi Servers from Excel"
       templateFilename="physical-esxi-template.xlsx"
       importHint={HINT}
+      disableVerifyByIp
     />
   );
 }

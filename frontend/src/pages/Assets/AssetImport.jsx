@@ -20,11 +20,12 @@ export default function AssetImport({
   title = 'Excel Smart Import',
   templateFilename = 'asset-import-template.xlsx',
   importHint = null,
+  disableVerifyByIp = false,
 }) {
   const targetLabel = TARGET_LABELS[apiPrefix] || 'Selected List';
 
   const [file, setFile] = useState(null);
-  const [verifyByIp, setVerifyByIp] = useState(true);
+  const [verifyByIp, setVerifyByIp] = useState(!disableVerifyByIp);
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -206,16 +207,18 @@ export default function AssetImport({
         }
       />
 
-      <Checkbox
-        checked={verifyByIp}
-        onChange={(e) => { setVerifyByIp(e.target.checked); clearAll(); }}
-        style={{ marginBottom: 12 }}
-      >
-        Verify if mapped fields differ from existing data (by IP)
-        <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-          — when an IP already exists, only empty fields will be filled from the file
-        </Typography.Text>
-      </Checkbox>
+      {!disableVerifyByIp && (
+        <Checkbox
+          checked={verifyByIp}
+          onChange={(e) => { setVerifyByIp(e.target.checked); clearAll(); }}
+          style={{ marginBottom: 12 }}
+        >
+          Verify if mapped fields differ from existing data (by IP)
+          <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+            — when an IP already exists, only empty fields will be filled from the file
+          </Typography.Text>
+        </Checkbox>
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <Space wrap>
