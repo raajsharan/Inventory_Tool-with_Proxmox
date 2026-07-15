@@ -594,13 +594,12 @@ export default function PhysicalEsxiList() {
         okButtonProps={{ icon: <SyncOutlined /> }}
       >
         <Typography.Paragraph>
-          This will copy <b>all VMs from the latest VMware ESXi and Proxmox VE discovery runs</b> into
-          Physical &amp; ESXi Servers.
+          This will copy the <b>ESXi / vCenter host addresses</b> and <b>Proxmox VE host addresses</b>
+          registered in VM Discovery into Physical &amp; ESXi Servers.
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary">
-          Records with an IP address already present in this list will be skipped automatically.
-          Fields populated: Device Name, Hosted IP, OS Type, OS Version, CPU Cores, RAM (GB),
-          Server Status, MAC Address (VMware), and source note in Additional Remarks.
+          Only the host machines themselves are copied — not the VMs running on them.
+          Hosts whose IP is already present in this list will be skipped automatically.
         </Typography.Paragraph>
       </Modal>
 
@@ -615,10 +614,10 @@ export default function PhysicalEsxiList() {
           <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Row gutter={16}>
               <Col span={8}>
-                <Statistic title="VMware VMs Found" value={syncResult.vmwareTotal} />
+                <Statistic title="ESXi Hosts Found" value={syncResult.esxiTotal} />
               </Col>
               <Col span={8}>
-                <Statistic title="Proxmox VMs Found" value={syncResult.proxmoxTotal} />
+                <Statistic title="Proxmox Hosts Found" value={syncResult.proxmoxTotal} />
               </Col>
             </Row>
             <Row gutter={16}>
