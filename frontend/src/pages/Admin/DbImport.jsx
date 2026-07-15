@@ -21,11 +21,15 @@ const TARGET_TABLES = [
 ];
 
 const TARGET_FIELDS = [
+  // Common fields (all inventory tables)
   'vm_name', 'os_hostname', 'ip_address', 'asset_type', 'os_type', 'os_version',
   'assigned_user', 'department', 'business_purpose', 'server_status', 'patching_type',
   'server_patch_type', 'patching_schedule', 'location', 'eol_status', 'serial_number',
   'ome_status', 'hosted_ip', 'asset_tag', 'asset_username', 'asset_password',
-  'additional_remarks', 'manage_engine_installed', 'tenable_installed', 'idrac_enabled',
+  'additional_remarks', 'mac_address', 'idrac_enabled', 'idrac_ip',
+  'manage_engine_installed', 'tenable_installed',
+  // Physical & ESXi server specific fields
+  'server_model', 'cpu_cores', 'ram_gb', 'total_disks', 'rack_number', 'server_position',
 ];
 
 const REQUIRED_FIELDS = new Set(['vm_name', 'ip_address']);

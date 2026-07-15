@@ -23,9 +23,18 @@ const COLUMN_ALIASES = {
   asset_username:        ['asset username', 'username', 'asset_username'],
   asset_password:        ['asset password', 'password', 'asset_password', 'asset_password_encrypted'],
   additional_remarks:    ['additional remarks', 'remarks', 'notes', 'comments', 'additional_remarks'],
+  mac_address:           ['mac address', 'mac', 'mac addr', 'macaddress', 'mac_address'],
+  idrac_ip:              ['idrac ip', 'idrac ip address', 'drac ip', 'idrac_ip'],
+  idrac_enabled:         ['idrac enabled', 'idrac enabled flag', 'idrac_enabled'],
   manage_engine_installed: ['manageengine installed', 'manage engine installed', 'manageengine', 'me', 'manage_engine_installed'],
   tenable_installed:     ['tenable installed', 'tenable', 'tenable_installed'],
-  idrac_enabled:         ['idrac enabled', 'idrac', 'idrac_enabled'],
+  // Physical & ESXi server specific fields
+  server_model:          ['server model', 'model', 'hardware model', 'server_model'],
+  cpu_cores:             ['cpu cores', 'cores', 'cpu count', 'processor cores', 'cpu_cores'],
+  ram_gb:                ['ram gb', 'ram', 'memory gb', 'total ram', 'ram_gb'],
+  total_disks:           ['total disks', 'disk count', 'number of disks', 'total_disks'],
+  rack_number:           ['rack number', 'rack', 'rack no', 'rack_number'],
+  server_position:       ['server position', 'position', 'rack unit', 'u position', 'server_position'],
 };
 
 function normalize(s) {

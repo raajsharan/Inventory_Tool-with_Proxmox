@@ -27,8 +27,16 @@ const COLUMN_ALIASES = {
   asset_password: ['asset password', 'password'],
   additional_remarks: ['additional remarks', 'remarks', 'notes', 'comments'],
   manage_engine_installed: ['manageengine installed', 'manage engine installed', 'manageengine', 'me'],
-  tenable_installed: ['tenable installed', 'tenable'],
-  idrac_enabled: ['idrac enabled', 'idrac'],
+  tenable_installed:       ['tenable installed', 'tenable'],
+  idrac_enabled:           ['idrac enabled', 'idrac enabled flag'],
+  mac_address:             ['mac address', 'mac', 'mac addr', 'macaddress'],
+  idrac_ip:                ['idrac ip', 'idrac ip address', 'drac ip'],
+  server_model:            ['server model', 'model', 'hardware model'],
+  cpu_cores:               ['cpu cores', 'cores', 'cpu count', 'processor cores'],
+  ram_gb:                  ['ram gb', 'ram', 'memory gb', 'total ram'],
+  total_disks:             ['total disks', 'disk count', 'number of disks'],
+  rack_number:             ['rack number', 'rack', 'rack no'],
+  server_position:         ['server position', 'position', 'rack unit', 'u position'],
 };
 
 const EOL_ALIASES = {
