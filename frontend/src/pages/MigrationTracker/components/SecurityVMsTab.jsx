@@ -132,12 +132,16 @@ export default function SecurityVMsTab({ projectId, hiddenColumns = [] }) {
   ];
 
   const summaryCards = summary ? [
-    { label: 'Total VMs',    value: summary.total },
-    { label: 'Migrated',     value: summary.migrated,    color: '#52c41a' },
-    { label: 'Pending',      value: summary.pending,     color: '#fa8c16' },
-    { label: 'In Progress',  value: summary.in_progress, color: '#1677ff' },
-    { label: 'Blocked',      value: summary.blocked,     color: '#ff4d4f' },
-    { label: 'Powered Off',  value: summary.powered_off  },
+    { label: 'Total VMs',     value: summary.total },
+    { label: 'Not Started',   value: summary.not_started },
+    { label: 'Awaiting',      value: summary.awaiting_confirmation, color: '#fa8c16' },
+    { label: 'In Progress',   value: summary.in_progress,           color: '#1677ff' },
+    { label: 'Completed',     value: summary.completed,             color: '#52c41a' },
+    { label: 'Cleaned up',    value: summary.cleaned_up,            color: '#13c2c2' },
+    { label: 'To be Deleted', value: summary.to_be_deleted,         color: '#fa541c' },
+    { label: 'Blocked',       value: summary.blocked,               color: '#ff4d4f' },
+    { label: 'Deleted',       value: summary.deleted_count },
+    { label: 'Powered Off',   value: summary.powered_off },
   ] : [];
 
   return (

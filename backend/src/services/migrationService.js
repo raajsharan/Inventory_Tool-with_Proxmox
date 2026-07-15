@@ -343,13 +343,14 @@ async function vmSummary(table, projectId = null) {
     SELECT
       COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                                                        AS total,
       COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)::int                  AS migrated,
-      COUNT(*) FILTER (WHERE migration_status != 'Completed' AND cleared_at IS NULL)::int                    AS pending,
       COUNT(*) FILTER (WHERE migration_status = 'Not Started'           AND cleared_at IS NULL)::int         AS not_started,
       COUNT(*) FILTER (WHERE migration_status = 'Awaiting confirmation' AND cleared_at IS NULL)::int         AS awaiting_confirmation,
       COUNT(*) FILTER (WHERE migration_status = 'In Progress'           AND cleared_at IS NULL)::int         AS in_progress,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed'             AND cleared_at IS NULL)::int         AS completed,
       COUNT(*) FILTER (WHERE migration_status = 'Cleaned up'            AND cleared_at IS NULL)::int         AS cleaned_up,
       COUNT(*) FILTER (WHERE migration_status = 'To be Deleted'         AND cleared_at IS NULL)::int         AS to_be_deleted,
       COUNT(*) FILTER (WHERE migration_status = 'Blocked'               AND cleared_at IS NULL)::int         AS blocked,
+      COUNT(*) FILTER (WHERE cleared_at IS NOT NULL)::int                                                    AS deleted_count,
       COUNT(*) FILTER (WHERE LOWER(powerstate) != 'poweredon'           AND cleared_at IS NULL)::int         AS powered_off,
       COALESCE(SUM(cpus)       FILTER (WHERE cleared_at IS NULL),0)::int                                     AS total_vcpus,
       COALESCE(SUM(memory_mib) FILTER (WHERE cleared_at IS NULL),0)::bigint                                  AS total_memory_mib,
@@ -954,25 +955,39 @@ async function patchCustomVM(id, fields) {
 
 async function customVMSummary(tabId) {
   const tid = parseInt(tabId, 10);
-  if (isNaN(tid)) return { total: 0, migrated: 0, pending: 0, in_progress: 0, blocked: 0, powered_off: 0 };
+  if (isNaN(tid)) return {
+    total: 0, migrated: 0, not_started: 0, awaiting_confirmation: 0,
+    in_progress: 0, completed: 0, cleaned_up: 0, to_be_deleted: 0,
+    blocked: 0, deleted_count: 0, powered_off: 0,
+  };
   const { rows } = await db.query(`
     SELECT
-      COUNT(*) FILTER (WHERE cleared_at IS NULL)                                        AS total,
-      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)  AS migrated,
-      COUNT(*) FILTER (WHERE migration_status = 'Not Started' AND cleared_at IS NULL)   AS pending,
-      COUNT(*) FILTER (WHERE migration_status = 'In Progress' AND cleared_at IS NULL)   AS in_progress,
-      COUNT(*) FILTER (WHERE migration_status = 'Blocked' AND cleared_at IS NULL)       AS blocked,
-      COUNT(*) FILTER (WHERE powerstate ILIKE '%off%' AND cleared_at IS NULL)           AS powered_off
+      COUNT(*) FILTER (WHERE cleared_at IS NULL)                                                        AS total,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)                  AS migrated,
+      COUNT(*) FILTER (WHERE migration_status = 'Not Started'           AND cleared_at IS NULL)         AS not_started,
+      COUNT(*) FILTER (WHERE migration_status = 'Awaiting confirmation' AND cleared_at IS NULL)         AS awaiting_confirmation,
+      COUNT(*) FILTER (WHERE migration_status = 'In Progress'           AND cleared_at IS NULL)         AS in_progress,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed'             AND cleared_at IS NULL)         AS completed,
+      COUNT(*) FILTER (WHERE migration_status = 'Cleaned up'            AND cleared_at IS NULL)         AS cleaned_up,
+      COUNT(*) FILTER (WHERE migration_status = 'To be Deleted'         AND cleared_at IS NULL)         AS to_be_deleted,
+      COUNT(*) FILTER (WHERE migration_status = 'Blocked'               AND cleared_at IS NULL)         AS blocked,
+      COUNT(*) FILTER (WHERE cleared_at IS NOT NULL)                                                    AS deleted_count,
+      COUNT(*) FILTER (WHERE powerstate ILIKE '%off%'                   AND cleared_at IS NULL)         AS powered_off
     FROM migration_custom_vms WHERE custom_tab_id = $1
   `, [tid]);
   const r = rows[0];
   return {
-    total:       parseInt(r.total, 10),
-    migrated:    parseInt(r.migrated, 10),
-    pending:     parseInt(r.pending, 10),
-    in_progress: parseInt(r.in_progress, 10),
-    blocked:     parseInt(r.blocked, 10),
-    powered_off: parseInt(r.powered_off, 10),
+    total:                parseInt(r.total, 10),
+    migrated:             parseInt(r.migrated, 10),
+    not_started:          parseInt(r.not_started, 10),
+    awaiting_confirmation:parseInt(r.awaiting_confirmation, 10),
+    in_progress:          parseInt(r.in_progress, 10),
+    completed:            parseInt(r.completed, 10),
+    cleaned_up:           parseInt(r.cleaned_up, 10),
+    to_be_deleted:        parseInt(r.to_be_deleted, 10),
+    blocked:              parseInt(r.blocked, 10),
+    deleted_count:        parseInt(r.deleted_count, 10),
+    powered_off:          parseInt(r.powered_off, 10),
   };
 }
 

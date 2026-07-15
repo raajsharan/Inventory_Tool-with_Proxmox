@@ -187,13 +187,17 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
   ];
 
   const summaryCards = summary2 ? [
-    { label: 'Total VMs',    value: summary2.total },
-    { label: 'Migrated',     value: summary2.migrated,    color: '#52c41a' },
-    { label: 'Pending',      value: summary2.pending,     color: '#fa8c16' },
-    { label: 'In Progress',  value: summary2.in_progress, color: '#1677ff' },
-    { label: 'Blocked',      value: summary2.blocked,     color: '#ff4d4f' },
-    { label: 'Powered Off',  value: summary2.powered_off                   },
-    { label: 'Total vCPUs',  value: summary2.total_vcpus                  },
+    { label: 'Total VMs',            value: summary2.total },
+    { label: 'Not Started',          value: summary2.not_started },
+    { label: 'Awaiting',             value: summary2.awaiting_confirmation, color: '#fa8c16' },
+    { label: 'In Progress',          value: summary2.in_progress,           color: '#1677ff' },
+    { label: 'Completed',            value: summary2.completed,             color: '#52c41a' },
+    { label: 'Cleaned up',           value: summary2.cleaned_up,            color: '#13c2c2' },
+    { label: 'To be Deleted',        value: summary2.to_be_deleted,         color: '#fa541c' },
+    { label: 'Blocked',              value: summary2.blocked,               color: '#ff4d4f' },
+    { label: 'Deleted',              value: summary2.deleted_count },
+    { label: 'Powered Off',          value: summary2.powered_off },
+    { label: 'Total vCPUs',          value: summary2.total_vcpus },
   ] : [];
 
   return (
