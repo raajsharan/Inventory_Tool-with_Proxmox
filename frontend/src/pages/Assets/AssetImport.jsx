@@ -19,6 +19,7 @@ export default function AssetImport({
   apiPrefix = '/assets',
   title = 'Excel Smart Import',
   templateFilename = 'asset-import-template.xlsx',
+  importHint = null,
 }) {
   const targetLabel = TARGET_LABELS[apiPrefix] || 'Selected List';
 
@@ -196,10 +197,12 @@ export default function AssetImport({
         type="info" showIcon
         style={{ marginBottom: 12 }}
         message={
-          <span>
-            Import compares incoming headers with template fields using flexible matching (spacing, casing, and common aliases).
-            EOL Status also accepts <code>InSupport</code>, <code>EOL</code>, <code>Decom</code>, and <code>Not Applicable</code> (including <code>NA</code>/<code>N/A</code> variants).
-          </span>
+          importHint ?? (
+            <span>
+              Import compares incoming headers with template fields using flexible matching (spacing, casing, and common aliases).
+              EOL Status also accepts <code>InSupport</code>, <code>EOL</code>, <code>Decom</code>, and <code>Not Applicable</code> (including <code>NA</code>/<code>N/A</code> variants).
+            </span>
+          )
         }
       />
 

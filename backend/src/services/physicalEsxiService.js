@@ -6,15 +6,13 @@ const decomSvc = require('./decommissionService');
 
 const TABLE = 'physical_esxi_servers';
 
+// Matches the Register Physical Server form exactly.
+// asset_tag kept for the auto-assignment tagging system.
 const ASSET_COLUMNS = [
-  'vm_name','os_hostname','ip_address','asset_type','os_type','os_version',
-  'assigned_user','department','business_purpose','server_status',
-  'location','serial_number','ome_status','hosted_ip','asset_tag',
-  'asset_username','additional_remarks','mac_address','idrac_enabled','idrac_ip',
-  'server_model','cpu_cores','ram_gb','total_disks','rack_number','server_position',
-  // Intentionally excluded: manage_engine_installed, tenable_installed,
-  // eol_status, patching_type, server_patch_type, patching_schedule
-  // (columns dropped — not applicable to physical server registration).
+  'vm_name', 'ip_address', 'server_status', 'department', 'location',
+  'server_model', 'serial_number', 'cpu_cores', 'ram_gb', 'total_disks',
+  'ome_status', 'rack_number', 'server_position', 'additional_remarks',
+  'idrac_ip', 'idrac_enabled', 'asset_tag',
 ];
 
 function mapBody(body) {
