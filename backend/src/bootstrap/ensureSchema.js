@@ -446,13 +446,26 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS server_patch_type`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_schedule`,
 
-  // ── Microsoft Teams notification config (single-row, singleton guard) ─────────
   // ── soft-delete (cleared before migration) column on all migration VM/host tables
   `ALTER TABLE migration_bomgar_vms      ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
   `ALTER TABLE migration_security_vms    ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
   `ALTER TABLE migration_standalone_esxi ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
   `ALTER TABLE migration_hosts           ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
   `ALTER TABLE migration_custom_vms      ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+
+  // ── migration_status & notes added after initial table creation (ADD COLUMN is idempotent)
+  `ALTER TABLE migration_bomgar_vms      ADD COLUMN IF NOT EXISTS migration_status VARCHAR(64) NOT NULL DEFAULT 'Not Started'`,
+  `ALTER TABLE migration_security_vms    ADD COLUMN IF NOT EXISTS migration_status VARCHAR(64) NOT NULL DEFAULT 'Not Started'`,
+  `ALTER TABLE migration_standalone_esxi ADD COLUMN IF NOT EXISTS migration_status VARCHAR(64) NOT NULL DEFAULT 'Not Started'`,
+  `ALTER TABLE migration_custom_vms      ADD COLUMN IF NOT EXISTS migration_status VARCHAR(50)          DEFAULT 'Not Started'`,
+  `ALTER TABLE migration_bomgar_vms      ADD COLUMN IF NOT EXISTS notes TEXT`,
+  `ALTER TABLE migration_security_vms    ADD COLUMN IF NOT EXISTS notes TEXT`,
+  `ALTER TABLE migration_standalone_esxi ADD COLUMN IF NOT EXISTS notes TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_migration_bomgar_status     ON migration_bomgar_vms(migration_status)`,
+  `CREATE INDEX IF NOT EXISTS idx_migration_security_status   ON migration_security_vms(migration_status)`,
+  `CREATE INDEX IF NOT EXISTS idx_migration_standalone_status ON migration_standalone_esxi(migration_status)`,
+
+  // ── Microsoft Teams notification config (single-row, singleton guard) ─────────
 
   `CREATE TABLE IF NOT EXISTS teams_notification_config (
       id                      SERIAL PRIMARY KEY,
