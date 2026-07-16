@@ -13,6 +13,7 @@ import api from '../../api/client';
 // Each entry below describes one dropdown category and (optionally)
 // which parent category it links to (used by OS Versions -> OS Types).
 const CATEGORIES = [
+  { key: 'asset_type',        label: 'Asset Types',       icon: <AppstoreOutlined /> },
   { key: 'location',          label: 'Locations',         icon: <EnvironmentOutlined /> },
   { key: 'os_type',           label: 'OS Types',          icon: <DesktopOutlined /> },
   { key: 'os_version',        label: 'OS Versions',       icon: <DesktopOutlined />, parentCategory: 'os_type', parentLabel: 'OS Types' },

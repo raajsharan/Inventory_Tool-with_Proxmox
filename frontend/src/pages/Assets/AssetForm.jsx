@@ -274,11 +274,11 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           ><Input /></Form.Item>
         );
       case 'asset_type':
-        return wrap(overridableFormItem({
-          fieldKey: 'asset_type', name: 'assetType',
-          label: labelOf('asset_type', 'Asset Type'),
-          defaultChild: <Input placeholder="e.g. Virtual Server" />,
-        }));
+        return wrap(
+          <Form.Item name="assetType" label={labelOf('asset_type', 'Asset Type')}>
+            <Select allowClear showSearch optionFilterProp="label" placeholder="Select Asset Type" options={opts('asset_type')} />
+          </Form.Item>
+        );
       case 'os_type':
         return wrap(
           <Form.Item name="osType" label={labelOf('os_type', 'OS Type')}>

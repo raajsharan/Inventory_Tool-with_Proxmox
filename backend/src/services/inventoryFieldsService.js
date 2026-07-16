@@ -64,7 +64,7 @@ const FIELD_DEFAULTS = {
   vm_name:                 { label: 'VM Name',                 type: 'text',     required: true },
   os_hostname:             { label: 'OS Hostname',             type: 'text' },
   ip_address:              { label: 'IP Address',              type: 'text',     required: true, frozen: true, frozen_reason: 'IP uniqueness validation' },
-  asset_type:              { label: 'Asset Type',              type: 'text' },
+  asset_type:              { label: 'Asset Type',              type: 'dropdown', linked_to_table: true, frozen: true, frozen_reason: 'Linked to dropdown_master' },
   os_type:                 { label: 'OS Type',                 type: 'dropdown', linked_to_table: true, frozen: true, frozen_reason: 'Linked to dropdown_master' },
   os_version:              { label: 'OS Version',              type: 'dropdown', linked_to_table: true, frozen: true, frozen_reason: 'Linked to dropdown_master' },
   mac_address:             { label: 'MAC Address',             type: 'text',     required: true },
