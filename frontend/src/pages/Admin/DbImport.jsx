@@ -30,6 +30,7 @@ const TARGET_FIELDS = [
   'manage_engine_installed', 'tenable_installed',
   // Physical & ESXi server specific fields
   'server_model', 'cpu_cores', 'ram_gb', 'total_disks', 'rack_number', 'server_position',
+  'idrac_username', 'idrac_password',
 ];
 
 const REQUIRED_FIELDS = new Set(['vm_name', 'ip_address']);

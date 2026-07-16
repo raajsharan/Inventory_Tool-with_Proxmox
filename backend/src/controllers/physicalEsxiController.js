@@ -21,6 +21,7 @@ const COLUMNS = [
   { key: 'ip_address',         header: 'Hosted IP *',         width: 18 },
   { key: 'server_status',      header: 'Server Status',       width: 16 },
   { key: 'department',         header: 'Department',          width: 16 },
+  { key: 'assigned_user',      header: 'Owner',               width: 18 },
   { key: 'location',           header: 'Location',            width: 16 },
   { key: 'server_model',       header: 'Server Model',        width: 22 },
   { key: 'serial_number',      header: 'Serial Number',       width: 18 },
@@ -38,6 +39,8 @@ const COLUMNS = [
   { key: 'additional_remarks', header: 'Additional Remarks',  width: 28 },
   { key: 'idrac_ip',           header: 'iDRAC IP',            width: 16 },
   { key: 'idrac_enabled',      header: 'iDRAC Enabled',       width: 16 },
+  { key: 'idrac_username',     header: 'iDRAC Username',      width: 18 },
+  { key: 'idrac_password',     header: 'iDRAC Password',      width: 18 },
 ];
 
 const IP_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -123,6 +126,14 @@ async function viewPassword(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function viewIdracPassword(req, res, next) {
+  try {
+    const password = await svc.viewIdracPassword(req.params.id);
+    await audit.log({ user: req.user, action: 'VIEW_PASSWORD', entityType: 'physical_esxi_idrac', entityId: req.params.id, ipAddress: req.ip });
+    res.json({ password: password || '' });
+  } catch (e) { next(e); }
+}
+
 async function checkIp(req, res, next) {
   try {
     const ip = String(req.query.ip || '').trim();
@@ -144,14 +155,14 @@ async function downloadTemplate(_req, res, next) {
 
     ws.addRow({
       vm_name: `${EXAMPLE_PREFIX}-EX-01`, ip_address: '10.40.1.99',
-      server_status: 'Active', department: 'IT Team', location: EXAMPLE_LOCATION,
+      server_status: 'Active', department: 'IT Team', assigned_user: 'Jane Doe', location: EXAMPLE_LOCATION,
       server_model: 'Dell PowerEdge R750', serial_number: `${EXAMPLE_PREFIX}-001`,
       asset_type: 'Physical Server', os_type: 'Linux', os_version: 'Ubuntu 22.04',
       asset_username: 'svc_admin', asset_password: 'secret',
       cpu_cores: 32, ram_gb: 128, total_disks: 4, ome_status: 'Active',
       rack_number: 'RACK-A1', server_position: 'U12',
       additional_remarks: 'remove this row before import',
-      idrac_ip: '', idrac_enabled: 'FALSE',
+      idrac_ip: '', idrac_enabled: 'FALSE', idrac_username: 'root', idrac_password: '',
     });
 
     const ws2 = wb.addWorksheet('Department Tag Ranges');
@@ -199,6 +210,7 @@ async function exportAssets(req, res, next) {
       ws.addRow({
         ...a,
         asset_password: a.hasPassword ? '••••••' : '',
+        idrac_password: a.hasIdracPassword ? '••••••' : '',
         idrac_enabled: a.idrac_enabled ? 'TRUE' : 'FALSE',
       });
     }
@@ -374,4 +386,4 @@ async function syncFromDiscovery(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { list, get, create, update, remove, tagStats, checkIp, downloadTemplate, exportAssets, importAssets, viewPassword, syncFromDiscovery };
+module.exports = { list, get, create, update, remove, tagStats, checkIp, downloadTemplate, exportAssets, importAssets, viewPassword, viewIdracPassword, syncFromDiscovery };

@@ -31,6 +31,8 @@ const COLUMN_ALIASES = {
   idrac_enabled:           ['idrac enabled', 'idrac enabled flag'],
   mac_address:             ['mac address', 'mac', 'mac addr', 'macaddress'],
   idrac_ip:                ['idrac ip', 'idrac ip address', 'drac ip'],
+  idrac_username:          ['idrac username', 'idrac user', 'drac username'],
+  idrac_password:          ['idrac password', 'drac password'],
   server_model:            ['server model', 'model', 'hardware model'],
   cpu_cores:               ['cpu cores', 'cores', 'cpu count', 'processor cores'],
   ram_gb:                  ['ram gb', 'ram', 'memory gb', 'total ram'],

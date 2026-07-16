@@ -446,6 +446,10 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number     VARCHAR(100)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100)`,
 
+  // ── iDRAC credentials (separate from asset_username/asset_password)
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_username           VARCHAR(255)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_password_encrypted TEXT`,
+
   // ── Remove fields not applicable to physical/ESXi servers
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS tenable_installed`,

@@ -48,6 +48,8 @@ const FIELD_GROUP_MAP = {
   serial_number:           'iDRAC',
   ome_status:              'iDRAC',
   idrac_ip:                'iDRAC',
+  idrac_username:          'iDRAC',
+  idrac_password:          'iDRAC',
   // Physical Server dedicated fields
   server_model:    'Hardware',
   cpu_cores:       'Hardware',
@@ -88,6 +90,8 @@ const FIELD_DEFAULTS = {
   tenable_installed:       { label: 'Tenable Installed',       type: 'toggle' },
   idrac_enabled:           { label: 'iDRAC Enabled',           type: 'toggle' },
   idrac_ip:                { label: 'iDRAC IP Address',        type: 'text' },
+  idrac_username:          { label: 'iDRAC Username',          type: 'text' },
+  idrac_password:          { label: 'iDRAC Password',          type: 'text',     frozen: true, frozen_reason: 'Encrypted credential' },
   // Physical Server dedicated fields
   server_model:    { label: 'Server Model',       type: 'dropdown', linked_to_table: true, frozen: true, frozen_reason: 'Linked to dropdown_master (server_model)' },
   cpu_cores:       { label: 'CPU Cores',          type: 'number' },
@@ -108,7 +112,7 @@ const PAGE_KEYS = new Set(['assets', 'beijing_assets', 'ext_assets', 'physical_e
 // that drives the Register form, download template, and import mapping —
 // automatically reflects in the "Change Field Types" editor with no second
 // edit required.
-const PHYSICAL_ESXI_ALLOWED = new Set([...physicalEsxiSvc.ASSET_COLUMNS, 'asset_password']);
+const PHYSICAL_ESXI_ALLOWED = new Set([...physicalEsxiSvc.ASSET_COLUMNS, 'asset_password', 'idrac_password']);
 function physicalEsxiExcluded() {
   return new Set(Object.keys(FIELD_DEFAULTS).filter(k => !PHYSICAL_ESXI_ALLOWED.has(k)));
 }

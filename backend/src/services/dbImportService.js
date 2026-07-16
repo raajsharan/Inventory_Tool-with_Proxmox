@@ -26,6 +26,8 @@ const COLUMN_ALIASES = {
   mac_address:           ['mac address', 'mac', 'mac addr', 'macaddress', 'mac_address'],
   idrac_ip:              ['idrac ip', 'idrac ip address', 'drac ip', 'idrac_ip'],
   idrac_enabled:         ['idrac enabled', 'idrac enabled flag', 'idrac_enabled'],
+  idrac_username:        ['idrac username', 'idrac user', 'drac username', 'idrac_username'],
+  idrac_password:        ['idrac password', 'drac password', 'idrac_password'],
   manage_engine_installed: ['manageengine installed', 'manage engine installed', 'manageengine', 'me', 'manage_engine_installed'],
   tenable_installed:     ['tenable installed', 'tenable', 'tenable_installed'],
   // Physical & ESXi server specific fields

@@ -517,6 +517,12 @@ ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks     INTEG
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number     VARCHAR(100);
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100);
 
+-- iDRAC credentials (separate from the general asset_username/asset_password
+-- pair) — idrac_password_encrypted is AES-256-GCM ciphertext, same pattern
+-- as asset_password_encrypted.
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_username           VARCHAR(255);
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_password_encrypted TEXT;
+
 -- Remove fields not applicable to physical servers (patching / tools / EOL
 -- are handled at the VM / OS layer, not on bare-metal host registration).
 ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed;

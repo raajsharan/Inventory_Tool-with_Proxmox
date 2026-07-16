@@ -36,10 +36,11 @@ const PAGE_KEY = 'physical_esxi_servers';
 const FIELD_WIDTHS = {
   vm_name: { xs: 24, md: 8 }, ip_address: { xs: 24, md: 8 },
   asset_type: { xs: 24, md: 8 }, os_type: { xs: 24, md: 8 }, os_version: { xs: 24, md: 8 },
-  department: { xs: 24, md: 8 }, asset_tag: { xs: 24, md: 24 },
+  department: { xs: 24, md: 8 }, asset_tag: { xs: 24, md: 24 }, assigned_user: { xs: 24, md: 8 },
   server_status: { xs: 24, md: 8 }, location: { xs: 24, md: 8 },
   asset_username: { xs: 24, md: 8 }, asset_password: { xs: 24, md: 8 }, additional_remarks: { xs: 24, md: 24 },
   idrac_enabled: { xs: 24, md: 8 }, serial_number: { xs: 24, md: 8 }, ome_status: { xs: 24, md: 8 }, idrac_ip: { xs: 24, md: 8 },
+  idrac_username: { xs: 24, md: 8 }, idrac_password: { xs: 24, md: 8 },
   server_model: { xs: 24, md: 8 }, cpu_cores: { xs: 24, md: 8 }, ram_gb: { xs: 24, md: 8 }, total_disks: { xs: 24, md: 8 },
   rack_number: { xs: 24, md: 8 }, server_position: { xs: 24, md: 8 },
 };
@@ -106,6 +107,8 @@ export default function PhysicalEsxiForm({ mode }) {
           assetUsername:   d.asset_username,
           serverStatus:    d.server_status,
           assetTag:        d.asset_tag,
+          assignedUser:    d.assigned_user,
+          idracUsername:   d.idrac_username,
           extras: Object.fromEntries(
             Object.entries(d.extras || {}).map(([k, v]) =>
               [k, v && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? dayjs(v) : v]
@@ -193,9 +196,12 @@ export default function PhysicalEsxiForm({ mode }) {
         osType:            values.osType,
         osVersion:         values.osVersion,
         assetUsername:     values.assetUsername,
+        assignedUser:      values.assignedUser,
+        idracUsername:     values.idracUsername,
         ...(values.serverStatus !== undefined ? { serverStatus: values.serverStatus } : {}),
         ...(values.serverStatus && /^decom/i.test(values.serverStatus) ? { decommissionReason: values.decommissionReason } : {}),
         ...(values.assetPassword ? { assetPassword: values.assetPassword } : {}),
+        ...(values.idracPassword ? { idracPassword: values.idracPassword } : {}),
         ...(values.assetTag ? { assetTag: values.assetTag } : {}),
       };
 
@@ -296,6 +302,12 @@ export default function PhysicalEsxiForm({ mode }) {
               options={deptOpts}
               onChange={(v) => setSelectedDept(v || null)}
             />
+          </Form.Item>
+        );
+      case 'assigned_user':
+        return wrap(
+          <Form.Item name="assignedUser" label={labelOf('assigned_user', 'Owner')}>
+            <Input placeholder="e.g. Jane Doe" />
           </Form.Item>
         );
       case 'asset_tag':
@@ -519,6 +531,21 @@ export default function PhysicalEsxiForm({ mode }) {
         return wrap(
           <Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}>
             <Input placeholder="e.g. 10.0.0.2" />
+          </Form.Item>
+        );
+      case 'idrac_username':
+        return wrap(
+          <Form.Item name="idracUsername" label={labelOf('idrac_username', 'iDRAC Username')}>
+            <Input placeholder="e.g. root" autoComplete="off" />
+          </Form.Item>
+        );
+      case 'idrac_password':
+        return wrap(
+          <Form.Item name="idracPassword" label={labelOf('idrac_password', 'iDRAC Password')} extra="Encrypted (AES-256-GCM) at rest">
+            <Input.Password
+              placeholder={mode === 'edit' ? 'Leave blank to keep existing' : ''}
+              autoComplete="new-password"
+            />
           </Form.Item>
         );
       case 'idrac_enabled':

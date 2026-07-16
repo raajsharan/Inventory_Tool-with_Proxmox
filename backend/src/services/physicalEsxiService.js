@@ -13,7 +13,8 @@ const ASSET_COLUMNS = [
   'server_model', 'serial_number', 'asset_type', 'os_type', 'os_version',
   'cpu_cores', 'ram_gb', 'total_disks',
   'ome_status', 'rack_number', 'server_position', 'additional_remarks',
-  'idrac_ip', 'idrac_enabled', 'asset_tag', 'asset_username',
+  'idrac_ip', 'idrac_enabled', 'idrac_username', 'asset_tag',
+  'asset_username', 'assigned_user',
 ];
 
 function mapBody(body) {
@@ -26,6 +27,10 @@ function mapBody(body) {
   const rawPw = body.assetPassword ?? body.asset_password;
   if (rawPw !== undefined && rawPw !== null && rawPw !== '') {
     row.asset_password_encrypted = crypto.encrypt(String(rawPw));
+  }
+  const rawIdracPw = body.idracPassword ?? body.idrac_password;
+  if (rawIdracPw !== undefined && rawIdracPw !== null && rawIdracPw !== '') {
+    row.idrac_password_encrypted = crypto.encrypt(String(rawIdracPw));
   }
   if (body.extras !== undefined) {
     row.extras = typeof body.extras === 'string' ? body.extras : JSON.stringify(body.extras || {});
@@ -191,13 +196,20 @@ async function viewPassword(id) {
   return crypto.decrypt(rows[0].asset_password_encrypted);
 }
 
+async function viewIdracPassword(id) {
+  const { rows } = await db.query(`SELECT idrac_password_encrypted FROM ${TABLE} WHERE id = $1`, [id]);
+  if (!rows.length) throw new ApiError(404, 'Asset not found');
+  if (!rows[0].idrac_password_encrypted) return null;
+  return crypto.decrypt(rows[0].idrac_password_encrypted);
+}
+
 async function list({ search, osType, serverStatus, location, serverModel, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
   const where = ['a.deleted_at IS NULL', 'a.decommissioned_at IS NULL'];
   const params = [];
   if (search) {
     params.push(`%${search}%`);
     const i = params.length;
-    where.push(`(vm_name ILIKE $${i} OR ip_address ILIKE $${i} OR department ILIKE $${i})`);
+    where.push(`(vm_name ILIKE $${i} OR ip_address ILIKE $${i} OR department ILIKE $${i} OR assigned_user ILIKE $${i})`);
   }
   if (osType)       { params.push(osType);       where.push(`os_type = $${params.length}`); }
   if (serverStatus) { params.push(serverStatus); where.push(`server_status = $${params.length}`); }
@@ -233,8 +245,12 @@ async function list({ search, osType, serverStatus, location, serverModel, page 
 }
 
 function scrub(row) {
-  const { asset_password_encrypted, ...rest } = row;
-  return { ...rest, hasPassword: !!asset_password_encrypted };
+  const { asset_password_encrypted, idrac_password_encrypted, ...rest } = row;
+  return {
+    ...rest,
+    hasPassword: !!asset_password_encrypted,
+    hasIdracPassword: !!idrac_password_encrypted,
+  };
 }
 
 async function tagStats(department) {
@@ -242,7 +258,7 @@ async function tagStats(department) {
 }
 
 module.exports = {
-  create, update, remove, get, list, viewPassword,
+  create, update, remove, get, list, viewPassword, viewIdracPassword,
   ASSET_COLUMNS,
   TABLE,
   tagStats,

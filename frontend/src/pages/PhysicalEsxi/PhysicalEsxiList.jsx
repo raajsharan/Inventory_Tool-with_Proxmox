@@ -170,22 +170,29 @@ export default function PhysicalEsxiList() {
     } finally { setSyncing(false); }
   }
 
-  async function togglePassword(id, hasPassword) {
+  // kind: 'asset' | 'idrac' — reveal/set share one mechanism keyed by `${kind}:${id}`.
+  const PW_KINDS = {
+    asset: { endpoint: 'password',       payloadKey: 'assetPassword', hasFlag: 'hasPassword' },
+    idrac: { endpoint: 'idrac-password', payloadKey: 'idracPassword', hasFlag: 'hasIdracPassword' },
+  };
+
+  async function togglePassword(id, hasPassword, kind = 'asset') {
     if (!hasPassword) return;
-    if (revealed[id]) { setRevealed(p => { const n = { ...p }; delete n[id]; return n; }); return; }
-    setRevealing(p => ({ ...p, [id]: true }));
+    const key = `${kind}:${id}`;
+    if (revealed[key]) { setRevealed(p => { const n = { ...p }; delete n[key]; return n; }); return; }
+    setRevealing(p => ({ ...p, [key]: true }));
     try {
-      const { data: d } = await api.get(`/physical-esxi/${id}/password`);
-      setRevealed(p => ({ ...p, [id]: d.password || '' }));
+      const { data: d } = await api.get(`/physical-esxi/${id}/${PW_KINDS[kind].endpoint}`);
+      setRevealed(p => ({ ...p, [key]: d.password || '' }));
     } catch (e) { message.error(e.response?.data?.error || 'Cannot view password'); }
-    finally { setRevealing(p => { const n = { ...p }; delete n[id]; return n; }); }
+    finally { setRevealing(p => { const n = { ...p }; delete n[key]; return n; }); }
   }
 
   async function onSetPassword({ newPassword }) {
     if (!setpwTarget) return;
     setSetpwLoading(true);
     try {
-      await api.put(`/physical-esxi/${setpwTarget.id}`, { assetPassword: newPassword });
+      await api.put(`/physical-esxi/${setpwTarget.id}`, { [PW_KINDS[setpwTarget.kind || 'asset'].payloadKey]: newPassword });
       message.success('Password saved');
       setSetpwTarget(null); setpwForm.resetFields(); load();
     } catch (e) { message.error(e.response?.data?.error || 'Failed to save password'); }
@@ -211,14 +218,16 @@ export default function PhysicalEsxiList() {
   const numCell = (v) =>
     v == null || v === 0 ? <Typography.Text type="secondary">—</Typography.Text> : v;
 
-  const pwCell = (_, r) => {
-    const shown = revealed[r.id];
-    const openSetModal = () => { setSetpwTarget({ id: r.id, vm_name: r.vm_name }); setpwForm.resetFields(); };
+  const makePwCell = (kind) => (_, r) => {
+    const key = `${kind}:${r.id}`;
+    const shown = revealed[key];
+    const hasPw = r[PW_KINDS[kind].hasFlag];
+    const openSetModal = () => { setSetpwTarget({ id: r.id, vm_name: r.vm_name, kind }); setpwForm.resetFields(); };
     if (!canSeePasswords)
-      return r.hasPassword
+      return hasPw
         ? <Space size={4}><span style={{ fontFamily: 'monospace' }}>••••••••</span><LockOutlined style={{ color: '#bbb' }} /></Space>
         : dash(null);
-    if (!r.hasPassword)
+    if (!hasPw)
       return canWrite
         ? <Space size={4}><Typography.Text type="secondary" style={{ fontFamily: 'monospace' }}>—</Typography.Text>
             <Tooltip title="Set password"><Button size="small" type="text" icon={<EyeOutlined style={{ color: '#bbb' }} />} onClick={openSetModal} /></Tooltip></Space>
@@ -228,7 +237,7 @@ export default function PhysicalEsxiList() {
         <span style={{ fontFamily: 'monospace', minWidth: 70, display: 'inline-block' }}>{shown || '••••••••'}</span>
         <Tooltip title={shown ? 'Hide' : 'Reveal password'}>
           <Button size="small" type="text" icon={shown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-            loading={!!revealing[r.id]} onClick={() => togglePassword(r.id, r.hasPassword)} />
+            loading={!!revealing[key]} onClick={() => togglePassword(r.id, hasPw, kind)} />
         </Tooltip>
         {canWrite && (
           <Tooltip title="Change password">
@@ -238,6 +247,8 @@ export default function PhysicalEsxiList() {
       </Space>
     );
   };
+  const pwCell = makePwCell('asset');
+  const idracPwCell = makePwCell('idrac');
 
   // ── Columns — order mirrors the Register Physical Server form ─────────────
   const allColumns = [
@@ -260,6 +271,10 @@ export default function PhysicalEsxiList() {
     {
       key: 'department', dataIndex: 'department', width: 140,
       title: labelOf('department', 'Department'), render: dash,
+    },
+    {
+      key: 'assigned_user', dataIndex: 'assigned_user', width: 150,
+      title: labelOf('assigned_user', 'Owner'), render: dash,
     },
     {
       key: 'location', dataIndex: 'location', width: 140,
@@ -309,6 +324,15 @@ export default function PhysicalEsxiList() {
     {
       key: 'idrac_ip', dataIndex: 'idrac_ip', width: 140,
       title: labelOf('idrac_ip', 'iDRAC IP'), render: dash,
+    },
+    {
+      key: 'idrac_username', dataIndex: 'idrac_username', width: 150,
+      title: labelOf('idrac_username', 'iDRAC Username'), render: dash,
+    },
+    {
+      key: 'idrac_password', width: 210,
+      title: labelOf('idrac_password', 'iDRAC Password'),
+      render: idracPwCell,
     },
 
     // ── Secondary / extended fields ─────────────────────────────────────────
@@ -367,7 +391,7 @@ export default function PhysicalEsxiList() {
   ];
 
   // Always-visible keys (never controlled by field-visibility toggle).
-  const pinned = new Set(['vm_name', '__actions__', 'asset_password',
+  const pinned = new Set(['vm_name', '__actions__', 'asset_password', 'idrac_password',
     'created_by_name', 'created_at', 'updated_by_name', 'updated_at']);
 
   const visibleColumns = allColumns.filter(c => pinned.has(c.key) || !hiddenSet.has(c.key));
@@ -543,7 +567,13 @@ export default function PhysicalEsxiList() {
         onConfirm={onBulkDeleteConfirmed}
       />
       <Modal
-        title={`${data.items.find(x => x.id === setpwTarget?.id)?.hasPassword ? 'Change' : 'Set'} Password — ${setpwTarget?.vm_name || ''}`}
+        title={(() => {
+          const kind = setpwTarget?.kind || 'asset';
+          const row = data.items.find(x => x.id === setpwTarget?.id);
+          const has = row?.[PW_KINDS[kind].hasFlag];
+          const label = kind === 'idrac' ? 'iDRAC Password' : 'Asset Password';
+          return `${has ? 'Change' : 'Set'} ${label} — ${setpwTarget?.vm_name || ''}`;
+        })()}
         open={!!setpwTarget}
         onCancel={() => { setSetpwTarget(null); setpwForm.resetFields(); }}
         onOk={() => setpwForm.submit()}
