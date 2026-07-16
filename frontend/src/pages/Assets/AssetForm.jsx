@@ -389,7 +389,6 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           defaultChild: <Input />,
         }));
       case 'serial_number':
-        if (!idracEnabled) return null;
         return wrap(overridableFormItem({
           fieldKey: 'serial_number', name: 'serialNumber',
           label: labelOf('serial_number', 'Serial Number'),

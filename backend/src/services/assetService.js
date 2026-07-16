@@ -50,6 +50,10 @@ async function checkDuplicates({ ip_address, asset_tag, excludeId }) {
 
 async function create(body, userId) {
   const row = mapBody(body);
+  if (decomSvc.isDecomStatus(row.server_status)) {
+    row.decommissioned_at = new Date();
+    row.decommissioned_by = userId || null;
+  }
 
   // Auto-assign next available tag when a department is set and no tag was supplied.
   if (row.department && !row.asset_tag) {

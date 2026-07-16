@@ -287,6 +287,14 @@ async function syncFromDiscovery(req, res, next) {
     const errors = [];
 
     async function insertOne(fields) {
+      const ip = String(fields.ip_address || '').trim();
+      if (!IP_RE.test(ip)) {
+        throw new Error(`Invalid IP address format: ${fields.ip_address}`);
+      }
+      const conflictTable = await deptSvc.isIpUsedAnywhere(ip);
+      if (conflictTable) {
+        throw new Error(`IP address already used in another inventory (${conflictTable})`);
+      }
       const cols = Object.keys(fields);
       const vals = Object.values(fields);
       const ph   = cols.map((_, i) => `$${i + 1}`).join(', ');
