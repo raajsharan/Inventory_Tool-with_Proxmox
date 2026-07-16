@@ -41,6 +41,9 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_user_page_access_user ON user_page_access(user_id)`,
   `ALTER TABLE page_access ALTER COLUMN role TYPE VARCHAR(64)`,
 
+  // ── Proxmox discovery: MAC addresses (proxmox_schema.sql predates this column)
+  `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS macs TEXT[]`,
+
   // ── newer inventory columns some deployments predate (schema.sql ALTERs)
   ...['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'].flatMap(t => [
     `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb`,

@@ -33,7 +33,7 @@ async function upsertHost({ host, displayName, username, password, port, useSSL,
        (host, display_name, username, password_encrypted, port, use_ssl, verify_ssl, interval_minutes, scheduler_enabled)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (host) DO UPDATE SET
-       display_name       = EXCLUDED.display_name,
+       display_name       = COALESCE(EXCLUDED.display_name, hyperv_hosts.display_name),
        username           = EXCLUDED.username,
        password_encrypted = COALESCE(EXCLUDED.password_encrypted, hyperv_hosts.password_encrypted),
        port               = EXCLUDED.port,
@@ -55,7 +55,7 @@ async function updateHostById(id, fields) {
   const { rows } = await db.query(
     `UPDATE hyperv_hosts SET
        host               = COALESCE($2, host),
-       display_name       = $3,
+       display_name       = COALESCE($3, display_name),
        username           = COALESCE($4, username),
        password_encrypted = COALESCE($5, password_encrypted),
        port               = COALESCE($6, port),

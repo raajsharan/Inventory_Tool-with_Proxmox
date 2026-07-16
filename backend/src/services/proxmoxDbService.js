@@ -187,13 +187,13 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
   let i = 1;
   for (const vm of vms) {
     values.push(
-      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
+      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
     );
     params.push(
       runId, hostId, sourceHost,
       vm.vmid, vm.name, vm.vm_type, vm.node,
       vm.status, vm.cpu_count, vm.memory_mb, vm.disk_gb,
-      vm.ips, vm.os_type, vm.uptime_seconds, vm.is_template,
+      vm.ips, vm.macs, vm.os_type, vm.uptime_seconds, vm.is_template,
       vm.snapshot_count, vm.snapshot_oldest,
       vm.tags, vm.pool, vm.cluster
     );
@@ -203,7 +203,7 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
        (run_id, host_id, source_host,
         vmid, name, vm_type, node,
         status, cpu_count, memory_mb, disk_gb,
-        ips, os_type, uptime_seconds, is_template,
+        ips, macs, os_type, uptime_seconds, is_template,
         snapshot_count, snapshot_oldest,
         tags, pool, cluster)
      VALUES ${values.join(',')}`,

@@ -7,7 +7,7 @@ const { Option } = Select;
 
 function stateTag(s) {
   if (s === 'Running') return <Tag color="success">Running</Tag>;
-  if (s === 'Stopped') return <Tag color="default">Stopped</Tag>;
+  if (s === 'Off') return <Tag color="default">Stopped</Tag>;
   if (s === 'Paused')  return <Tag color="warning">Paused</Tag>;
   if (s === 'Saved')   return <Tag color="processing">Saved</Tag>;
   return <Tag>{s || '—'}</Tag>;
@@ -71,7 +71,7 @@ export default function HVList() {
           style={{ width: 130 }}
         >
           <Option value="Running">Running</Option>
-          <Option value="Stopped">Stopped</Option>
+          <Option value="Off">Stopped</Option>
           <Option value="Paused">Paused</Option>
           <Option value="Saved">Saved</Option>
         </Select>

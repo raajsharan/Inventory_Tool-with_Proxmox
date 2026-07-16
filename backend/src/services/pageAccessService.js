@@ -45,6 +45,9 @@ const STATIC_PAGES = [
   { key: 'nessus_status',           label: 'Software Status (Nessus)',       group: 'General' },
   { key: 'tenable_report',          label: 'Tenable Report',                 group: 'General' },
   { key: 'migration_tracker',       label: 'Migration Tracker',              group: 'General' },
+  { key: 'vmware',                  label: 'VMware Discovery',               group: 'General' },
+  { key: 'proxmox',                 label: 'Proxmox Discovery',              group: 'General' },
+  { key: 'hyperv',                  label: 'Hyper-V Discovery',              group: 'General' },
 ];
 
 async function dynamicCustomPages() {

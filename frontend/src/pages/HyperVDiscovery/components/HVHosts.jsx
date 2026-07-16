@@ -71,7 +71,10 @@ export default function HVHosts({ onDiscoveryStarted }) {
       message.success(editing ? 'Host updated' : 'Host added');
       setModalOpen(false);
       load();
-      if (values.runNow && onDiscoveryStarted) onDiscoveryStarted();
+      if (values.runNow) {
+        if (onDiscoveryStarted) onDiscoveryStarted();
+        setTimeout(load, 2000);
+      }
     } catch (e) {
       message.error(e.response?.data?.error || 'Failed to save host');
     }

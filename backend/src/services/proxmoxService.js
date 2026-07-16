@@ -153,6 +153,22 @@ function extractLxcIPs(config) {
   return ips.size ? [...ips] : ['Not Available'];
 }
 
+function extractNetMacs(config) {
+  if (!config) return [];
+  const macs = new Set();
+  const macRe = /[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}/;
+  for (const key of Object.keys(config)) {
+    if (!key.startsWith('net')) continue;
+    const val = config[key];
+    if (typeof val !== 'string') continue;
+    // QEMU:  net0: virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,firewall=1
+    // LXC:   net0: name=eth0,bridge=vmbr0,hwaddr=AA:BB:CC:DD:EE:FF,ip=192.168.1.5/24,...
+    const m = val.match(macRe);
+    if (m) macs.add(m[0].toUpperCase());
+  }
+  return [...macs];
+}
+
 function estimateQemuDiskGb(config) {
   if (!config) return null;
   for (const key of Object.keys(config)) {
@@ -255,6 +271,7 @@ async function discoverVE(hostname, port, getter, verifySSL) {
             memory_mb:       config?.memory || (vm.maxmem ? Math.round(vm.maxmem / 1048576) : null),
             disk_gb:         estimateQemuDiskGb(config),
             ips:             extractQemuIPs(agentNet),
+            macs:            extractNetMacs(config),
             os_type:         normalizeOsType(config?.ostype),
             uptime_seconds:  vm.uptime || 0,
             is_template:     !!(vm.template || config?.template),
@@ -294,6 +311,7 @@ async function discoverVE(hostname, port, getter, verifySSL) {
             memory_mb:       config?.memory || (ct.maxmem ? Math.round(ct.maxmem / 1048576) : null),
             disk_gb:         estimateLxcDiskGb(config),
             ips:             extractLxcIPs(config),
+            macs:            extractNetMacs(config),
             os_type:         config?.ostype || null,
             uptime_seconds:  ct.uptime || 0,
             is_template:     !!(ct.template || config?.template),
@@ -333,6 +351,7 @@ async function discoverPDM(hostname, port, getter) {
       memory_mb:       vm.maxmem ? Math.round(vm.maxmem / 1048576) : null,
       disk_gb:         vm.maxdisk ? Math.round(vm.maxdisk / 1073741824 * 100) / 100 : null,
       ips:             ['Not Available'],
+      macs:            [],
       os_type:         null,
       uptime_seconds:  vm.uptime || 0,
       is_template:     !!vm.template,

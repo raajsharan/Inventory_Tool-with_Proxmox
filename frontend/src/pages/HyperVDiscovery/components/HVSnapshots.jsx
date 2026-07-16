@@ -23,9 +23,9 @@ function stateTag(s) {
 const columns = [
   { title: 'Name',      dataIndex: 'name',           key: 'name',  ellipsis: true },
   { title: 'State',     dataIndex: 'state',           key: 'state', width: 100, render: stateTag },
-  { title: 'Snapshots', dataIndex: 'snapshot_count',  key: 'count', width: 110,
-    sorter: (a, b) => b.snapshot_count - a.snapshot_count },
-  { title: 'Oldest',    dataIndex: 'oldest_snapshot', key: 'oldest', ellipsis: true,
+  { title: 'Snapshots', dataIndex: 'count',           key: 'count', width: 110,
+    sorter: (a, b) => b.count - a.count },
+  { title: 'Oldest',    dataIndex: 'oldest',          key: 'oldest', ellipsis: true,
     render: v => <span>{v || '—'}{ageWarning(v)}</span> },
   { title: 'Host',      dataIndex: 'source_host',     key: 'host',  ellipsis: true },
 ];

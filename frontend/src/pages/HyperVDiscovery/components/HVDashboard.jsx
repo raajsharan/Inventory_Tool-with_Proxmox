@@ -35,7 +35,7 @@ export default function HVDashboard() {
   const { stats, byHost, byOS } = data;
 
   const hostColumns = [
-    { title: 'Host',    dataIndex: 'source_host', key: 'host',    ellipsis: true },
+    { title: 'Host',    dataIndex: 'host',        key: 'host',    ellipsis: true },
     { title: 'Total',   dataIndex: 'total',       key: 'total',   width: 80 },
     { title: 'Running', dataIndex: 'running',     key: 'running', width: 90, render: n => <Tag color="success">{n}</Tag> },
     { title: 'Stopped', dataIndex: 'stopped',     key: 'stopped', width: 90, render: n => <Tag color="default">{n}</Tag> },
@@ -44,7 +44,7 @@ export default function HVDashboard() {
   ];
 
   const osColumns = [
-    { title: 'OS Type', dataIndex: 'os_type', key: 'os',    ellipsis: true },
+    { title: 'OS Type', dataIndex: 'os',     key: 'os',    ellipsis: true },
     { title: 'Count',   dataIndex: 'count',   key: 'count', width: 90 },
   ];
 
@@ -57,9 +57,9 @@ export default function HVDashboard() {
         : <Tag color="processing">Running</Tag>,
     },
     { title: 'VMs Found', dataIndex: 'vm_count', key: 'vm_count', width: 100, render: v => v ?? '—' },
-    { title: 'Started',   dataIndex: 'started_at', key: 'started', ellipsis: true,
+    { title: 'Started',   dataIndex: 'run_at', key: 'started', ellipsis: true,
       render: v => v ? new Date(v).toLocaleString() : '—' },
-    { title: 'Error',     dataIndex: 'error',      key: 'error',   ellipsis: true, render: v => v || '—' },
+    { title: 'Error',     dataIndex: 'error_message', key: 'error', ellipsis: true, render: v => v || '—' },
   ];
 
   return (
@@ -112,7 +112,7 @@ export default function HVDashboard() {
         </Col>
         <Col xs={12} sm={8} md={4}>
           <Card size="small">
-            <Statistic title="Hosts Monitored" value={stats.hosts} />
+            <Statistic title="Hosts Monitored" value={byHost.length} />
           </Card>
         </Col>
       </Row>
@@ -122,7 +122,7 @@ export default function HVDashboard() {
           <Card size="small" title="By Host">
             <Table
               size="small"
-              rowKey="source_host"
+              rowKey="host"
               dataSource={byHost}
               columns={hostColumns}
               pagination={false}
@@ -133,7 +133,7 @@ export default function HVDashboard() {
           <Card size="small" title="OS Breakdown">
             <Table
               size="small"
-              rowKey="os_type"
+              rowKey="os"
               dataSource={byOS}
               columns={osColumns}
               pagination={false}

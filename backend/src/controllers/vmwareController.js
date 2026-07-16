@@ -161,8 +161,9 @@ async function runDiscoverySync(req, res, next) {
 
     const decryptedPw = password || dbSvc.getDecryptedPassword(record);
 
+    let runId;
     try {
-      const runId = await dbSvc.startRun(record.id, host);
+      runId = await dbSvc.startRun(record.id, host);
       await dbSvc.setHostRunning(record.id, true);
       const vms = await vmSvc.discover(host, Number(port), username, decryptedPw, Boolean(verifySSL));
       await dbSvc.saveVMs(runId, record.id, host, vms);
@@ -171,6 +172,7 @@ async function runDiscoverySync(req, res, next) {
       res.json({ message: 'Discovery complete', vmCount: vms.length, host });
     } catch (err) {
       await dbSvc.setHostRunning(record.id, false);
+      if (runId) await dbSvc.failRun(runId, err.message);
       if (err instanceof vmSvc.VMwareAuthError) {
         return res.status(401).json({ error: err.message });
       }

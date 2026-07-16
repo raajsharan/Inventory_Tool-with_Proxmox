@@ -24,10 +24,25 @@ function parseType2(buf) {
   if (buf.length < 32) throw new Error('NTLM Type 2 message too short');
   if (buf.slice(0, 7).toString('ascii') !== 'NTLMSSP') throw new Error('Invalid NTLM Type 2 signature');
   if (buf.readUInt32LE(8) !== 2) throw new Error('Not an NTLM Type 2 message');
-  return { serverChallenge: buf.slice(24, 32) };
+
+  const serverChallenge = buf.slice(24, 32);
+
+  // TargetInfoFields (MS-NLMP 2.2.1.2): Len(2) MaxLen(2) Offset(4), at offset 40.
+  // Some minimal/older Type 2 messages omit this block, so fall back to a bare
+  // AV_EOL (4 zero bytes) when it isn't present or the offsets don't check out.
+  let targetInfo = Buffer.alloc(4, 0);
+  if (buf.length >= 48) {
+    const len = buf.readUInt16LE(40);
+    const offset = buf.readUInt32LE(44);
+    if (len > 0 && offset + len <= buf.length) {
+      targetInfo = buf.slice(offset, offset + len);
+    }
+  }
+
+  return { serverChallenge, targetInfo };
 }
 
-function buildType3(username, password, domain, serverChallenge) {
+function buildType3(username, password, domain, serverChallenge, targetInfo = Buffer.alloc(4, 0)) {
   const ntHash    = crypto.createHash('md4').update(Buffer.from(password, 'utf16le')).digest();
   const ntv2Hash  = crypto.createHmac('md5', ntHash)
     .update(Buffer.from((username.toUpperCase() + domain), 'utf16le'))
@@ -42,7 +57,7 @@ function buildType3(username, password, domain, serverChallenge) {
     Buffer.alloc(8, 0),                     // Timestamp (zero)
     clientChallenge,
     Buffer.alloc(4, 0),                     // Reserved
-    Buffer.alloc(4, 0),                     // TargetInfo EOL
+    targetInfo,                             // TargetInfo AV-pairs (from Type 2 challenge; ends in AV_EOL)
   ]);
 
   const ntProofStr  = crypto.createHmac('md5', ntv2Hash)

@@ -142,10 +142,10 @@ async function winrmPost(cfg, soapBody) {
     }
 
     const type2Buf = Buffer.from(challenge[1], 'base64');
-    const { serverChallenge } = parseType2(type2Buf);
+    const { serverChallenge, targetInfo } = parseType2(type2Buf);
 
     // ── Step 3: NTLM Type 3 (Authenticate) + actual SOAP body ───────────────
-    const type3b64 = buildType3(username, cfg.password, domain, serverChallenge).toString('base64');
+    const type3b64 = buildType3(username, cfg.password, domain, serverChallenge, targetInfo).toString('base64');
     const res2 = await httpRequest(proto, {
       ...base,
       headers: {

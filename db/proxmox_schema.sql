@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS proxmox_discovered_vms (
   memory_mb       INTEGER,
   disk_gb         NUMERIC(12,2),
   ips             TEXT[],
+  macs            TEXT[],
   os_type         VARCHAR(255),
   uptime_seconds  BIGINT,
   is_template     BOOLEAN      DEFAULT FALSE,

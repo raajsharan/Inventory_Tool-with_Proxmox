@@ -1,21 +1,22 @@
 const router = require('express').Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, requirePageAccess } = require('../middleware/auth');
 const ctrl = require('../controllers/hypervController');
 
+const guard = [authenticate, requirePageAccess('hyperv')];
 const admin = authorize('admin', 'superadmin');
 
-router.get('/hosts',              authenticate, ctrl.listHosts);
-router.post('/hosts',             authenticate, admin, ctrl.addHost);
-router.put('/hosts/:id',          authenticate, admin, ctrl.updateHost);
-router.delete('/hosts/:id',       authenticate, admin, ctrl.removeHost);
-router.post('/hosts/:id/test',    authenticate, admin, ctrl.testHost);
-router.post('/hosts/:id/run',     authenticate, admin, ctrl.triggerRun);
+router.get('/hosts',              ...guard, ctrl.listHosts);
+router.post('/hosts',             ...guard, admin, ctrl.addHost);
+router.put('/hosts/:id',          ...guard, admin, ctrl.updateHost);
+router.delete('/hosts/:id',       ...guard, admin, ctrl.removeHost);
+router.post('/hosts/:id/test',    ...guard, admin, ctrl.testHost);
+router.post('/hosts/:id/run',     ...guard, admin, ctrl.triggerRun);
 
-router.get('/vms',        authenticate, ctrl.listVMs);
-router.get('/dashboard',  authenticate, ctrl.getDashboard);
-router.get('/drift',      authenticate, ctrl.getDrift);
-router.get('/stale',      authenticate, ctrl.getStale);
-router.get('/snapshots',  authenticate, ctrl.getSnapshots);
-router.get('/runs',       authenticate, ctrl.getRuns);
+router.get('/vms',        ...guard, ctrl.listVMs);
+router.get('/dashboard',  ...guard, ctrl.getDashboard);
+router.get('/drift',      ...guard, ctrl.getDrift);
+router.get('/stale',      ...guard, ctrl.getStale);
+router.get('/snapshots',  ...guard, ctrl.getSnapshots);
+router.get('/runs',       ...guard, ctrl.getRuns);
 
 module.exports = router;

@@ -55,17 +55,21 @@ export function vmwareToInventory(vm) {
  */
 export function proxmoxToInventory(vm) {
   const assetType = vm.vm_type === 'lxc' ? 'LXC Container' : 'VM';
+  const macs = validMACs(vm.macs);
   return {
     vm_name:           vm.name    || '',
     os_hostname:       '',
     ip_address:        firstValidIP(vm.ips),
-    mac_address:       '',
+    mac_address:       macs[0]    || '',
     asset_type:        assetType,
     os_type:           vm.os_type || '',
     os_version:        '',
     hosted_ip:         vm.source_host || '',
     server_status:     vm.status === 'running' ? 'Active' : 'Inactive',
-    additional_remarks: `Proxmox Node: ${vm.node || '—'}  |  VMID: ${vm.vmid || '—'}  |  Type: ${vm.vm_type?.toUpperCase() || '—'}`,
+    additional_remarks: [
+      `Proxmox Node: ${vm.node || '—'}  |  VMID: ${vm.vmid || '—'}  |  Type: ${vm.vm_type?.toUpperCase() || '—'}`,
+      macs.length > 1 ? `Additional MACs: ${macs.slice(1).join(', ')}` : null,
+    ].filter(Boolean).join('  ·  '),
     _source_label: `Proxmox · ${vm.source_host || vm.node || ''}`,
     _source_detail: [
       vm.cpu_count  && `CPUs: ${vm.cpu_count}`,

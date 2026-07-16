@@ -156,7 +156,17 @@ function newFileId() {
   return `${ts}_${rnd}`;
 }
 
+// Matches the exact format produced by newFileId(): 15-digit timestamp,
+// underscore, 6-char lowercase hex. Used to reject path-traversal attempts
+// (e.g. "../../etc/passwd") before building a filesystem path from user input.
+const FILE_ID_RE = /^[0-9]{15}_[0-9a-f]{6}$/;
+
 function filePath(id) {
+  if (typeof id !== 'string' || !FILE_ID_RE.test(id)) {
+    const err = new Error('Invalid file id');
+    err.status = 400;
+    throw err;
+  }
   return path.join(DATA_DIR, `${id}.json`);
 }
 
