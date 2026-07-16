@@ -677,7 +677,7 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField, nav }) {
                   />
                 </Col>
                 <Col xs={24} md={4}>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>Input Type</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>Default Type (reference)</Typography.Text>
                   <Input
                     value={INPUT_TYPES.find(t => t.value === f.default_type)?.label || f.default_type}
                     disabled
@@ -685,7 +685,7 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField, nav }) {
                   />
                 </Col>
                 <Col xs={24} md={4}>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>&nbsp;</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>Input Type (editable)</Typography.Text>
                   {f.frozen ? (
                     <Tooltip title={f.frozen_reason}>
                       <Input value="Locked" disabled />
