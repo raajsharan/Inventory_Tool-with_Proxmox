@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select, Input } from 'antd';
-import { DownloadOutlined, WarningOutlined } from '@ant-design/icons';
+import { Table, Button, Tag, Tooltip, Typography, Space, theme, message, Select, Input, Popconfirm } from 'antd';
+import { DownloadOutlined, WarningOutlined, DeleteOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
@@ -207,8 +207,25 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
     },
   ];
 
+  if (canEdit) {
+    columns.push({
+      title: 'Actions', key: 'actions', fixed: 'right', width: 80,
+      render: (_, r) => (
+        <Popconfirm
+          title="Delete this host?"
+          description="This will permanently remove the host record."
+          okText="Delete"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => remove(r.id)}
+        >
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    });
+  }
+
   const allColumns = columns; // alias for clarity below
-  const toggleableCols = allColumns.filter(c => c.key !== 'host');
+  const toggleableCols = allColumns.filter(c => c.key !== 'host' && c.key !== 'actions');
   const { visible, toggle, reset, order, reorder } = useColumnVisibility('hosts', toggleableCols.map(c => c.key));
   const visibleColumns = [
     allColumns[0], // host — always visible, never reordered
@@ -216,6 +233,7 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
       .filter(k => visible.has(k))
       .map(k => allColumns.find(c => c.key === k))
       .filter(Boolean),
+    ...(canEdit ? [allColumns.find(c => c.key === 'actions')] : []),
   ];
 
   const summaryCards = summary ? [

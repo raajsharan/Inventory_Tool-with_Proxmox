@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const deptSvc = require('./departmentService');
 
 // Maps a logical "type" the UI uses to the underlying physical table.
 const TABLE_BY_TYPE = {
@@ -86,6 +87,27 @@ async function list({ type, search } = {}) {
 
 async function restore(type, id, userId) {
   const table = assertType(type);
+
+  // The IP/asset tag freed up when this row was deleted may have since
+  // been reused by another active record. Partial unique indexes would
+  // catch that at the UPDATE below, but only with a generic 409 — check
+  // up front so we can name the specific conflicting field instead, same
+  // as assetService.update()'s reactivation path.
+  if (deptSvc.ALL_TABLES.includes(table)) {
+    const { rows } = await db.query(
+      `SELECT ip_address, asset_tag FROM ${table} WHERE id = $1 AND deleted_at IS NOT NULL`,
+      [id]
+    );
+    if (!rows.length) throw new ApiError(404, 'Item not found in recycle bin');
+    const { ip_address: ip, asset_tag: tag } = rows[0];
+    if (tag && await deptSvc.isTagUsedAnywhere(tag, { excludeTable: table, excludeId: id })) {
+      throw new ApiError(409, 'Cannot restore', { asset_tag: `asset tag ${tag} has been reused by an active record — assign a new tag first` });
+    }
+    if (ip && await deptSvc.isIpUsedAnywhere(ip, { excludeTable: table, excludeId: id })) {
+      throw new ApiError(409, 'Cannot restore', { ip_address: `IP ${ip} has been reused by an active record` });
+    }
+  }
+
   const { rowCount } = await db.query(
     `UPDATE ${table} SET deleted_at = NULL, deleted_by = NULL, updated_by = $2, updated_at = NOW()
        WHERE id = $1 AND deleted_at IS NOT NULL`,

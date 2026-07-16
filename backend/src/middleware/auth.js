@@ -27,10 +27,13 @@ async function authenticate(req, _res, next) {
 }
 
 function authorize(...roles) {
+  if (roles.length === 0) {
+    throw new Error('authorize() called with no roles: this would allow any authenticated user through. Pass at least one role.');
+  }
   return (req, _res, next) => {
     if (!req.user) return next(new ApiError(401, 'Unauthenticated'));
     if (req.user.role === 'superadmin') return next(); // god mode
-    if (roles.length && !roles.includes(req.user.role)) {
+    if (!roles.includes(req.user.role)) {
       return next(new ApiError(403, 'Forbidden: insufficient role'));
     }
     return next();

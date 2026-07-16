@@ -24,7 +24,7 @@ const UNION_ACTIVE = `
 // numbers: cross-inventory duplicates and missing critical fields.
 router.get('/', authenticate, authorize('admin', 'superadmin'), async (req, res, next) => {
   try {
-    const [dupIps, dupNames, missing] = await Promise.all([
+    const [dupIps, dupNames, missing, dupIpCount, dupNameCount, missingCounts] = await Promise.all([
       db.query(`
         SELECT ip_address,
                JSON_AGG(JSON_BUILD_OBJECT('id', id, 'vm_name', vm_name, 'source', source)
@@ -56,20 +56,43 @@ router.get('/', authenticate, authorize('admin', 'superadmin'), async (req, res,
             OR NULLIF(TRIM(hosted_ip), '') IS NULL
          ORDER BY source, vm_name
          LIMIT 500`),
+      // True (unLIMITed) counts for the summary tiles — the queries above are
+      // capped for the detail tables and must not be used to derive totals.
+      db.query(`
+        SELECT COUNT(*) AS count FROM (
+          SELECT ip_address
+            FROM (${UNION_ACTIVE}) u
+           WHERE NULLIF(TRIM(ip_address), '') IS NOT NULL
+           GROUP BY ip_address HAVING COUNT(*) > 1
+        ) sub`),
+      db.query(`
+        SELECT COUNT(*) AS count FROM (
+          SELECT vm_name
+            FROM (${UNION_ACTIVE}) u
+           WHERE NULLIF(TRIM(vm_name), '') IS NOT NULL AND vm_name <> 'No Info'
+           GROUP BY vm_name HAVING COUNT(*) > 1
+        ) sub`),
+      db.query(`
+        SELECT COUNT(*) FILTER (WHERE asset_password_encrypted IS NULL)         AS no_password,
+               COUNT(*) FILTER (WHERE NULLIF(TRIM(asset_username), '') IS NULL) AS no_username,
+               COUNT(*) FILTER (WHERE NULLIF(TRIM(location), '') IS NULL)       AS no_location,
+               COUNT(*) FILTER (WHERE NULLIF(TRIM(hosted_ip), '') IS NULL)     AS no_hosted_ip
+          FROM (${UNION_ACTIVE}) u`),
     ]);
 
     const gaps = missing.rows;
+    const counts = missingCounts.rows[0];
     res.json({
       duplicate_ips:   dupIps.rows,
       duplicate_names: dupNames.rows,
       gaps,
       summary: {
-        duplicate_ips:   dupIps.rows.length,
-        duplicate_names: dupNames.rows.length,
-        no_password:  gaps.filter(g => g.no_password).length,
-        no_username:  gaps.filter(g => g.no_username).length,
-        no_location:  gaps.filter(g => g.no_location).length,
-        no_hosted_ip: gaps.filter(g => g.no_hosted_ip).length,
+        duplicate_ips:   Number(dupIpCount.rows[0].count),
+        duplicate_names: Number(dupNameCount.rows[0].count),
+        no_password:  Number(counts.no_password),
+        no_username:  Number(counts.no_username),
+        no_location:  Number(counts.no_location),
+        no_hosted_ip: Number(counts.no_hosted_ip),
       },
     });
   } catch (e) { next(e); }

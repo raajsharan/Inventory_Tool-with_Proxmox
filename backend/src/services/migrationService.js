@@ -24,7 +24,7 @@ function normaliseMigrationStatus(raw) {
   if (/^await/i.test(v))             return 'Awaiting confirmation';
   if (/^to.?be.?del/i.test(v))       return 'To be Deleted';
   if (/^block/i.test(v))             return 'Blocked';
-  if (/^delet/i.test(v))             return 'Not Started'; // imported "Deleted" rows start fresh
+  if (/^delet/i.test(v))             return 'Deleted';
   if (/^pend/i.test(v))              return 'Pending';
   return VALID_MIGRATION_STATUSES.includes(v) ? v : 'Not Started';
 }
@@ -342,7 +342,7 @@ async function vmSummary(table, projectId = null) {
 
   const { rows } = await db.query(`
     SELECT
-      COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                                                        AS total,
+      COUNT(*)::int                                                                                           AS total,
       COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)::int                  AS migrated,
       COUNT(*) FILTER (WHERE migration_status = 'Not Started'           AND cleared_at IS NULL)::int         AS not_started,
       COUNT(*) FILTER (WHERE migration_status = 'Awaiting confirmation' AND cleared_at IS NULL)::int         AS awaiting_confirmation,
@@ -424,7 +424,7 @@ async function overview(projectId = null) {
   ]);
   const totalVMs = (bomgar.total || 0) + (security.total || 0) + (standalone.total || 0);
   const migrated = (bomgar.migrated || 0) + (security.migrated || 0) + (standalone.migrated || 0);
-  return { hosts, bomgar, security, standalone, totalVMs, migrated, remaining: totalVMs - migrated };
+  return { hosts, bomgar, security, standalone, totalVMs, migrated, remaining: Math.max(0, totalVMs - migrated) };
 }
 
 // ── CSV EXPORT ────────────────────────────────────────────────────────────────
@@ -640,6 +640,16 @@ async function previewImport(buffer, projectId = null) {
   return result;
 }
 
+// Maps a table to the `migration_field_values.record_type` used for its custom
+// field values (see useCustomFields() call sites in the frontend tabs), so
+// re-import can clean up values keyed to rows about to be replaced.
+const TABLE_RECORD_TYPE = {
+  migration_hosts:           'host',
+  migration_bomgar_vms:      'bomgar_vm',
+  migration_security_vms:    'security_vm',
+  migration_standalone_esxi: 'standalone_esxi',
+};
+
 async function confirmImport(buffer, preserveStatus = false, projectId) {
   if (!projectId) throw new Error('project_id is required for import');
   const pid = parseInt(projectId, 10);
@@ -697,6 +707,18 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
       // parseable data rows, so a blank/header-only tab can't wipe existing data.
       if (insertedRows.length === 0) { counts[ws.name] = 0; continue; }
 
+      // Rows are about to be dropped and re-inserted with new ids; clean up
+      // any custom field values keyed to the old ids so they don't orphan.
+      const recordType = TABLE_RECORD_TYPE[table];
+      if (recordType) {
+        await client.query(
+          `DELETE FROM migration_field_values
+            WHERE record_type = $1
+              AND record_id IN (SELECT id FROM ${table} WHERE project_id = $2)`,
+          [recordType, pid]
+        );
+      }
+
       await client.query(`DELETE FROM ${table} WHERE project_id = $1`, [pid]);
 
       const keys = Object.keys(insertedRows[0]);
@@ -747,6 +769,17 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
       // Skip entirely (including the DELETE below) if the sheet has no
       // parseable data rows, so a blank/header-only tab can't wipe existing data.
       if (insertedRows.length === 0) { counts[ws.name] = 0; continue; }
+
+      // Rows are about to be dropped and re-inserted with new ids; clean up
+      // any custom field values keyed to the old ids so they don't orphan.
+      await client.query(
+        `DELETE FROM migration_field_values
+          WHERE record_type = 'custom_vm'
+            AND record_id IN (
+              SELECT id FROM migration_custom_vms WHERE custom_tab_id = $1 AND project_id = $2
+            )`,
+        [customTab.id, pid]
+      );
 
       await client.query(
         `DELETE FROM migration_custom_vms WHERE custom_tab_id = $1 AND project_id = $2`,
@@ -947,7 +980,9 @@ async function patchCustomVM(id, fields) {
   const sets = [], vals = [];
   let idx = 1;
   for (const [k, v] of Object.entries(fields)) {
-    if (allowed.includes(k)) { sets.push(`${k} = $${idx++}`); vals.push(v); }
+    if (!allowed.includes(k)) continue;
+    if (k === 'migration_status' && !VALID_MIGRATION_STATUSES.includes(v)) continue;
+    sets.push(`${k} = $${idx++}`); vals.push(v);
   }
   if (!sets.length) return null;
   sets.push(`updated_at = NOW()`);

@@ -1,8 +1,8 @@
 const router   = require('express').Router();
-const { authorize } = require('../middleware/auth');
+const { authorize, requirePageAccess } = require('../middleware/auth');
 const c = require('../controllers/complianceConfigController');
 
-router.get('/', c.getConfig);
-router.put('/', authorize('admin', 'superadmin'), c.saveConfig);
+router.get('/', requirePageAccess('admin/compliance-config'), c.getConfig);
+router.put('/', requirePageAccess('admin/compliance-config'), authorize('admin', 'superadmin'), c.saveConfig);
 
 module.exports = router;

@@ -10,7 +10,7 @@ async function saveConfig(req, res, next) {
 
 async function testNotification(req, res, next) {
   try {
-    await svc.testNotification();
+    await svc.testNotification(req.body?.webhook_url);
     res.json({ ok: true, message: 'Test notification sent to Teams.' });
   } catch (e) {
     res.status(400).json({ error: e.message });

@@ -99,9 +99,17 @@ async function summary(_req, res, next) {
           UNION ALL SELECT NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x GROUP BY 1 ORDER BY 2 DESC`);
     const recentQ = db.query(`
-      SELECT id, vm_name, ip_address, os_type, server_status, location, created_at
-        FROM assets
-        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+      SELECT id, vm_name, ip_address, os_type, server_status, location, created_at, source_table
+        FROM (
+          SELECT id, vm_name, ip_address, os_type, server_status, location, created_at, 'assets'::text AS source_table
+            FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL
+          SELECT id, vm_name, ip_address, os_type, server_status, location, created_at, 'beijing_assets'::text AS source_table
+            FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL
+          SELECT id, vm_name, ip_address, os_type, server_status, location, created_at, 'physical_esxi_servers'::text AS source_table
+            FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        ) x
         ORDER BY created_at DESC LIMIT 10`);
 
     // Weekly Report counters (created in the last 7 days vs prior 7 days).
@@ -125,13 +133,19 @@ async function summary(_req, res, next) {
     // $1 = include_server_statuses[], $2 = exclude_eol_statuses[]
     // Empty arrays mean "no filter" (all pass).
     // ---------------------------------------------------------------
+    // Denominator = eligible universe (in-scope by server_status / EOL filters, per admin config).
+    // Numerator = the compliant subset of that universe — mirrors the same
+    // "password on file" convention used for extComplianceQ.with_password below,
+    // so MSL is no longer numerator === denominator (always 100%).
     const mslQ = db.query(`
       WITH inv AS (
-        SELECT server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL SELECT server_status, eol_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL SELECT server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        SELECT server_status, eol_status, asset_password_encrypted FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT server_status, eol_status, asset_password_encrypted FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT server_status, NULL::text AS eol_status, asset_password_encrypted FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
-      SELECT COUNT(*)::int AS msl
+      SELECT
+        COUNT(*)::int                                                    AS msl_denominator,
+        COUNT(*) FILTER (WHERE asset_password_encrypted IS NOT NULL)::int AS msl_numerator
         FROM inv
        WHERE (
          array_length($1::text[], 1) IS NULL
@@ -594,12 +608,12 @@ async function summary(_req, res, next) {
       },
 
       mslCompliance: {
-        mslNumerator:   mslRow.rows[0].msl,
-        mslDenominator: mslRow.rows[0].msl,
+        mslNumerator:   mslRow.rows[0].msl_numerator,
+        mslDenominator: mslRow.rows[0].msl_denominator,
         extNumerator:   extComp.rows[0].with_password,
         extDenominator: extComp.rows[0].total,
-        combinedNumerator:   mslRow.rows[0].msl + extComp.rows[0].with_password,
-        combinedDenominator: mslRow.rows[0].msl + extComp.rows[0].total,
+        combinedNumerator:   mslRow.rows[0].msl_numerator + extComp.rows[0].with_password,
+        combinedDenominator: mslRow.rows[0].msl_denominator + extComp.rows[0].total,
         locations: locationCount.rows,
       },
 

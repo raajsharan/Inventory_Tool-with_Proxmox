@@ -324,6 +324,8 @@ export default function TenableReport() {
               <Select.Option value="all">All Sources</Select.Option>
               <Select.Option value="Asset Inventory">Asset Inventory</Select.Option>
               <Select.Option value="Ext. Asset Inventory">Ext. Asset Inventory</Select.Option>
+              <Select.Option value="Beijing Inventory">Beijing Inventory</Select.Option>
+              <Select.Option value="Physical / ESXi">Physical / ESXi</Select.Option>
             </Select>
           </Col>
         )}

@@ -4,6 +4,11 @@ const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const audit = require('../services/auditService');
 
+// Precomputed bcrypt hash of a fixed dummy password, used to keep bcrypt.compare
+// timing constant on the "no such user" / "inactive user" path so login responses
+// don't leak (via response time) whether an email is registered.
+const DUMMY_PASSWORD_HASH = '$2b$12$bjD8Qcyc5ml6wlVXIWNEi.WusgBc4r5jvku1AGuKh6N92kIeAKNca';
+
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
@@ -13,7 +18,10 @@ async function login(req, res, next) {
       [email.toLowerCase()]
     );
     const user = rows[0];
-    if (!user || !user.is_active) throw new ApiError(401, 'Invalid credentials');
+    if (!user || !user.is_active) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      throw new ApiError(401, 'Invalid credentials');
+    }
 
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) throw new ApiError(401, 'Invalid credentials');

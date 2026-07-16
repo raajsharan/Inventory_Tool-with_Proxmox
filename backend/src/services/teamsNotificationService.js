@@ -264,9 +264,10 @@ async function notifyMigrationStatus(vmName, category, newStatus, updatedBy = nu
   await send(card);
 }
 
-async function testNotification() {
+async function testNotification(overrideUrl) {
   const cfg = await getConfig();
-  if (!cfg.webhook_url) throw new Error('No webhook URL configured');
+  const webhookUrl = overrideUrl || cfg.webhook_url;
+  if (!webhookUrl) throw new Error('No webhook URL configured');
 
   const card = buildCard({
     subtitle: 'NetBrain Inventory Tool',
@@ -277,7 +278,7 @@ async function testNotification() {
       { title: 'Time',   value: new Date().toISOString() },
     ],
   });
-  await postJson(cfg.webhook_url, card);
+  await postJson(webhookUrl, card);
 }
 
 module.exports = {

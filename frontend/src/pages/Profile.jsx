@@ -265,8 +265,18 @@ export default function Profile() {
               <Form.Item name="currentPassword" label="Current Password" rules={[{ required: true }]}>
                 <Input.Password placeholder="Enter current password" />
               </Form.Item>
-              <Form.Item name="newPassword" label="New Password" rules={[{ required: true, min: 6, message: 'Min 6 characters' }]}>
-                <Input.Password placeholder="Min 6 characters" />
+              <Form.Item
+                name="newPassword"
+                label="New Password"
+                rules={[
+                  { required: true, message: 'Please enter a new password' },
+                  {
+                    pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+                    message: 'Min 8 characters, with uppercase, lowercase, and a number',
+                  },
+                ]}
+              >
+                <Input.Password placeholder="Min 8 characters, with uppercase, lowercase, and a number" />
               </Form.Item>
               <Form.Item name="confirmPassword" label="Confirm New Password" rules={[{ required: true }]}>
                 <Input.Password placeholder="Re-enter new password" />

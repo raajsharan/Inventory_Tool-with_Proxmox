@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, App, Badge, Button, Card, Col, Divider, Form, Input,
+  Alert, App, AutoComplete, Badge, Button, Card, Col, Divider, Form, Input,
   Modal, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
@@ -408,11 +408,9 @@ function ConfigModal({ open, onClose, onSaved }) {
               </span>
             }
           >
-            <Select
+            <AutoComplete
               allowClear
               placeholder="Auto-detect (tries known paths)"
-              showSearch
-              mode="combobox"
               options={[
                 { value: '/api/1.4/som/computers',                label: '/api/1.4/som/computers (recommended)' },
                 { value: '/api/1.4/inventory/computers',          label: '/api/1.4/inventory/computers' },
@@ -423,6 +421,9 @@ function ConfigModal({ open, onClose, onSaved }) {
                 { value: '/api/1.4/computers',                    label: '/api/1.4/computers (legacy)' },
                 { value: '/dcapi/rd/computers',                   label: '/dcapi/rd/computers (legacy)' },
               ]}
+              filterOption={(inputValue, option) =>
+                option?.value?.toLowerCase().includes(inputValue.toLowerCase())
+              }
               onClear={() => form.setFieldValue('api_path', '')}
             />
           </Form.Item>

@@ -7,6 +7,14 @@ const ApiError = require('../utils/ApiError');
 
 const INVENTORY_TABLES = ['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'];
 
+// Matches only files produced by this service's own naming conventions:
+//   inventory_<db>[_<stamp>].sql   (pg dump, see runPgBackup)
+//   <table>_<stamp>.csv            (csv export, see dumpTableToCsv, table is one of INVENTORY_TABLES)
+//   pg_dump_...                    (retained for backward-compat with older backup naming)
+const BACKUP_NAME_RE = new RegExp(
+  `^(pg_dump|inventory|${INVENTORY_TABLES.join('|')})_.*\\.(sql|csv|zip)$`
+);
+
 function nowStamp() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
@@ -148,7 +156,7 @@ async function pruneOldFiles(dir, retainDays) {
   let entries;
   try { entries = await fsp.readdir(dir); } catch { return; }
   for (const name of entries) {
-    if (!/^(pg_dump|inventory_)|\.(sql|csv|zip)$/.test(name)) continue;
+    if (!BACKUP_NAME_RE.test(name)) continue;
     const full = path.join(dir, name);
     try {
       const st = await fsp.stat(full);

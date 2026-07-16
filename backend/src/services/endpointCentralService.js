@@ -310,7 +310,10 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
       ON CONFLICT (id) DO UPDATE SET
         server_url    = EXCLUDED.server_url,
         customer_id   = EXCLUDED.customer_id,
-        api_key       = EXCLUDED.api_key,
+        api_key       = CASE
+          WHEN EXCLUDED.api_key = '' THEN endpoint_central_config.api_key
+          ELSE EXCLUDED.api_key
+        END,
         api_path      = EXCLUDED.api_path,
         verify_ssl    = EXCLUDED.verify_ssl,
         auth_mode     = EXCLUDED.auth_mode,
@@ -343,12 +346,10 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
 }
 
 async function saveSessionToken(token) {
-  try {
-    await db.query(
-      `UPDATE endpoint_central_config SET session_token = $1, updated_at = NOW() WHERE id = 1`,
-      [token || '']
-    );
-  } catch { /* non-fatal */ }
+  await db.query(
+    `UPDATE endpoint_central_config SET session_token = $1, updated_at = NOW() WHERE id = 1`,
+    [token || '']
+  );
 }
 
 // ---------------------------------------------------------------------------

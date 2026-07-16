@@ -534,6 +534,8 @@ export default function DbImport() {
                 setCurrent(0); setPreviewRows([]); setResult(null);
                 setColumns([]); setSample([]); setTables([]);
                 setColumnMap({}); setSuggested({}); setSavedCreds(null);
+                setSelectedTable(''); setCustomQuery(''); setSourceMode('table');
+                setTargetTable('assets'); setVerifyByIp(true);
               }}
             >
               Start New Import

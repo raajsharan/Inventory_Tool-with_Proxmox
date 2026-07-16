@@ -52,7 +52,7 @@ export default function TeamsNotifications() {
     }
     setTesting(true);
     try {
-      await api.post('/teams-notification/test');
+      await api.post('/teams-notification/test', { webhook_url: webhookUrl });
       message.success('Test notification sent to Teams!');
     } catch (err) {
       message.error(err?.response?.data?.error || 'Test notification failed.');
