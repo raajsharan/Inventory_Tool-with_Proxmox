@@ -116,6 +116,9 @@ const STATEMENTS = [
   `INSERT INTO compliance_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
 
   // ── ManageEngine Endpoint Central connection config (singleton row)
+  // NOTE: api_key and auth_password store AES-256-GCM ciphertext (see
+  // utils/crypto.js), written/read via endpointCentralService.js — never
+  // plaintext, mirroring asset_password_encrypted elsewhere in the app.
   `CREATE TABLE IF NOT EXISTS endpoint_central_config (
       id          INTEGER PRIMARY KEY DEFAULT 1,
       server_url  TEXT NOT NULL DEFAULT '',
@@ -161,6 +164,8 @@ const STATEMENTS = [
       updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `INSERT INTO software_install_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+  // NOTE: nessus_key stores AES-256-GCM ciphertext (see utils/crypto.js),
+  // written/read via nessusStatusController.js — never plaintext.
   `CREATE TABLE IF NOT EXISTS nessus_install_config (
       id                     INTEGER PRIMARY KEY DEFAULT 1,
       linux_install_method   VARCHAR(16) DEFAULT 'file',

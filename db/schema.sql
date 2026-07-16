@@ -711,6 +711,8 @@ CREATE TABLE IF NOT EXISTS software_install_location_config (
 -- nessus_install_config
 --   Single-row config for the Nessus agent deploy feature on the
 --   Nessus Agent Status page.
+--   nessus_key stores AES-256-GCM ciphertext (see backend/src/utils/crypto.js),
+--   written/read via nessusStatusController.js — never plaintext.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nessus_install_config (
     id                     INTEGER PRIMARY KEY DEFAULT 1,

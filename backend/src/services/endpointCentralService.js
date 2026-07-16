@@ -12,9 +12,10 @@
  * Fix in ME EC: Admin → API Explorer → (re)generate key → select modules.
  */
 
-const https = require('https');
-const http  = require('http');
-const db    = require('../config/db');
+const https   = require('https');
+const http    = require('http');
+const db      = require('../config/db');
+const crypto  = require('../utils/crypto');
 
 // ---------------------------------------------------------------------------
 // Known API paths — tested across multiple ME EC versions
@@ -279,7 +280,15 @@ const DEFAULT_CONFIG = {
 async function getConfig() {
   try {
     const { rows } = await db.query('SELECT * FROM endpoint_central_config WHERE id = 1');
-    return rows[0] || DEFAULT_CONFIG;
+    const row = rows[0];
+    if (!row) return DEFAULT_CONFIG;
+    // api_key / auth_password are stored encrypted at rest (AES-256-GCM);
+    // decrypt here so all existing callers keep receiving plaintext.
+    return {
+      ...row,
+      api_key:       crypto.decryptSafe(row.api_key),
+      auth_password: crypto.decryptSafe(row.auth_password),
+    };
   } catch (e) {
     if (e.code === '42P01' || e.code === '42703') return DEFAULT_CONFIG;
     throw e;
@@ -288,6 +297,11 @@ async function getConfig() {
 
 async function saveConfig({ server_url, customer_id, api_key, api_path, verify_ssl, auth_mode, auth_username, auth_password }, updatedBy) {
   try {
+    // Encrypt secrets at rest — mirrors asset_password_encrypted elsewhere
+    // in the app. '' is kept as the "no change" sentinel (see CASE below),
+    // so only non-empty values are encrypted.
+    const encApiKey       = api_key       ? crypto.encrypt(api_key)       : '';
+    const encAuthPassword = auth_password ? crypto.encrypt(auth_password) : '';
     await db.query(`
       INSERT INTO endpoint_central_config
         (id, server_url, customer_id, api_key, api_path, verify_ssl,
@@ -310,12 +324,12 @@ async function saveConfig({ server_url, customer_id, api_key, api_path, verify_s
     `, [
       server_url    || '',
       customer_id   || '1',
-      api_key       || '',
+      encApiKey,
       api_path      || '',
       !!verify_ssl,
       auth_mode     || 'api_key',
       auth_username || '',
-      auth_password || '',
+      encAuthPassword,
       updatedBy     || null,
     ]);
   } catch (e) {

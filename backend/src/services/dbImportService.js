@@ -41,6 +41,20 @@ function normalize(s) {
   return String(s || '').replace(/[_\-\s]+/g, ' ').trim().toLowerCase();
 }
 
+// Table names are interpolated directly into SQL identifier position (`"${table}"`).
+// pg's simple query protocol (used when client.query() is called with a bare string)
+// allows stacked ;-separated statements, so an unvalidated table name is a SQL
+// injection vector. Only allow safe, unquoted-identifier-style names.
+const SAFE_IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
+
+function assertSafeIdentifier(table) {
+  if (typeof table !== 'string' || !SAFE_IDENTIFIER_RE.test(table)) {
+    const err = new Error('Invalid table name');
+    err.status = 400;
+    throw err;
+  }
+}
+
 async function withClient(creds, fn) {
   // pg's val() uses a truthy check so '' is falsy → falls through to null default →
   // SASL throws "client password must be a string".
@@ -89,6 +103,7 @@ async function testConnection(creds) {
 }
 
 async function fetchColumns(creds, { table, query }) {
+  if (!query) assertSafeIdentifier(table);
   return withClient(creds, async (client) => {
     const sql = query
       ? `SELECT * FROM (${query}) _q LIMIT 5`
@@ -117,6 +132,7 @@ function suggestMapping(sourceColumns) {
 }
 
 async function fetchRows(creds, { table, query }) {
+  if (!query) assertSafeIdentifier(table);
   return withClient(creds, async (client) => {
     const sql = query
       ? query

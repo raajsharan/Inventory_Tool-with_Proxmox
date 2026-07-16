@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { sanitizeFooterHtml } = require('../utils/sanitizeHtml');
 
 async function get() {
   const { rows } = await db.query('SELECT * FROM app_branding WHERE id = 1');
@@ -12,7 +13,12 @@ async function get() {
       logo_data_url: null,
     };
   }
-  return rows[0];
+  const row = rows[0];
+  // Defense in depth: re-sanitize on read too, so rows written before this
+  // fix (or by any other path) can never serve unsafe markup to the public
+  // login page or the app footer.
+  if (row.footer_html) row.footer_html = sanitizeFooterHtml(row.footer_html);
+  return row;
 }
 
 async function update(body, userId) {
@@ -21,8 +27,9 @@ async function update(body, userId) {
   const vals = [];
   for (const k of allowed) {
     if (body[k] !== undefined) {
+      const value = k === 'footer_html' ? sanitizeFooterHtml(body[k]) : body[k];
       sets.push(`${k} = $${sets.length + 1}`);
-      vals.push(body[k]);
+      vals.push(value);
     }
   }
   if (!sets.length) return get();

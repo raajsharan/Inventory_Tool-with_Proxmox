@@ -34,4 +34,19 @@ function decrypt(payload) {
   return pt.toString('utf8');
 }
 
-module.exports = { encrypt, decrypt };
+// Decrypts a value that is expected to be ciphertext produced by encrypt(),
+// but tolerates legacy plaintext saved before encryption was applied to that
+// column: if decryption fails (e.g. GCM auth-tag verification), the original
+// value is returned unchanged so existing data keeps working until the next
+// save re-encrypts it.
+function decryptSafe(payload) {
+  if (!payload) return '';
+  try {
+    const pt = decrypt(payload);
+    return pt === null ? '' : pt;
+  } catch {
+    return payload;
+  }
+}
+
+module.exports = { encrypt, decrypt, decryptSafe };

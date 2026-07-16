@@ -1,12 +1,25 @@
 const jwt = require('jsonwebtoken');
 const ApiError = require('../utils/ApiError');
+const db = require('../config/db');
 
-function authenticate(req, _res, next) {
+async function authenticate(req, _res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return next(new ApiError(401, 'Missing token'));
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    // Re-check current DB state on every request so a deactivation or role
+    // change takes effect immediately instead of waiting for the token to
+    // expire (the JWT payload alone is a stale snapshot from login time).
+    const { rows } = await db.query(
+      `SELECT is_active, role FROM users WHERE id = $1`,
+      [payload.id]
+    );
+    const current = rows[0];
+    if (!current || !current.is_active) {
+      return next(new ApiError(401, 'Invalid or expired token'));
+    }
+    req.user = { ...payload, role: current.role };
     return next();
   } catch (e) {
     return next(new ApiError(401, 'Invalid or expired token'));

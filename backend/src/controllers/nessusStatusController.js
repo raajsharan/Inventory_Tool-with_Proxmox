@@ -1,7 +1,7 @@
 const fs          = require('fs');
 const path        = require('path');
 const db          = require('../config/db');
-const { decrypt } = require('../utils/crypto');
+const { encrypt, decrypt, decryptSafe } = require('../utils/crypto');
 const {
   sshVerify, sshRunCommand, sshUploadAndRun, isWindows,
   NESSUS_LINUX_CONFIG, NESSUS_WINDOWS_CONFIG,
@@ -156,6 +156,13 @@ async function getInstallConfig(req, res, next) {
          FROM nessus_install_config WHERE id = 1`,
     );
     const row = rows[0] || {};
+    const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
+    // nessus_key is stored encrypted at rest (AES-256-GCM); decrypt before
+    // applying the existing admin-only masking below.
+    const plainNessusKey = decryptSafe(row.nessus_key);
+    // The linking key can be used to enroll rogue agents into the Tenable
+    // subscription — never expose it in cleartext to non-admin roles.
+    row.nessus_key            = isAdmin ? (plainNessusKey || '') : (plainNessusKey ? '••••••••' : '');
     row.linux_file_exists     = fileCheck(row.linux_file_path);
     row.windows_file_exists   = fileCheck(row.windows_file_path);
     row.windows_psexec_exists = fileCheck(row.windows_psexec_path);
@@ -213,11 +220,16 @@ async function saveInstallConfig(req, res, next) {
         windows_psexec_path || null, windows_winrm_port || 5985, windows_smb_port || 445,
         skip_if_installed === true || skip_if_installed === 'true',
         log_file_path || null,
-        nessus_server || null, nessus_port || 8834, nessus_key || null, nessus_groups || null,
+        nessus_server || null, nessus_port || 8834,
+        nessus_key ? encrypt(nessus_key) : null, // stored encrypted at rest (AES-256-GCM)
+        nessus_groups || null,
         req.user.id,
       ],
     );
     const row = rows[0];
+    // RETURNING gives back the encrypted value just written; the caller
+    // already knows the plaintext they submitted, so echo that instead.
+    row.nessus_key            = nessus_key || null;
     row.linux_file_exists     = fileCheck(row.linux_file_path);
     row.windows_file_exists   = fileCheck(row.windows_file_path);
     row.windows_psexec_exists = fileCheck(row.windows_psexec_path);
