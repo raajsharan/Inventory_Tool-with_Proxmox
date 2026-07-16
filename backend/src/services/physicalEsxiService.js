@@ -10,7 +10,8 @@ const TABLE = 'physical_esxi_servers';
 // asset_tag kept for the auto-assignment tagging system.
 const ASSET_COLUMNS = [
   'vm_name', 'ip_address', 'server_status', 'department', 'location',
-  'server_model', 'serial_number', 'cpu_cores', 'ram_gb', 'total_disks',
+  'server_model', 'serial_number', 'asset_type', 'os_type', 'os_version',
+  'cpu_cores', 'ram_gb', 'total_disks',
   'ome_status', 'rack_number', 'server_position', 'additional_remarks',
   'idrac_ip', 'idrac_enabled', 'asset_tag',
 ];

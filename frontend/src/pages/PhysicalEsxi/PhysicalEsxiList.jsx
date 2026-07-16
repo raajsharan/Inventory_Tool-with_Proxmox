@@ -208,9 +208,6 @@ export default function PhysicalEsxiList() {
         ? <Space size={4}><CloseCircleFilled style={{ color: '#ff4d4f' }} /><span style={{ color: '#ff4d4f' }}>Expired</span></Space>
         : dash(v);
 
-  const yesNo = (v) =>
-    v == null ? dash(v) : v ? <Tag color="green">Yes</Tag> : <Tag>No</Tag>;
-
   const numCell = (v) =>
     v == null || v === 0 ? <Typography.Text type="secondary">—</Typography.Text> : v;
 
@@ -313,10 +310,6 @@ export default function PhysicalEsxiList() {
       key: 'idrac_ip', dataIndex: 'idrac_ip', width: 140,
       title: labelOf('idrac_ip', 'iDRAC IP'), render: dash,
     },
-    {
-      key: 'idrac_enabled', dataIndex: 'idrac_enabled', width: 110,
-      title: labelOf('idrac_enabled', 'iDRAC Enabled'), align: 'center', render: yesNo,
-    },
 
     // ── Secondary / extended fields ─────────────────────────────────────────
     {
@@ -326,10 +319,6 @@ export default function PhysicalEsxiList() {
     {
       key: 'os_version', dataIndex: 'os_version', width: 150,
       title: labelOf('os_version', 'OS Version'), render: dash,
-    },
-    {
-      key: 'os_hostname', dataIndex: 'os_hostname', width: 180,
-      title: labelOf('os_hostname', 'OS Hostname'), render: dash,
     },
     {
       key: 'asset_type', dataIndex: 'asset_type', width: 140,
@@ -343,14 +332,6 @@ export default function PhysicalEsxiList() {
       key: 'asset_tag', dataIndex: 'asset_tag', width: 110,
       title: labelOf('asset_tag', 'Asset Tag'),
       render: v => v ? <Tag>{v}</Tag> : dash(v),
-    },
-    {
-      key: 'hosted_ip', dataIndex: 'hosted_ip', width: 130,
-      title: labelOf('hosted_ip', 'Hosted IP (alt)'), render: dash,
-    },
-    {
-      key: 'mac_address', dataIndex: 'mac_address', width: 150,
-      title: labelOf('mac_address', 'MAC Address'), render: dash,
     },
     {
       key: 'asset_username', dataIndex: 'asset_username', width: 150,

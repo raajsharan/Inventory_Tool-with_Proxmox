@@ -41,6 +41,7 @@ export default function PhysicalEsxiForm({ mode }) {
   const [originalIp, setOriginalIp] = useState(null);
   const [selectedDept, setSelectedDept] = useState(null);
   const [pendingTag, setPendingTag] = useState(null);
+  const [osType, setOsType] = useState();
 
   const omeOn = Form.useWatch('omeActive', form);
 
@@ -70,10 +71,14 @@ export default function PhysicalEsxiForm({ mode }) {
           serverPosition:  d.server_position,
           additionalRemarks: d.additional_remarks,
           idracIp:         d.idrac_ip,
+          assetType:       d.asset_type,
+          osType:          d.os_type,
+          osVersion:       d.os_version,
         });
         setOriginalIp(d.ip_address || null);
         setSelectedDept(d.department);
         setPendingTag(d.asset_tag);
+        setOsType(d.os_type);
       });
     }
   }, [id, mode]); // eslint-disable-line
@@ -86,7 +91,9 @@ export default function PhysicalEsxiForm({ mode }) {
       .catch(() => setPendingTag(null));
   }, [selectedDept, mode]);
 
-  const opts = (cat) => (dd[cat] || []).map(d => ({ label: d.value, value: d.value }));
+  const opts = (cat, parent) => (dd[cat] || [])
+    .filter(d => parent === undefined ? true : d.parent_value === parent)
+    .map(d => ({ label: d.value, value: d.value }));
 
   const deptOpts = departments.map(d => ({
     label: `${d.name} (${String(d.min_tag).padStart(4, '0')}–${String(d.max_tag).padStart(4, '0')})`,
@@ -114,6 +121,9 @@ export default function PhysicalEsxiForm({ mode }) {
         additionalRemarks: values.additionalRemarks,
         idracIp:           values.idracIp,
         idracEnabled:      !!(values.idracIp),
+        assetType:         values.assetType,
+        osType:            values.osType,
+        osVersion:         values.osVersion,
         ...(pendingTag ? { assetTag: pendingTag } : {}),
       };
 
@@ -283,6 +293,43 @@ export default function PhysicalEsxiForm({ mode }) {
             <Col xs={24} md={8}>
               <Form.Item name="serialNumber" label="Serial Number">
                 <Input placeholder="SRV-001-2024" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            {/* Asset Type */}
+            <Col xs={24} md={8}>
+              <Form.Item name="assetType" label="Asset Type">
+                <Input placeholder="e.g. Physical Server" />
+              </Form.Item>
+            </Col>
+
+            {/* OS Type */}
+            <Col xs={24} md={8}>
+              <Form.Item name="osType" label="OS Type">
+                <Select
+                  allowClear showSearch optionFilterProp="label"
+                  placeholder="Select OS Type"
+                  options={opts('os_type')}
+                  onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }}
+                />
+              </Form.Item>
+            </Col>
+
+            {/* OS Version */}
+            <Col xs={24} md={8}>
+              <Form.Item
+                name="osVersion"
+                label="OS Version"
+                extra={!osType ? 'Select an OS Type first to see available versions.' : undefined}
+              >
+                <Select
+                  allowClear showSearch optionFilterProp="label"
+                  disabled={!osType}
+                  placeholder={osType ? 'Select OS Version' : 'Select OS Type first'}
+                  options={osType ? opts('os_version', osType) : []}
+                />
               </Form.Item>
             </Col>
           </Row>
