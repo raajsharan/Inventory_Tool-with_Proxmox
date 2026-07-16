@@ -642,13 +642,13 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
             a text box to a dropdown with predefined values, or convert <strong>Additional Remarks</strong> to a radio button selector.
             <br />
             <Typography.Text type="warning" style={{ fontSize: 12 }}>
-              ⚠ Fields linked to database tables (Asset Type, OS Type, Department, etc.) always remain as dropdowns — they are not listed here.
+              ⚠ Fields linked to database tables (OS Type, Department, Server Model, etc.) always remain as dropdowns — shown below as <strong>Locked</strong>, but you can still rename their label.
             </Typography.Text>
           </>
         }
       />
       {grouped.map(g => {
-        const editable = g.fields.filter(f => !f.linked_to_table);
+        const editable = g.fields;
         if (!editable.length) return null;
         return (
           <div key={g.name} style={{ marginBottom: 24 }}>
