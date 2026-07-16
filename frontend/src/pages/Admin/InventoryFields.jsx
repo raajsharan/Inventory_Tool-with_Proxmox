@@ -376,7 +376,7 @@ export default function InventoryFields() {
       )}
 
       {tab === 'types' && (
-        <ChangeFieldTypes data={data} grouped={grouped} patchField={patchField} resetField={resetField} />
+        <ChangeFieldTypes data={data} grouped={grouped} patchField={patchField} resetField={resetField} nav={nav} />
       )}
 
       <Modal
@@ -627,7 +627,7 @@ function MoveBuiltInFields({ data, grouped, patchField, addGroup, renameGroup, d
 }
 
 // ===== Tab 3: Change Field Types =====
-function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
+function ChangeFieldTypes({ data, grouped, patchField, resetField, nav }) {
   return (
     <>
       <Alert
@@ -640,6 +640,9 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
           <>
             Override the input type for any built-in field. For example, change <strong>Assigned User</strong> from
             a text box to a dropdown with predefined values, or convert <strong>Additional Remarks</strong> to a radio button selector.
+            Switching a field to <strong>Dropdown</strong> automatically links it to its own category on the{' '}
+            <strong>Dropdown Master</strong> page, where its values are then managed — the same place every other
+            dropdown in the app is managed.
             <br />
             <Typography.Text type="warning" style={{ fontSize: 12 }}>
               ⚠ Fields linked to database tables (OS Type, Department, Server Model, etc.) always remain as dropdowns — shown below as <strong>Locked</strong>, but you can still rename their label.
@@ -704,20 +707,27 @@ function ChangeFieldTypes({ data, grouped, patchField, resetField }) {
 
                 {f.input_type === 'dropdown' && !f.frozen && (
                   <Col xs={24} style={{ marginTop: 10 }}>
-                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                      <FontSizeOutlined /> Dropdown Options (one per line)
-                    </Typography.Text>
-                    <Input.TextArea
-                      rows={3}
-                      value={(f.options || []).join('\n')}
-                      onChange={e => patchField(f.field_key, { options: e.target.value.split('\n') })}
-                      placeholder="Option A&#10;Option B&#10;Option C"
-                      className="inv-edit-input"
-                      style={{ fontFamily: 'monospace' }}
-                    />
-                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                      {(f.options || []).filter(s => s && s.trim()).length} options defined
-                    </Typography.Text>
+                    {f.dropdown_category ? (
+                      <Alert
+                        type="info"
+                        showIcon
+                        message={
+                          <Space size={4} wrap>
+                            <span>Values for this dropdown are managed on the Dropdown Master page.</span>
+                            <Button size="small" type="link" style={{ padding: 0 }}
+                              onClick={() => nav('/admin/dropdowns')}>
+                              Manage on Dropdown Master →
+                            </Button>
+                          </Space>
+                        }
+                      />
+                    ) : (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="Click Save to link this field to a new Dropdown Master category, where you'll add its values."
+                      />
+                    )}
                   </Col>
                 )}
               </Row>

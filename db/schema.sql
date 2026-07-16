@@ -482,7 +482,8 @@ CREATE TABLE IF NOT EXISTS builtin_field_overrides (
     label        VARCHAR(255),
     section      VARCHAR(64),
     input_type   VARCHAR(32),               -- text|textarea|number|dropdown|toggle|date
-    options      JSONB,                     -- for dropdown options (array of strings)
+    options      JSONB,                     -- legacy free-text dropdown options (array of strings)
+    dropdown_category VARCHAR(120),         -- when input_type='dropdown', auto-linked dropdown_master category
     is_required  BOOLEAN NOT NULL DEFAULT FALSE,
     sort_order   INT NOT NULL DEFAULT 0,
     updated_by   UUID REFERENCES users(id) ON DELETE SET NULL,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Card, Form, Input, Select, Switch, Row, Col, Button, Space, App,
@@ -8,23 +8,33 @@ import {
   ArrowLeftOutlined, ReloadOutlined,
   CheckCircleFilled, CloseCircleFilled,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import {
+  useInventoryFieldMeta,
+  overridableFormItem as sharedOverridableFormItem,
+  renderExtraWidget as sharedRenderExtraWidget,
+  buildDynamicSections,
+} from '../../utils/dynamicFormFields.jsx';
 
 const { Text, Link } = Typography;
 
 const ipRe = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
-const SectionLabel = ({ children }) => (
-  <div style={{ marginBottom: 16 }}>
-    <Text style={{
-      fontSize: 11, fontWeight: 700, letterSpacing: 1.2,
-      color: '#8c8c8c', textTransform: 'uppercase',
-    }}>
-      {children}
-    </Text>
-  </div>
-);
+const PAGE_KEY = 'physical_esxi_servers';
+
+// Width map for built-in widgets so a moved field keeps a sensible size.
+const FIELD_WIDTHS = {
+  vm_name: { xs: 24, md: 8 }, ip_address: { xs: 24, md: 8 },
+  asset_type: { xs: 24, md: 8 }, os_type: { xs: 24, md: 8 }, os_version: { xs: 24, md: 8 },
+  department: { xs: 24, md: 8 }, asset_tag: { xs: 24, md: 24 },
+  server_status: { xs: 24, md: 8 }, location: { xs: 24, md: 8 },
+  asset_username: { xs: 24, md: 8 }, asset_password: { xs: 24, md: 8 }, additional_remarks: { xs: 24, md: 24 },
+  idrac_enabled: { xs: 24, md: 8 }, serial_number: { xs: 24, md: 8 }, ome_status: { xs: 24, md: 8 }, idrac_ip: { xs: 24, md: 8 },
+  server_model: { xs: 24, md: 8 }, cpu_cores: { xs: 24, md: 8 }, ram_gb: { xs: 24, md: 8 }, total_disks: { xs: 24, md: 8 },
+  rack_number: { xs: 24, md: 8 }, server_position: { xs: 24, md: 8 },
+};
 
 export default function PhysicalEsxiForm({ mode }) {
   const { id } = useParams();
@@ -42,8 +52,16 @@ export default function PhysicalEsxiForm({ mode }) {
   const [selectedDept, setSelectedDept] = useState(null);
   const [pendingTag, setPendingTag] = useState(null);
   const [osType, setOsType] = useState();
+  const { isHidden, fieldMeta, labelOf } = useInventoryFieldMeta(PAGE_KEY);
 
   const omeOn = Form.useWatch('omeActive', form);
+  const serverStatusValue = Form.useWatch('serverStatus', form);
+
+  // ome_status keeps its bespoke Active/Expired switch as the default widget;
+  // only falls back to a generic override widget if an admin explicitly
+  // changes its type away from default via Change Field Types.
+  const omeMeta = fieldMeta.byKey?.ome_status;
+  const omeOverridden = !!(omeMeta?.input_type && omeMeta.input_type !== omeMeta.default_type);
 
   // ── Load dropdowns + record (edit mode) ────────────────────────────────────
   useEffect(() => {
@@ -67,6 +85,7 @@ export default function PhysicalEsxiForm({ mode }) {
           ramGb:           d.ram_gb    ?? 0,
           totalDisks:      d.total_disks ?? 0,
           omeActive:       d.ome_status === 'Active',
+          omeStatus:       d.ome_status,
           rackNumber:      d.rack_number,
           serverPosition:  d.server_position,
           additionalRemarks: d.additional_remarks,
@@ -75,6 +94,12 @@ export default function PhysicalEsxiForm({ mode }) {
           osType:          d.os_type,
           osVersion:       d.os_version,
           assetUsername:   d.asset_username,
+          serverStatus:    d.server_status,
+          extras: Object.fromEntries(
+            Object.entries(d.extras || {}).map(([k, v]) =>
+              [k, v && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? dayjs(v) : v]
+            )
+          ),
         });
         setOriginalIp(d.ip_address || null);
         setSelectedDept(d.department);
@@ -101,6 +126,16 @@ export default function PhysicalEsxiForm({ mode }) {
     value: d.name,
   }));
 
+  // Thin wrapper around the shared implementation (frontend/src/utils/dynamicFormFields.jsx)
+  // so every fieldKey-based call site below keeps working unchanged.
+  function overridableFormItem(opts) {
+    return sharedOverridableFormItem({ ...opts, fieldMeta, dd });
+  }
+
+  function renderExtraWidget(f) {
+    return sharedRenderExtraWidget(f, { isHidden, dd });
+  }
+
   // ── Submit ──────────────────────────────────────────────────────────────────
   async function onFinish(values) {
     setSubmitting(true);
@@ -116,7 +151,7 @@ export default function PhysicalEsxiForm({ mode }) {
         cpuCores:          values.cpuCores   ?? 0,
         ramGb:             values.ramGb      ?? 0,
         totalDisks:        values.totalDisks ?? 0,
-        omeStatus:         values.omeActive ? 'Active' : 'Expired',
+        omeStatus:         omeOverridden ? values.omeStatus : (values.omeActive ? 'Active' : 'Expired'),
         rackNumber:        values.rackNumber,
         serverPosition:    values.serverPosition,
         additionalRemarks: values.additionalRemarks,
@@ -126,9 +161,20 @@ export default function PhysicalEsxiForm({ mode }) {
         osType:            values.osType,
         osVersion:         values.osVersion,
         assetUsername:     values.assetUsername,
+        ...(values.serverStatus !== undefined ? { serverStatus: values.serverStatus } : {}),
+        ...(values.serverStatus && /^decom/i.test(values.serverStatus) ? { decommissionReason: values.decommissionReason } : {}),
         ...(values.assetPassword ? { assetPassword: values.assetPassword } : {}),
         ...(pendingTag ? { assetTag: pendingTag } : {}),
       };
+
+      if (values.extras && typeof values.extras === 'object' && Object.keys(values.extras).length) {
+        payload.extras = Object.fromEntries(
+          Object.entries(values.extras).map(([k, v]) => {
+            if (v && typeof v === 'object' && typeof v.toISOString === 'function') return [k, v.toISOString()];
+            return [k, v];
+          })
+        );
+      }
 
       if (mode === 'create') {
         await api.post('/physical-esxi', payload);
@@ -156,6 +202,256 @@ export default function PhysicalEsxiForm({ mode }) {
 
   const isCreate = mode === 'create';
   const title    = isCreate ? 'Register Physical Server' : 'Edit Physical Server';
+
+  function renderBuiltinWidget(field_key) {
+    if (isHidden(field_key)) return null;
+    const width = FIELD_WIDTHS[field_key] || { xs: 24, md: 8 };
+    const wrap = (children) => <Col key={field_key} xs={width.xs} md={width.md}>{children}</Col>;
+
+    switch (field_key) {
+      case 'vm_name':
+        return wrap(overridableFormItem({
+          fieldKey: 'vm_name', name: 'vmName',
+          label: labelOf('vm_name', 'Device Name'),
+          extra: 'Linked VM or primary asset on this host',
+          defaultChild: <Input placeholder="e.g. ESX-HOST-01" />,
+        }));
+      case 'ip_address':
+        return wrap(
+          <Form.Item
+            name="ipAddress"
+            label={labelOf('ip_address', 'Hosted IP')}
+            extra="IP address of this physical server"
+            validateDebounce={400}
+            rules={[
+              { required: true, message: 'Hosted IP is required' },
+              { pattern: ipRe, message: 'Invalid IP address' },
+              {
+                validator: async (_, value) => {
+                  if (!value || !ipRe.test(value)) return;
+                  if (mode === 'edit' && originalIp && value === originalIp) return;
+                  try {
+                    const params = { ip: value };
+                    if (mode === 'edit' && id) {
+                      params.excludeTable = 'physical_esxi_servers';
+                      params.excludeId = id;
+                    }
+                    const { data } = await api.get('/physical-esxi/check-ip', { params });
+                    if (data.used) {
+                      const where =
+                        data.conflictTable === 'beijing_assets'          ? 'Beijing Inventory'
+                        : data.conflictTable === 'ext_assets'            ? 'Ext. Asset Inventory'
+                        : data.conflictTable === 'physical_esxi_servers' ? 'Physical & ESXi Servers'
+                        : 'Asset Inventory';
+                      throw new Error(`IP already exists in ${where}`);
+                    }
+                  } catch (e) {
+                    if (e.message?.startsWith('IP already')) throw e;
+                  }
+                },
+              },
+            ]}
+          >
+            <Input placeholder="10.0.0.1" />
+          </Form.Item>
+        );
+      case 'department':
+        return wrap(
+          <Form.Item name="department" label={labelOf('department', 'Department')}>
+            <Select
+              allowClear showSearch optionFilterProp="label"
+              placeholder="Select department..."
+              options={deptOpts}
+              onChange={(v) => setSelectedDept(v || null)}
+            />
+          </Form.Item>
+        );
+      case 'asset_tag':
+        // Auto-assigned behind the scenes via `pendingTag` + department
+        // selection (see effect above) — no standalone widget, matching
+        // the form's existing UX (tag isn't shown until after creation).
+        return null;
+      case 'location':
+        return wrap(
+          <Form.Item name="location" label={labelOf('location', 'Location')}>
+            <Select allowClear showSearch optionFilterProp="label"
+              placeholder="Select location..."
+              options={opts('location')}
+            />
+          </Form.Item>
+        );
+      case 'server_status':
+        return wrap(
+          <>
+            <Form.Item name="serverStatus" label={labelOf('server_status', 'Server Status')}>
+              <Select allowClear options={opts('server_status')} />
+            </Form.Item>
+            {/^decom/i.test(String(serverStatusValue || '')) && (
+              <Form.Item
+                name="decommissionReason"
+                label="Decommission reason"
+                extra="Optional — recorded in the decommission report with your name and date."
+              >
+                <Input.TextArea rows={2} placeholder="e.g. Hardware refresh — replaced by new unit" maxLength={500} />
+              </Form.Item>
+            )}
+          </>
+        );
+      case 'server_model':
+        return wrap(
+          <>
+            <Form.Item name="serverModel" label={labelOf('server_model', 'Server Model')}>
+              <Select
+                allowClear showSearch optionFilterProp="label"
+                placeholder="Select model..."
+                options={serverModels.map(m => ({
+                  label: m.manufacturer ? `${m.manufacturer} ${m.model_name}` : m.model_name,
+                  value: m.model_name,
+                }))}
+              />
+            </Form.Item>
+            {isAdmin && (
+              <div style={{ marginTop: -18, marginBottom: 16 }}>
+                <Link onClick={() => nav('/admin/server-models')}>Manage models →</Link>
+              </div>
+            )}
+          </>
+        );
+      case 'serial_number':
+        return wrap(overridableFormItem({
+          fieldKey: 'serial_number', name: 'serialNumber',
+          label: labelOf('serial_number', 'Serial Number'),
+          defaultChild: <Input placeholder="SRV-001-2024" />,
+        }));
+      case 'asset_type':
+        return wrap(overridableFormItem({
+          fieldKey: 'asset_type', name: 'assetType',
+          label: labelOf('asset_type', 'Asset Type'),
+          defaultChild: <Input placeholder="e.g. Physical Server" />,
+        }));
+      case 'os_type':
+        return wrap(
+          <Form.Item name="osType" label={labelOf('os_type', 'OS Type')}>
+            <Select
+              allowClear showSearch optionFilterProp="label"
+              placeholder="Select OS Type"
+              options={opts('os_type')}
+              onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }}
+            />
+          </Form.Item>
+        );
+      case 'os_version':
+        return wrap(
+          <Form.Item
+            name="osVersion"
+            label={labelOf('os_version', 'OS Version')}
+            extra={!osType ? 'Select an OS Type first to see available versions.' : undefined}
+          >
+            <Select
+              allowClear showSearch optionFilterProp="label"
+              disabled={!osType}
+              placeholder={osType ? 'Select OS Version' : 'Select OS Type first'}
+              options={osType ? opts('os_version', osType) : []}
+            />
+          </Form.Item>
+        );
+      case 'asset_username':
+        return wrap(overridableFormItem({
+          fieldKey: 'asset_username', name: 'assetUsername',
+          label: labelOf('asset_username', 'Asset Username'),
+          defaultChild: <Input placeholder="e.g. svc_admin" autoComplete="off" />,
+        }));
+      case 'asset_password':
+        return wrap(
+          <Form.Item name="assetPassword" label={labelOf('asset_password', 'Asset Password')} extra="Encrypted (AES-256-GCM) at rest">
+            <Input.Password
+              placeholder={mode === 'edit' ? 'Leave blank to keep existing' : ''}
+              autoComplete="new-password"
+            />
+          </Form.Item>
+        );
+      case 'cpu_cores':
+        return wrap(overridableFormItem({
+          fieldKey: 'cpu_cores', name: 'cpuCores',
+          label: labelOf('cpu_cores', 'CPU Cores'),
+          defaultChild: <InputNumber min={0} style={{ width: '100%' }} />,
+        }));
+      case 'ram_gb':
+        return wrap(overridableFormItem({
+          fieldKey: 'ram_gb', name: 'ramGb',
+          label: labelOf('ram_gb', 'RAM (GB)'),
+          defaultChild: <InputNumber min={0} style={{ width: '100%' }} />,
+        }));
+      case 'total_disks':
+        return wrap(overridableFormItem({
+          fieldKey: 'total_disks', name: 'totalDisks',
+          label: labelOf('total_disks', 'Total Disks'),
+          defaultChild: <InputNumber min={0} style={{ width: '100%' }} />,
+        }));
+      case 'ome_status':
+        if (omeOverridden) {
+          return wrap(overridableFormItem({
+            fieldKey: 'ome_status', name: 'omeStatus',
+            label: labelOf('ome_status', 'OME Support Status'),
+            defaultChild: <Input />,
+          }));
+        }
+        return wrap(
+          <Form.Item label={labelOf('ome_status', 'OME Support Status')}>
+            <Space align="center">
+              <Form.Item name="omeActive" valuePropName="checked" noStyle>
+                <Switch />
+              </Form.Item>
+              {omeOn ? (
+                <Space size={4}>
+                  <CheckCircleFilled style={{ color: '#52c41a' }} />
+                  <Text style={{ color: '#52c41a' }}>Support Active</Text>
+                </Space>
+              ) : (
+                <Space size={4}>
+                  <CloseCircleFilled style={{ color: '#ff4d4f' }} />
+                  <Text style={{ color: '#ff4d4f' }}>Support Expired</Text>
+                </Space>
+              )}
+            </Space>
+          </Form.Item>
+        );
+      case 'rack_number':
+        return wrap(overridableFormItem({
+          fieldKey: 'rack_number', name: 'rackNumber',
+          label: labelOf('rack_number', 'Rack Number'),
+          extra: 'e.g. RACK-A1, RACK-B3',
+          defaultChild: <Input placeholder="RACK-A1" />,
+        }));
+      case 'server_position':
+        return wrap(overridableFormItem({
+          fieldKey: 'server_position', name: 'serverPosition',
+          label: labelOf('server_position', 'Server Position (U)'),
+          extra: 'e.g. U12, U13-U14',
+          defaultChild: <Input placeholder="U12" />,
+        }));
+      case 'additional_remarks':
+        return wrap(overridableFormItem({
+          fieldKey: 'additional_remarks', name: 'additionalRemarks',
+          label: labelOf('additional_remarks', 'Additional Notes'),
+          defaultChild: <Input.TextArea rows={4} placeholder="Any additional notes about this physical server..." />,
+        }));
+      case 'idrac_ip':
+        return wrap(
+          <Form.Item name="idracIp" label={labelOf('idrac_ip', 'iDRAC IP')} rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}>
+            <Input placeholder="e.g. 10.0.0.2" />
+          </Form.Item>
+        );
+      case 'idrac_enabled':
+        // Derived from whether iDRAC IP is filled in (see onFinish) — no
+        // standalone widget, matching the form's existing behavior.
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  const dynamicSections = useMemo(() => buildDynamicSections(fieldMeta), [fieldMeta]);
 
   return (
     <div style={{ padding: '16px 24px' }}>
@@ -194,265 +490,22 @@ export default function PhysicalEsxiForm({ mode }) {
           onFinish={onFinish}
           initialValues={{ cpuCores: 0, ramGb: 0, totalDisks: 0, omeActive: false }}
         >
-          {/* ══ HARDWARE INFORMATION ════════════════════════════════════════════ */}
-          <SectionLabel>Hardware Information</SectionLabel>
-
-          <Row gutter={16}>
-            {/* Hosted IP */}
-            <Col xs={24} md={8}>
-              <Form.Item
-                name="ipAddress"
-                label="Hosted IP"
-                extra="IP address of this physical server"
-                validateDebounce={400}
-                rules={[
-                  { required: true, message: 'Hosted IP is required' },
-                  { pattern: ipRe, message: 'Invalid IP address' },
-                  {
-                    validator: async (_, value) => {
-                      if (!value || !ipRe.test(value)) return;
-                      if (mode === 'edit' && originalIp && value === originalIp) return;
-                      try {
-                        const params = { ip: value };
-                        if (mode === 'edit' && id) {
-                          params.excludeTable = 'physical_esxi_servers';
-                          params.excludeId = id;
-                        }
-                        const { data } = await api.get('/physical-esxi/check-ip', { params });
-                        if (data.used) {
-                          const where =
-                            data.conflictTable === 'beijing_assets'          ? 'Beijing Inventory'
-                            : data.conflictTable === 'ext_assets'            ? 'Ext. Asset Inventory'
-                            : data.conflictTable === 'physical_esxi_servers' ? 'Physical & ESXi Servers'
-                            : 'Asset Inventory';
-                          throw new Error(`IP already exists in ${where}`);
-                        }
-                      } catch (e) {
-                        if (e.message?.startsWith('IP already')) throw e;
-                      }
-                    },
-                  },
-                ]}
-              >
-                <Input placeholder="10.0.0.1" />
-              </Form.Item>
-            </Col>
-
-            {/* Device Name */}
-            <Col xs={24} md={8}>
-              <Form.Item
-                name="vmName"
-                label="Device Name"
-                extra="Linked VM or primary asset on this host"
-              >
-                <Input placeholder="e.g. ESX-HOST-01" />
-              </Form.Item>
-            </Col>
-
-            {/* Department */}
-            <Col xs={24} md={8}>
-              <Form.Item name="department" label="Department">
-                <Select
-                  allowClear showSearch optionFilterProp="label"
-                  placeholder="Select department..."
-                  options={deptOpts}
-                  onChange={(v) => setSelectedDept(v || null)}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            {/* Location */}
-            <Col xs={24} md={8}>
-              <Form.Item name="location" label="Location">
-                <Select allowClear showSearch optionFilterProp="label"
-                  placeholder="Select location..."
-                  options={opts('location')}
-                />
-              </Form.Item>
-            </Col>
-
-            {/* Server Model */}
-            <Col xs={24} md={8}>
-              <Form.Item name="serverModel" label="Server Model">
-                <Select
-                  allowClear showSearch optionFilterProp="label"
-                  placeholder="Select model..."
-                  options={serverModels.map(m => ({
-                    label: m.manufacturer ? `${m.manufacturer} ${m.model_name}` : m.model_name,
-                    value: m.model_name,
-                  }))}
-                />
-              </Form.Item>
-              {isAdmin && (
-                <div style={{ marginTop: -18, marginBottom: 16 }}>
-                  <Link onClick={() => nav('/admin/server-models')}>Manage models →</Link>
+          {dynamicSections === null ? (
+            <Typography.Text type="secondary">Loading fields…</Typography.Text>
+          ) : (
+            dynamicSections.map(([sectionName, sectionFields]) => {
+              const widgets = sectionFields
+                .map(f => f.is_extra ? renderExtraWidget(f) : renderBuiltinWidget(f.field_key))
+                .filter(Boolean);
+              if (widgets.length === 0) return null;
+              return (
+                <div key={sectionName}>
+                  <Divider orientation="left">{sectionName}</Divider>
+                  <Row gutter={16}>{widgets}</Row>
                 </div>
-              )}
-            </Col>
-
-            {/* Serial Number */}
-            <Col xs={24} md={8}>
-              <Form.Item name="serialNumber" label="Serial Number">
-                <Input placeholder="SRV-001-2024" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            {/* Asset Type */}
-            <Col xs={24} md={8}>
-              <Form.Item name="assetType" label="Asset Type">
-                <Input placeholder="e.g. Physical Server" />
-              </Form.Item>
-            </Col>
-
-            {/* OS Type */}
-            <Col xs={24} md={8}>
-              <Form.Item name="osType" label="OS Type">
-                <Select
-                  allowClear showSearch optionFilterProp="label"
-                  placeholder="Select OS Type"
-                  options={opts('os_type')}
-                  onChange={(v) => { setOsType(v); form.setFieldValue('osVersion', undefined); }}
-                />
-              </Form.Item>
-            </Col>
-
-            {/* OS Version */}
-            <Col xs={24} md={8}>
-              <Form.Item
-                name="osVersion"
-                label="OS Version"
-                extra={!osType ? 'Select an OS Type first to see available versions.' : undefined}
-              >
-                <Select
-                  allowClear showSearch optionFilterProp="label"
-                  disabled={!osType}
-                  placeholder={osType ? 'Select OS Version' : 'Select OS Type first'}
-                  options={osType ? opts('os_version', osType) : []}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            {/* Asset Username */}
-            <Col xs={24} md={8}>
-              <Form.Item name="assetUsername" label="Asset Username">
-                <Input placeholder="e.g. svc_admin" autoComplete="off" />
-              </Form.Item>
-            </Col>
-
-            {/* Asset Password */}
-            <Col xs={24} md={8}>
-              <Form.Item name="assetPassword" label="Asset Password" extra="Encrypted (AES-256-GCM) at rest">
-                <Input.Password
-                  placeholder={mode === 'edit' ? 'Leave blank to keep existing' : ''}
-                  autoComplete="new-password"
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            {/* CPU Cores */}
-            <Col xs={24} md={8}>
-              <Form.Item name="cpuCores" label="CPU Cores">
-                <InputNumber min={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-
-            {/* RAM */}
-            <Col xs={24} md={8}>
-              <Form.Item name="ramGb" label="RAM (GB)">
-                <InputNumber min={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-
-            {/* Total Disks */}
-            <Col xs={24} md={8}>
-              <Form.Item name="totalDisks" label="Total Disks">
-                <InputNumber min={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          {/* OME Support Status */}
-          <Form.Item label="OME Support Status">
-            <Space align="center">
-              <Form.Item name="omeActive" valuePropName="checked" noStyle>
-                <Switch />
-              </Form.Item>
-              {omeOn ? (
-                <Space size={4}>
-                  <CheckCircleFilled style={{ color: '#52c41a' }} />
-                  <Text style={{ color: '#52c41a' }}>Support Active</Text>
-                </Space>
-              ) : (
-                <Space size={4}>
-                  <CloseCircleFilled style={{ color: '#ff4d4f' }} />
-                  <Text style={{ color: '#ff4d4f' }}>Support Expired</Text>
-                </Space>
-              )}
-            </Space>
-          </Form.Item>
-
-          <Divider style={{ margin: '8px 0 20px' }} />
-
-          {/* ══ RACK INFORMATION ════════════════════════════════════════════════ */}
-          <SectionLabel>Rack Information</SectionLabel>
-
-          <Row gutter={16}>
-            <Col xs={24} md={8}>
-              <Form.Item
-                name="rackNumber"
-                label="Rack Number"
-                extra="e.g. RACK-A1, RACK-B3"
-              >
-                <Input placeholder="RACK-A1" />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={8}>
-              <Form.Item
-                name="serverPosition"
-                label="Server Position (U)"
-                extra="e.g. U12, U13-U14"
-              >
-                <Input placeholder="U12" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col xs={24}>
-              <Form.Item name="additionalRemarks" label="Additional Notes">
-                <Input.TextArea
-                  rows={4}
-                  placeholder="Any additional notes about this physical server..."
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Divider style={{ margin: '8px 0 20px' }} />
-
-          {/* ══ HARDWARE INFORMATION (iDRAC) ════════════════════════════════════ */}
-          <SectionLabel>Hardware Information</SectionLabel>
-
-          <Row gutter={16}>
-            <Col xs={24} md={8}>
-              <Form.Item
-                name="idracIp"
-                label="iDRAC IP"
-                rules={[{ pattern: ipRe, message: 'Invalid IP address' }]}
-              >
-                <Input placeholder="e.g. 10.0.0.2" />
-              </Form.Item>
-            </Col>
-          </Row>
+              );
+            })
+          )}
 
           {/* ── Actions ── */}
           <Row style={{ marginTop: 8 }}>

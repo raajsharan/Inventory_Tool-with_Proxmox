@@ -113,6 +113,34 @@ function physicalEsxiExcluded() {
   return new Set(Object.keys(FIELD_DEFAULTS).filter(k => !PHYSICAL_ESXI_ALLOWED.has(k)));
 }
 
+// Deterministic dropdown_master category key for a field an admin has
+// switched to input_type='dropdown'. Namespaced by page_key + field_key so
+// it can never collide with the 9 built-in categories or across pages.
+function categoryFor(pageKey, fieldKey) {
+  return `custom__${pageKey}__${fieldKey}`;
+}
+
+// One-time migration: when a field is first linked to a dropdown_master
+// category, seed it with whatever free-text options were already typed in
+// (legacy per-field storage) so nothing an admin previously entered is lost.
+// No-ops if the category already has any rows — never clobbers existing data.
+async function ensureDropdownCategorySeeded(queryable, category, legacyOptions) {
+  if (!Array.isArray(legacyOptions) || !legacyOptions.length) return;
+  const { rows } = await queryable.query(`SELECT 1 FROM dropdown_master WHERE category = $1 LIMIT 1`, [category]);
+  if (rows.length) return;
+  let sort = 0;
+  for (const raw of legacyOptions) {
+    const value = String(raw ?? '').trim();
+    if (!value) continue;
+    sort += 1;
+    await queryable.query(
+      `INSERT INTO dropdown_master (category, value, sort_order) VALUES ($1,$2,$3)
+       ON CONFLICT (category, value, parent_value) DO NOTHING`,
+      [category, value, sort]
+    );
+  }
+}
+
 function slugifyKey(label) {
   return String(label || '')
     .toLowerCase().trim()
@@ -154,6 +182,7 @@ async function get(pageKey) {
       default_type: def.type,
       input_type: (def.frozen ? def.type : (ov?.input_type || def.type)),
       options: ov?.options || null,
+      dropdown_category: ov?.dropdown_category || null,
       is_required: !!def.required,
       sort_order: ov?.sort_order ?? idx,
       frozen: !!def.frozen,
@@ -173,6 +202,7 @@ async function get(pageKey) {
       section: r.section || 'Other',
       input_type: r.input_type || 'text',
       options: r.options || null,
+      dropdown_category: r.dropdown_category || null,
       is_required: !!r.is_required,
       sort_order: r.sort_order ?? 9999,
       frozen: false,
@@ -255,15 +285,26 @@ async function upsertOverrides(pageKey, updates, userId) {
       let inputType = u.input_type ?? null;
       if (isBuiltIn && FIELD_DEFAULTS[u.field_key].frozen) inputType = null;
       const options = u.options !== undefined ? u.options : null;
+
+      // Switching a field to 'dropdown' auto-links it to a dropdown_master
+      // category (creating/seeding it from any legacy free-text options),
+      // so its values are managed on the Dropdown Master page from here on.
+      let dropdownCategory = null;
+      if (inputType === 'dropdown') {
+        dropdownCategory = categoryFor(pageKey, u.field_key);
+        await ensureDropdownCategorySeeded(client, dropdownCategory, options);
+      }
+
       await client.query(
         `INSERT INTO builtin_field_overrides
-           (page_key, field_key, is_extra, label, section, input_type, options, is_required, sort_order, updated_by, updated_at)
-         VALUES ($1,$2,FALSE,$3,$4,$5,$6,$7,$8,$9,NOW())
+           (page_key, field_key, is_extra, label, section, input_type, options, dropdown_category, is_required, sort_order, updated_by, updated_at)
+         VALUES ($1,$2,FALSE,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
          ON CONFLICT (page_key, field_key) DO UPDATE
            SET label       = EXCLUDED.label,
                section     = EXCLUDED.section,
                input_type  = COALESCE(EXCLUDED.input_type, builtin_field_overrides.input_type),
                options     = EXCLUDED.options,
+               dropdown_category = COALESCE(EXCLUDED.dropdown_category, builtin_field_overrides.dropdown_category),
                is_required = EXCLUDED.is_required,
                sort_order  = EXCLUDED.sort_order,
                updated_by  = EXCLUDED.updated_by,
@@ -275,6 +316,7 @@ async function upsertOverrides(pageKey, updates, userId) {
           u.section ?? null,
           inputType,
           options ? JSON.stringify(options) : null,
+          dropdownCategory,
           !!u.is_required,
           u.sort_order ?? 0,
           userId || null,
@@ -298,15 +340,20 @@ async function createExtra(pageKey, body, userId) {
   let fieldKey = slugifyKey(body.field_key || label);
   // Disallow collision with built-ins.
   if (FIELD_DEFAULTS[fieldKey]) fieldKey = `${fieldKey}_x`;
+
+  const dropdownCategory = input_type === 'dropdown' ? categoryFor(pageKey, fieldKey) : null;
+  if (dropdownCategory) await ensureDropdownCategorySeeded(db, dropdownCategory, options);
+
   try {
     await db.query(
       `INSERT INTO builtin_field_overrides
-         (page_key, field_key, is_extra, label, section, input_type, options, is_required, sort_order, updated_by, updated_at)
-       VALUES ($1,$2,TRUE,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+         (page_key, field_key, is_extra, label, section, input_type, options, dropdown_category, is_required, sort_order, updated_by, updated_at)
+       VALUES ($1,$2,TRUE,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
       [
         pageKey, fieldKey,
         label, section || 'Other', input_type,
         options ? JSON.stringify(options) : null,
+        dropdownCategory,
         !!is_required, sort_order ?? 9999,
         userId || null,
       ]
@@ -320,12 +367,20 @@ async function createExtra(pageKey, body, userId) {
 
 async function updateExtra(pageKey, fieldKey, body, userId) {
   if (!PAGE_KEYS.has(pageKey)) throw new ApiError(404, 'Unknown built-in page');
+
+  let dropdownCategory = null;
+  if (body.input_type === 'dropdown') {
+    dropdownCategory = categoryFor(pageKey, fieldKey);
+    await ensureDropdownCategorySeeded(db, dropdownCategory, body.options);
+  }
+
   const { rowCount } = await db.query(
     `UPDATE builtin_field_overrides
         SET label       = COALESCE($3, label),
             section     = COALESCE($4, section),
             input_type  = COALESCE($5, input_type),
             options     = COALESCE($6::jsonb, options),
+            dropdown_category = COALESCE($10, dropdown_category),
             is_required = COALESCE($7, is_required),
             sort_order  = COALESCE($8, sort_order),
             updated_by  = $9,
@@ -340,6 +395,7 @@ async function updateExtra(pageKey, fieldKey, body, userId) {
       body.is_required ?? null,
       body.sort_order ?? null,
       userId || null,
+      dropdownCategory,
     ]
   );
   if (!rowCount) throw new ApiError(404, 'Extra field not found');

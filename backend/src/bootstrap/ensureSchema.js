@@ -533,6 +533,9 @@ const STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_hyperv_vms_run  ON hyperv_discovered_vms(run_id)`,
   `CREATE INDEX IF NOT EXISTS idx_hyperv_vms_host ON hyperv_discovered_vms(host_id)`,
+
+  // ── Change Field Types → Dropdown Master auto-linking
+  `ALTER TABLE builtin_field_overrides ADD COLUMN IF NOT EXISTS dropdown_category VARCHAR(120)`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get

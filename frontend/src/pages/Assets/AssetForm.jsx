@@ -9,6 +9,12 @@ import { ThunderboltOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import AssetTagPicker from './AssetTagPicker.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import {
+  useInventoryFieldMeta,
+  overridableFormItem as sharedOverridableFormItem,
+  renderExtraWidget as sharedRenderExtraWidget,
+  buildDynamicSections,
+} from '../../utils/dynamicFormFields.jsx';
 
 const ipRe = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
@@ -37,10 +43,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const [autoTagInfo, setAutoTagInfo] = useState(null);
   const [autoTagLoading, setAutoTagLoading] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
-  const [hiddenSet, setHiddenSet] = useState(new Set());
-  const isHidden = (snakeKey) => hiddenSet.has(snakeKey);
-  const [fieldMeta, setFieldMeta] = useState({ fields: [], byKey: {} });
-  const labelOf = (snakeKey, fallback) => fieldMeta.byKey[snakeKey]?.label || fallback;
+  const { isHidden, fieldMeta, labelOf } = useInventoryFieldMeta(pageKey);
   const [meta, setMeta] = useState({ created_by_name: '', created_at: '' });
   const [originalIp, setOriginalIp] = useState(null); // record's stored IP (edit mode)
 
@@ -58,16 +61,6 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     api.get('/dropdowns').then(r => setDd(r.data.grouped || {}));
     api.get('/departments', { params: { activeOnly: 1 } })
       .then(r => setDepartments(r.data.items || []))
-      .catch(() => {});
-    api.get(`/field-visibility/${pageKey}`)
-      .then(r => setHiddenSet(new Set(r.data.hidden || [])))
-      .catch(() => {});
-    api.get(`/inventory-fields/${pageKey}`)
-      .then(r => {
-        const byKey = {};
-        for (const f of r.data.fields || []) byKey[f.field_key] = f;
-        setFieldMeta({ fields: r.data.fields || [], byKey, groups: r.data.groups || [] });
-      })
       .catch(() => {});
 
     if (mode === 'edit' && id) {
@@ -211,34 +204,12 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
     idrac_enabled: { xs: 12, md: 6 }, idrac_ip: { xs: 24, md: 6 },
   };
 
-  // Build a Form.Item that respects an input_type override from the field
-  // editor. If the field is unchanged from its default, falls back to the
-  // caller's defaultChild. Used by the "plain" built-in widgets (vm_name,
-  // asset_type, ...). Frozen and DB-linked fields bypass this and keep
-  // their special widgets so we don't lose IP/asset-tag/cascade behavior.
-  function overridableFormItem({ fieldKey, name, label, defaultChild, defaultValuePropName = 'value', rules, extra }) {
-    const f = fieldMeta.byKey[fieldKey];
-    const type = f?.input_type;
-    const isOverridden = type && type !== f?.default_type;
-    let child = defaultChild;
-    let valuePropName = defaultValuePropName;
-    if (isOverridden) {
-      switch (type) {
-        case 'textarea': child = <Input.TextArea rows={3} />; valuePropName = 'value'; break;
-        case 'number':   child = <InputNumber style={{ width: '100%' }} />; valuePropName = 'value'; break;
-        case 'dropdown': child = (
-          <Select options={(f.options || []).map(o => ({ label: o, value: o }))} allowClear showSearch optionFilterProp="label" />
-        ); valuePropName = 'value'; break;
-        case 'toggle':   child = <Switch />; valuePropName = 'checked'; break;
-        case 'date':     child = <DatePicker style={{ width: '100%' }} />; valuePropName = 'value'; break;
-        default:         child = <Input />; valuePropName = 'value';
-      }
-    }
-    return (
-      <Form.Item name={name} label={label} rules={rules} extra={extra} valuePropName={valuePropName}>
-        {child}
-      </Form.Item>
-    );
+  // Thin wrapper around the shared implementation (frontend/src/utils/dynamicFormFields.jsx)
+  // so every existing call site below (fieldKey-based) keeps working unchanged.
+  // Frozen and DB-linked fields bypass this and keep their special widgets so
+  // we don't lose IP/asset-tag/cascade behavior.
+  function overridableFormItem(opts) {
+    return sharedOverridableFormItem({ ...opts, fieldMeta, dd });
   }
 
   function renderBuiltinWidget(field_key) {
@@ -521,40 +492,10 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   }
 
   function renderExtraWidget(f) {
-    if (isHidden(f.field_key)) return null;
-    return (
-      <Col xs={24} md={f.input_type === 'textarea' ? 24 : 8} key={f.field_key}>
-        <Form.Item
-          name={['extras', f.field_key]}
-          label={f.label}
-          rules={f.is_required ? [{ required: true, message: `${f.label} is required` }] : []}
-          valuePropName={f.input_type === 'toggle' ? 'checked' : 'value'}
-        >
-          {renderExtraInput(f)}
-        </Form.Item>
-      </Col>
-    );
+    return sharedRenderExtraWidget(f, { isHidden, dd });
   }
 
-  // Group fields by their section using the latest field meta. Sections are
-  // rendered in the saved group order (fieldMeta.groups), then any orphan
-  // sections that exist on fields but not in groups are appended. Fields
-  // inside each section are ordered by sort_order.
-  const dynamicSections = useMemo(() => {
-    const fields = fieldMeta.fields || [];
-    if (!fields.length) return null;
-    const map = new Map();
-    for (const g of (fieldMeta.groups || [])) map.set(g, []);
-    for (const f of fields) {
-      const sec = f.section || 'Other';
-      if (!map.has(sec)) map.set(sec, []);
-      map.get(sec).push(f);
-    }
-    for (const list of map.values()) {
-      list.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    }
-    return Array.from(map.entries());
-  }, [fieldMeta]);
+  const dynamicSections = useMemo(() => buildDynamicSections(fieldMeta), [fieldMeta]);
 
   return (
     <Card title={<Typography.Title level={4} style={{ margin: 0 }}>{mode === 'create' ? `Add ${effectiveEntityLabel}` : `Edit ${effectiveEntityLabel}`}</Typography.Title>}
@@ -607,17 +548,6 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       </Form>
     </Card>
   );
-}
-
-function renderExtraInput(f) {
-  switch (f.input_type) {
-    case 'textarea': return <Input.TextArea rows={3} />;
-    case 'number':   return <InputNumber style={{ width: '100%' }} />;
-    case 'dropdown': return <Select options={(f.options || []).map(o => ({ label: o, value: o }))} allowClear />;
-    case 'toggle':   return <Switch />;
-    case 'date':     return <DatePicker style={{ width: '100%' }} />;
-    default:         return <Input />;
-  }
 }
 
 function AutoAssignedTagDisplay({ department, range, info, loading, isAdmin, onEnableOverride, value }) {

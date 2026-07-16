@@ -24,6 +24,17 @@ const CATEGORIES = [
   { key: 'eol_status',        label: 'EOL Status',        icon: <FileTextOutlined /> },
 ];
 
+// Built-in inventory pages whose "Change Field Types" editor can auto-link a
+// field to a dropdown_master category. Every field with a dropdown_category
+// across these pages gets its own category panel below, automatically —
+// no code change needed here when a new one is created.
+const CUSTOM_FIELD_PAGES = [
+  { key: 'assets',                label: 'Asset Inventory' },
+  { key: 'beijing_assets',        label: 'Beijing Inventory' },
+  { key: 'ext_assets',            label: 'Ext. Asset Inventory' },
+  { key: 'physical_esxi_servers', label: 'Physical & ESXi Servers' },
+];
+
 function CategoryPanel({ meta, items, onAdd, onUpdate, onDelete, parentOptions }) {
   const { message } = App.useApp();
   const [editingId, setEditingId] = useState(null);
@@ -206,6 +217,9 @@ export default function Dropdowns() {
   const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeKeys, setActiveKeys] = useState([]); // collapsed by default
+  // field_key -> { label, pageLabel } for every field auto-linked to a
+  // dropdown_category via "Change Field Types" across the 4 built-in pages.
+  const [linkedFieldMeta, setLinkedFieldMeta] = useState({});
 
   async function load() {
     setLoading(true);
@@ -218,20 +232,67 @@ export default function Dropdowns() {
   }
   useEffect(() => { load(); }, []);
 
+  // Discover fields switched to "Dropdown" in Change Field Types so their
+  // auto-linked category appears here immediately — even before any values
+  // are added — without needing a dedicated "create category" endpoint.
+  useEffect(() => {
+    Promise.all(
+      CUSTOM_FIELD_PAGES.map(p =>
+        api.get(`/inventory-fields/${p.key}`)
+          .then(r => ({ page: p, fields: r.data.fields || [] }))
+          .catch(() => ({ page: p, fields: [] }))
+      )
+    ).then(results => {
+      const map = {};
+      for (const { page, fields } of results) {
+        for (const f of fields) {
+          if (f.dropdown_category) {
+            map[f.dropdown_category] = { label: f.label, pageLabel: page.label };
+          }
+        }
+      }
+      setLinkedFieldMeta(map);
+    });
+  }, []);
+
+  // Fixed built-in categories + any auto-linked custom-field categories
+  // (present in dropdown_master and/or referenced by a field's
+  // dropdown_category, so a brand-new empty one still shows up).
+  const dynamicCategoryKeys = useMemo(() => {
+    const fixed = new Set(CATEGORIES.map(c => c.key));
+    const keys = new Set();
+    for (const cat of Object.keys(linkedFieldMeta)) if (!fixed.has(cat)) keys.add(cat);
+    for (const r of all) if (!fixed.has(r.category) && !linkedFieldMeta[r.category]) keys.add(r.category);
+    return Array.from(keys);
+  }, [linkedFieldMeta, all]);
+
+  const ALL_CATEGORIES = useMemo(() => [
+    ...CATEGORIES,
+    ...dynamicCategoryKeys.map(key => {
+      const meta = linkedFieldMeta[key];
+      return {
+        key,
+        label: meta ? `${meta.label} (${meta.pageLabel})` : key,
+        icon: <TagsOutlined />,
+        isCustom: true,
+      };
+    }),
+  ], [dynamicCategoryKeys, linkedFieldMeta]);
+
   const byCategory = useMemo(() => {
     const m = {};
-    for (const c of CATEGORIES) m[c.key] = [];
+    for (const c of ALL_CATEGORIES) m[c.key] = [];
     for (const r of all) {
       if (!m[r.category]) m[r.category] = [];
       m[r.category].push(r);
     }
     return m;
-  }, [all]);
+  }, [all, ALL_CATEGORIES]);
 
   // Build parent options for cascading categories (e.g. OS Type list for OS Version).
   const parentOptionsByCategory = useMemo(() => {
     const out = {};
-    for (const cat of CATEGORIES) {
+    for (const cat of ALL_CATEGORIES) {
       if (cat.parentCategory) {
         const parents = byCategory[cat.parentCategory] || [];
         out[cat.key] = parents
@@ -241,7 +302,7 @@ export default function Dropdowns() {
       }
     }
     return out;
-  }, [byCategory]);
+  }, [byCategory, ALL_CATEGORIES]);
 
   async function onAdd(body) {
     try {
@@ -273,7 +334,7 @@ export default function Dropdowns() {
     }
   }
 
-  const items = CATEGORIES.map(cat => {
+  const items = ALL_CATEGORIES.map(cat => {
     const count = (byCategory[cat.key] || []).length;
     return {
       key: cat.key,
@@ -292,6 +353,7 @@ export default function Dropdowns() {
               (linked to {cat.parentLabel})
             </Typography.Text>
           )}
+          {cat.isCustom && <Tag color="purple">Custom</Tag>}
           <Tag color="blue" style={{ marginLeft: 4 }}>{count}</Tag>
         </Space>
       ),
@@ -319,7 +381,7 @@ export default function Dropdowns() {
       }
       extra={
         <Space>
-          <Button size="small" onClick={() => setActiveKeys(CATEGORIES.map(c => c.key))}>Expand all</Button>
+          <Button size="small" onClick={() => setActiveKeys(ALL_CATEGORIES.map(c => c.key))}>Expand all</Button>
           <Button size="small" onClick={() => setActiveKeys([])}>Collapse all</Button>
         </Space>
       }
