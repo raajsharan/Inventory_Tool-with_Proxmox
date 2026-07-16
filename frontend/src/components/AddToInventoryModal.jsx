@@ -110,12 +110,16 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
       const { data } = await api.post('/ext-assets', values);
       setCreated({ id: data.id, vm_name: data.vm_name });
     } catch (e) {
-      const detail = e.response?.data?.detail;
-      if (detail) {
-        const msgs = Object.values(detail).join(', ');
-        setError(msgs);
+      const err = e.response?.data;
+      const { details } = err || {};
+      if (details && typeof details === 'object' && !Array.isArray(details)) {
+        // { field: 'reason' } shape from duplicate checks
+        setError(Object.values(details).join(', '));
+      } else if (Array.isArray(details) && details.length) {
+        // express-validator shape: [{ path, msg, ... }]
+        setError(details.map(d => d.msg).filter(Boolean).join(', '));
       } else {
-        setError(e.response?.data?.error || 'Failed to create asset');
+        setError(err?.error || 'Failed to create asset');
       }
     }
     setSaving(false);

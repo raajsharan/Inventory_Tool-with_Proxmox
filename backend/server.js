@@ -76,6 +76,12 @@ const PORT = process.env.PORT || 4000;
     // eslint-disable-next-line no-console
     console.error('[proxmox-scheduler] failed to start:', e);
   }
+  try {
+    await require('./src/services/hypervSchedulerService').initFromDb();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[hyperv-scheduler] failed to start:', e);
+  }
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`[inventory-api] listening on :${PORT} (${process.env.NODE_ENV || 'development'})`);

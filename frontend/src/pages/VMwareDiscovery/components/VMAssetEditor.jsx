@@ -9,6 +9,7 @@ import {
   PlayCircleOutlined, StopOutlined, PauseCircleOutlined, LinkOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
 const { Text } = Typography;
 
@@ -27,6 +28,8 @@ const FILTERS = [
 ];
 
 export default function VMAssetEditor() {
+  const { user } = useAuth();
+  const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const [data,        setData]        = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState('all');
@@ -230,27 +233,29 @@ export default function VMAssetEditor() {
     {
       title: 'Actions', key: 'actions', width: 110, fixed: 'right',
       render: (_, r) => (
-        <Space size={4}>
-          <Tooltip title="Edit">
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openEdit(r)}
-            />
-          </Tooltip>
-          {r.has_edit && (
-            <Popconfirm
-              title={`Revert all edits for "${r.name}"?`}
-              onConfirm={() => onReset(r)}
-              okText="Revert"
-              okType="danger"
-            >
-              <Tooltip title="Revert edits">
-                <Button size="small" icon={<UndoOutlined />} />
-              </Tooltip>
-            </Popconfirm>
-          )}
-        </Space>
+        canWrite ? (
+          <Space size={4}>
+            <Tooltip title="Edit">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => openEdit(r)}
+              />
+            </Tooltip>
+            {r.has_edit && (
+              <Popconfirm
+                title={`Revert all edits for "${r.name}"?`}
+                onConfirm={() => onReset(r)}
+                okText="Revert"
+                okType="danger"
+              >
+                <Tooltip title="Revert edits">
+                  <Button size="small" icon={<UndoOutlined />} />
+                </Tooltip>
+              </Popconfirm>
+            )}
+          </Space>
+        ) : null
       ),
     },
   ];

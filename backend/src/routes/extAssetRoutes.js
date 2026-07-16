@@ -44,10 +44,26 @@ const bodyValidators = [
   body('ip_address').optional().matches(IP_RE).withMessage('Invalid IP address'),
 ];
 
+// Some callers (e.g. AddToInventoryModal from VMware/Proxmox discovery) post
+// snake_case field names. Normalize them to the camelCase names the
+// validators below (and the rest of the create pipeline) expect.
+function acceptSnakeCaseAliases(req, _res, next) {
+  if (req.body) {
+    if (req.body.vmName === undefined && req.body.vm_name !== undefined) {
+      req.body.vmName = req.body.vm_name;
+    }
+    if (req.body.ipAddress === undefined && req.body.ip_address !== undefined) {
+      req.body.ipAddress = req.body.ip_address;
+    }
+  }
+  next();
+}
+
 router.post(
   '/',
   authenticate,
   authorize(...writeRoles),
+  acceptSnakeCaseAliases,
   body('vmName').exists().withMessage('vmName required').bail().isString(),
   body('ipAddress').exists().withMessage('ipAddress required').bail().matches(IP_RE).withMessage('Invalid IP address'),
   validate,

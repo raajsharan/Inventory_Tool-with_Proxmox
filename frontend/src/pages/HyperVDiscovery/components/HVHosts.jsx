@@ -95,7 +95,7 @@ export default function HVHosts({ onDiscoveryStarted }) {
     setTestResult(null);
     const values = form.getFieldsValue();
     try {
-      const r = await api.post('/hyperv/hosts/0/test', values);
+      const r = await api.post(`/hyperv/hosts/${editing ? editing.id : 0}/test`, values);
       setTestResult(r.data);
     } catch (e) {
       setTestResult({ ok: false, error: e.response?.data?.error || e.message });

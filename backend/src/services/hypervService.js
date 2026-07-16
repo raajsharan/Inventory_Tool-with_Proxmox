@@ -72,7 +72,11 @@ function httpRequest(proto, opts, bodyBuf) {
       }));
     });
     req.on('error', e => reject(new Error(`WinRM connection to ${opts.hostname}:${opts.port} failed — ${e.message}`)));
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('WinRM request timed out after 30s')); });
+    // Must comfortably exceed the PT120S <w:OperationTimeout> advertised in
+    // soapHeader() — a Receive request is allowed to block up to 120s waiting
+    // for new output, so a shorter client socket timeout fires first and
+    // aborts perfectly healthy long-polls.
+    req.setTimeout(130000, () => { req.destroy(); reject(new Error('WinRM request timed out after 130s')); });
     if (bodyBuf && bodyBuf.length) req.write(bodyBuf);
     req.end();
   });
@@ -90,75 +94,78 @@ async function winrmPost(cfg, soapBody) {
   if (cfg.useSSL) agentOpts.rejectUnauthorized = !!cfg.verifySSL;
   const agent = new proto.Agent(agentOpts);
 
-  const base = {
-    hostname: cfg.host,
-    port,
-    path:     '/wsman',
-    method:   'POST',
-    agent,
-  };
+  try {
+    const base = {
+      hostname: cfg.host,
+      port,
+      path:     '/wsman',
+      method:   'POST',
+      agent,
+    };
 
-  const { username, domain } = parseUsername(cfg.username);
+    const { username, domain } = parseUsername(cfg.username);
 
-  // ── Step 1: NTLM Type 1 (Negotiate) ─────────────────────────────────────
-  const type1b64 = buildType1().toString('base64');
-  const res1 = await httpRequest(proto, {
-    ...base,
-    headers: {
-      'Authorization':  `NTLM ${type1b64}`,
-      'Content-Type':   'application/soap+xml;charset=UTF-8',
-      'Content-Length': 0,
-      'Connection':     'keep-alive',
-    },
-  }, null);
+    // ── Step 1: NTLM Type 1 (Negotiate) ─────────────────────────────────────
+    const type1b64 = buildType1().toString('base64');
+    const res1 = await httpRequest(proto, {
+      ...base,
+      headers: {
+        'Authorization':  `NTLM ${type1b64}`,
+        'Content-Type':   'application/soap+xml;charset=UTF-8',
+        'Content-Length': 0,
+        'Connection':     'keep-alive',
+      },
+    }, null);
 
-  if (res1.status !== 401) {
-    // Server accepted without challenge (unlikely) or failed for other reason
-    if (res1.status === 200 || res1.status === 201) return res1;
-    const hint = buildHint(res1.status, res1.headers['www-authenticate'] || '');
-    throw new Error(`WinRM CreateShell failed (HTTP ${res1.status}): ${hint}`);
-  }
-
-  // ── Step 2: Parse NTLM Type 2 challenge ─────────────────────────────────
-  const wwwAuth  = res1.headers['www-authenticate'] || '';
-  const ntlmPart = wwwAuth.match(/(?:^|,)\s*NTLM\s+([A-Za-z0-9+/=]+)/i);
-  const negoPart = wwwAuth.match(/(?:^|,)\s*Negotiate\s+([A-Za-z0-9+/=]+)/i);
-  const challenge = ntlmPart || negoPart;
-
-  if (!challenge) {
-    // Server returned 401 but no NTLM challenge — check if Basic is offered
-    if (/Basic/i.test(wwwAuth)) {
-      return winrmBasic(proto, base, soapBuf, cfg.username, cfg.password);
+    if (res1.status !== 401) {
+      // Server accepted without challenge (unlikely) or failed for other reason
+      if (res1.status === 200 || res1.status === 201) return res1;
+      const hint = buildHint(res1.status, res1.headers['www-authenticate'] || '');
+      throw new Error(`WinRM CreateShell failed (HTTP ${res1.status}): ${hint}`);
     }
-    throw new Error(
-      `WinRM 401 — server offered: "${wwwAuth || '(none)'}". ` +
-      `Enable WinRM on the host: run  Enable-PSRemoting -Force  as Administrator.`
-    );
+
+    // ── Step 2: Parse NTLM Type 2 challenge ─────────────────────────────────
+    const wwwAuth  = res1.headers['www-authenticate'] || '';
+    const ntlmPart = wwwAuth.match(/(?:^|,)\s*NTLM\s+([A-Za-z0-9+/=]+)/i);
+    const negoPart = wwwAuth.match(/(?:^|,)\s*Negotiate\s+([A-Za-z0-9+/=]+)/i);
+    const challenge = ntlmPart || negoPart;
+
+    if (!challenge) {
+      // Server returned 401 but no NTLM challenge — check if Basic is offered
+      if (/Basic/i.test(wwwAuth)) {
+        return await winrmBasic(proto, base, soapBuf, cfg.username, cfg.password);
+      }
+      throw new Error(
+        `WinRM 401 — server offered: "${wwwAuth || '(none)'}". ` +
+        `Enable WinRM on the host: run  Enable-PSRemoting -Force  as Administrator.`
+      );
+    }
+
+    const type2Buf = Buffer.from(challenge[1], 'base64');
+    const { serverChallenge } = parseType2(type2Buf);
+
+    // ── Step 3: NTLM Type 3 (Authenticate) + actual SOAP body ───────────────
+    const type3b64 = buildType3(username, cfg.password, domain, serverChallenge).toString('base64');
+    const res2 = await httpRequest(proto, {
+      ...base,
+      headers: {
+        'Authorization':  `NTLM ${type3b64}`,
+        'Content-Type':   'application/soap+xml;charset=UTF-8',
+        'Content-Length': soapBuf.length,
+        'Connection':     'keep-alive',
+      },
+    }, soapBuf);
+
+    if (res2.status !== 200 && res2.status !== 201) {
+      const hint = buildHint(res2.status, res2.headers['www-authenticate'] || '');
+      throw new Error(`WinRM request failed (HTTP ${res2.status}): ${hint}`);
+    }
+    return res2;
+  } finally {
+    // Always release the keep-alive socket/agent — success, thrown error, or
+    // rejected httpRequest (connection refused, DNS failure, 30s timeout, etc).
+    agent.destroy();
   }
-
-  const type2Buf = Buffer.from(challenge[1], 'base64');
-  const { serverChallenge } = parseType2(type2Buf);
-
-  // ── Step 3: NTLM Type 3 (Authenticate) + actual SOAP body ───────────────
-  const type3b64 = buildType3(username, cfg.password, domain, serverChallenge).toString('base64');
-  const res2 = await httpRequest(proto, {
-    ...base,
-    headers: {
-      'Authorization':  `NTLM ${type3b64}`,
-      'Content-Type':   'application/soap+xml;charset=UTF-8',
-      'Content-Length': soapBuf.length,
-      'Connection':     'keep-alive',
-    },
-  }, soapBuf);
-
-  // Destroy the agent after we're done — we create a fresh one per call
-  agent.destroy();
-
-  if (res2.status !== 200 && res2.status !== 201) {
-    const hint = buildHint(res2.status, res2.headers['www-authenticate'] || '');
-    throw new Error(`WinRM request failed (HTTP ${res2.status}): ${hint}`);
-  }
-  return res2;
 }
 
 async function winrmBasic(proto, base, soapBuf, username, password) {
@@ -245,7 +252,21 @@ async function runPowerShell(cfg, psScript) {
         soapHeader(`${NS_RSP}/Receive`, shellId),
         `<rsp:Receive><rsp:DesiredStream CommandId="${cmdId}">stdout stderr</rsp:DesiredStream></rsp:Receive>`
       );
-      const recvRes = await winrmPost(cfg, recvXml);
+      let recvRes;
+      try {
+        recvRes = await winrmPost(cfg, recvXml);
+      } catch (e) {
+        // A Receive is allowed to legitimately take up to the 120s
+        // OperationTimeout advertised in soapHeader(). A client-side socket
+        // timeout, or the routine WSMan "no new output yet" SOAP fault
+        // (surfaced here as an HTTP 500), just means output isn't ready —
+        // retry instead of aborting the whole discovery run.
+        if (/timed out|HTTP 500/i.test(e.message)) {
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+        throw e;
+      }
       output += extractOutput(recvRes.body);
       if (isDone(recvRes.body)) break;
       await new Promise(r => setTimeout(r, 1000));

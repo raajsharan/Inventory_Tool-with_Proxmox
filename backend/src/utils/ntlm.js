@@ -30,7 +30,7 @@ function parseType2(buf) {
 function buildType3(username, password, domain, serverChallenge) {
   const ntHash    = crypto.createHash('md4').update(Buffer.from(password, 'utf16le')).digest();
   const ntv2Hash  = crypto.createHmac('md5', ntHash)
-    .update(Buffer.from((username.toUpperCase() + domain.toUpperCase()), 'utf16le'))
+    .update(Buffer.from((username.toUpperCase() + domain), 'utf16le'))
     .digest();
 
   const clientChallenge = crypto.randomBytes(8);

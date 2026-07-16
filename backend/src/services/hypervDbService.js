@@ -288,7 +288,8 @@ async function getStaleVMs() {
   const noNet   = vms.filter(v => !v.is_template && (v.state || '').toLowerCase() === 'running' &&
                                   (!v.ips || v.ips.length === 0));
   const stopped = vms.filter(v => !v.is_template && (v.state || '').toLowerCase() === 'off');
-  return { removed, noNetwork: noNet, stopped, total: vms.length };
+  const saved   = vms.filter(v => !v.is_template && (v.state || '').toLowerCase() === 'saved');
+  return { removed, noNetwork: noNet, stopped, saved, total: vms.length };
 }
 
 // ---------------------------------------------------------------------------

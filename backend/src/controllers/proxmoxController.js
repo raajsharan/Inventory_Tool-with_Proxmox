@@ -51,19 +51,28 @@ async function updateHost(req, res) {
     port, verifySSL, intervalMinutes, schedulerEnabled,
   } = req.body;
 
-  const saved = await db.upsertHost({
-    host:             host             ?? existing.host,
-    hostType:         hostType         ?? existing.host_type,
-    username:         username         ?? existing.username,
-    realm:            realm            ?? existing.realm,
-    password:         password         || null,      // null = keep existing
-    tokenId:          tokenId          !== undefined ? tokenId : existing.token_id,
-    tokenSecret:      tokenSecret      || null,
-    port:             port             ?? existing.port,
-    verifySSL:        verifySSL        !== undefined ? verifySSL : existing.verify_ssl,
-    intervalMinutes:  intervalMinutes  ?? existing.interval_minutes,
-    schedulerEnabled: schedulerEnabled !== undefined ? schedulerEnabled : existing.scheduler_enabled,
-  });
+  let saved;
+  try {
+    saved = await db.updateHostById(existing.id, {
+      host:             host             ?? existing.host,
+      hostType:         hostType         ?? existing.host_type,
+      username:         username         ?? existing.username,
+      realm:            realm            ?? existing.realm,
+      password:         password         || null,      // null = keep existing
+      tokenId:          tokenId          !== undefined ? tokenId : existing.token_id,
+      tokenSecret:      tokenSecret      || null,
+      port:             port             ?? existing.port,
+      verifySSL:        verifySSL        !== undefined ? verifySSL : existing.verify_ssl,
+      intervalMinutes:  intervalMinutes  ?? existing.interval_minutes,
+      schedulerEnabled: schedulerEnabled !== undefined ? schedulerEnabled : existing.scheduler_enabled,
+    });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Another host with that Hostname/IP already exists' });
+    }
+    throw err;
+  }
+  if (!saved) return res.status(404).json({ error: 'Host not found' });
   scheduler.upsert(saved, saved.interval_minutes, saved.scheduler_enabled);
   res.json(saved);
 }
@@ -75,17 +84,32 @@ async function deleteHost(req, res) {
   res.json({ ok: true });
 }
 
-// Test a connection without saving (uses request body credentials)
+// Test a connection without saving (uses request body credentials, falling
+// back to the saved host's stored password/token secret when editing an
+// existing host without retyping them — mirrors vmwareController.testHost)
 async function testHost(req, res) {
   const { host, hostType, username, realm, password, tokenId, tokenSecret, port, verifySSL } = req.body;
   if (!host || !username) return res.status(400).json({ error: 'host and username are required' });
+
+  let effectivePassword = password || null;
+  let effectiveTokenSecret = tokenSecret || null;
+
+  const id = Number(req.params.id);
+  if (id) {
+    const existing = await db.getHostById(id);
+    if (existing) {
+      effectivePassword = effectivePassword || db.getDecryptedPassword(existing);
+      effectiveTokenSecret = effectiveTokenSecret || db.getDecryptedTokenSecret(existing);
+    }
+  }
+
   try {
     const vms = await pxSvc.discover(
       host, port || (hostType === 'pdm' ? 8007 : 8006),
       username, realm || 'pam',
-      password || null, verifySSL,
+      effectivePassword, verifySSL,
       hostType || 've',
-      tokenId || null, tokenSecret || null
+      tokenId || null, effectiveTokenSecret
     );
     res.json({ ok: true, vmCount: vms.length });
   } catch (err) {
@@ -120,9 +144,9 @@ async function runDiscoverySync(req, res) {
     const vms = await pxSvc.discover(
       host, port || hostRecord.port,
       username, realm || hostRecord.realm,
-      password || null, verifySSL,
+      password || db.getDecryptedPassword(hostRecord), verifySSL,
       hostType || hostRecord.host_type,
-      tokenId || hostRecord.token_id || null, null
+      tokenId || hostRecord.token_id || null, tokenSecret || db.getDecryptedTokenSecret(hostRecord)
     );
     await db.saveVMs(runId, hostRecord.id, host, vms);
     await db.finishRun(runId, vms.length);

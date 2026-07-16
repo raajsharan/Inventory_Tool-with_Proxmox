@@ -34,14 +34,14 @@ router.get('/runs',               authenticate, ctrl.getRunHistory);
 router.get('/mac-lookup',                    authenticate, ctrl.getMacLookup);
 router.get('/mac-lookup/export',             authenticate, ctrl.exportMacLookupCSV);
 router.get('/mac-lookup/files',              authenticate, ctrl.listMacFiles);
-router.post('/mac-lookup/files',             authenticate, authorize(...adminRoles), upload.single('file'), ctrl.uploadMacFile);
-router.delete('/mac-lookup/files/:id',       authenticate, authorize(...adminRoles), ctrl.deleteMacFile);
-router.delete('/mac-lookup/files',           authenticate, authorize(...adminRoles), ctrl.clearMacFiles);
+router.post('/mac-lookup/files',             authenticate, authorize(...writeRoles), upload.single('file'), ctrl.uploadMacFile);
+router.delete('/mac-lookup/files/:id',       authenticate, authorize(...writeRoles), ctrl.deleteMacFile);
+router.delete('/mac-lookup/files',           authenticate, authorize(...writeRoles), ctrl.clearMacFiles);
 
 // Asset Editor
 router.get('/asset-editor',                  authenticate, ctrl.getAssetEditor);
 router.get('/asset-editor/export',           authenticate, ctrl.exportAssetEditorCSV);
-router.post('/asset-editor/save',            authenticate, authorize(...adminRoles), ctrl.saveAssetEdit);
-router.post('/asset-editor/reset',           authenticate, authorize(...adminRoles), ctrl.resetAssetEdit);
+router.post('/asset-editor/save',            authenticate, authorize(...writeRoles), ctrl.saveAssetEdit);
+router.post('/asset-editor/reset',           authenticate, authorize(...writeRoles), ctrl.resetAssetEdit);
 
 module.exports = router;

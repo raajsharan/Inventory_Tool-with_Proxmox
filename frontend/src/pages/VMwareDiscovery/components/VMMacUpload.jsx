@@ -8,11 +8,14 @@ import {
   ReloadOutlined, InfoCircleOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
 const { Text, Paragraph } = Typography;
 const { Dragger } = Upload;
 
 export default function VMMacUpload() {
+  const { user } = useAuth();
+  const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const [files,     setFiles]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -105,14 +108,16 @@ export default function VMMacUpload() {
     {
       title: '', key: 'actions', width: 60, align: 'center',
       render: (_, row) => (
-        <Popconfirm
-          title={`Remove "${row.filename}"?`}
-          onConfirm={() => handleDelete(row.id, row.filename)}
-          okText="Remove"
-          okType="danger"
-        >
-          <Button icon={<DeleteOutlined />} size="small" danger type="text" />
-        </Popconfirm>
+        canWrite ? (
+          <Popconfirm
+            title={`Remove "${row.filename}"?`}
+            onConfirm={() => handleDelete(row.id, row.filename)}
+            okText="Remove"
+            okType="danger"
+          >
+            <Button icon={<DeleteOutlined />} size="small" danger type="text" />
+          </Popconfirm>
+        ) : null
       ),
     },
   ];
@@ -133,42 +138,44 @@ export default function VMMacUpload() {
       </Row>
 
       {/* Upload area */}
-      <Card size="small" title="Upload MAC → IP Mapping File" style={{ marginBottom: 16 }}>
-        <Alert
-          type="info"
-          showIcon
-          icon={<InfoCircleOutlined />}
-          style={{ marginBottom: 12 }}
-          message="Supported formats: .csv and .xlsx"
-          description={
-            <Paragraph style={{ margin: 0 }}>
-              The file must include a <Text code>MAC Address</Text> column and an{' '}
-              <Text code>IP Address</Text> column. Optional columns:{' '}
-              <Text code>LAN Segment</Text>, <Text code>VLAN Group</Text>,{' '}
-              <Text code>Data Retrieved</Text>. Column names are auto-detected.
-              Multiple files are combined — first match per MAC wins.
-            </Paragraph>
-          }
-        />
-        <Dragger
-          name="file"
-          accept=".csv,.xlsx,.xls"
-          multiple={false}
-          showUploadList={false}
-          customRequest={handleUpload}
-          disabled={uploading}
-        >
-          <p className="ant-upload-drag-icon">
-            {uploading ? <Spin /> : <UploadOutlined style={{ fontSize: 32 }} />}
-          </p>
-          <p className="ant-upload-text">
-            {uploading ? 'Uploading…' : 'Click or drag a .csv / .xlsx file here'}
-          </p>
-          <p className="ant-upload-hint">
-            Max 20 MB. Each upload is stored separately and combined during MAC lookup.
-          </p>
-        </Dragger>
-      </Card>
+      {canWrite && (
+        <Card size="small" title="Upload MAC → IP Mapping File" style={{ marginBottom: 16 }}>
+          <Alert
+            type="info"
+            showIcon
+            icon={<InfoCircleOutlined />}
+            style={{ marginBottom: 12 }}
+            message="Supported formats: .csv and .xlsx"
+            description={
+              <Paragraph style={{ margin: 0 }}>
+                The file must include a <Text code>MAC Address</Text> column and an{' '}
+                <Text code>IP Address</Text> column. Optional columns:{' '}
+                <Text code>LAN Segment</Text>, <Text code>VLAN Group</Text>,{' '}
+                <Text code>Data Retrieved</Text>. Column names are auto-detected.
+                Multiple files are combined — first match per MAC wins.
+              </Paragraph>
+            }
+          />
+          <Dragger
+            name="file"
+            accept=".csv,.xlsx,.xls"
+            multiple={false}
+            showUploadList={false}
+            customRequest={handleUpload}
+            disabled={uploading}
+          >
+            <p className="ant-upload-drag-icon">
+              {uploading ? <Spin /> : <UploadOutlined style={{ fontSize: 32 }} />}
+            </p>
+            <p className="ant-upload-text">
+              {uploading ? 'Uploading…' : 'Click or drag a .csv / .xlsx file here'}
+            </p>
+            <p className="ant-upload-hint">
+              Max 20 MB. Each upload is stored separately and combined during MAC lookup.
+            </p>
+          </Dragger>
+        </Card>
+      )}
 
       {/* Stored files list */}
       <Card
@@ -177,7 +184,7 @@ export default function VMMacUpload() {
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} size="small" onClick={loadFiles} />
-            {files.length > 0 && (
+            {canWrite && files.length > 0 && (
               <Popconfirm
                 title="Remove ALL mapping files?"
                 onConfirm={handleClearAll}

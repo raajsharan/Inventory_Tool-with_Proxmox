@@ -53,7 +53,7 @@ export default function HVDashboard() {
     {
       title: 'Status', dataIndex: 'status', key: 'status', width: 90,
       render: s => s === 'success' ? <Tag color="success">Success</Tag>
-        : s === 'failed' ? <Tag color="error">Failed</Tag>
+        : s === 'error' ? <Tag color="error">Failed</Tag>
         : <Tag color="processing">Running</Tag>,
     },
     { title: 'VMs Found', dataIndex: 'vm_count', key: 'vm_count', width: 100, render: v => v ?? '—' },

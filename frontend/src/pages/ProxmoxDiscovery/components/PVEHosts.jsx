@@ -99,7 +99,7 @@ export default function PVEHosts({ onDiscoveryStarted }) {
     setTestResult(null);
     const values = form.getFieldsValue();
     try {
-      const r = await api.post('/proxmox/hosts/0/test', values);
+      const r = await api.post(`/proxmox/hosts/${editing ? editing.id : 0}/test`, values);
       setTestResult(r.data);
     } catch (e) {
       setTestResult({ ok: false, error: e.response?.data?.error || e.message });
@@ -174,7 +174,7 @@ export default function PVEHosts({ onDiscoveryStarted }) {
           </Form.Item>
 
           <Form.Item name="host" label="Hostname / IP" rules={[{ required: true }]}>
-            <Input placeholder="192.168.1.10 or pve.example.com" />
+            <Input placeholder="192.168.1.10 or pve.example.com" disabled={!!editing} />
           </Form.Item>
 
           <Form.Item name="username" label="Username" rules={[{ required: true }]}>

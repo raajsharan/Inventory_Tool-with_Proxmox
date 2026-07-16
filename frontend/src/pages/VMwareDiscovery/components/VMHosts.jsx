@@ -111,8 +111,8 @@ export default function VMHosts({ onDiscoveryStarted }) {
     try {
       const r = await api.post(`/vmware/hosts/${record.id}/test`);
       setTest(t => ({ ...t, [record.id]: r.data }));
-    } catch {
-      setTest(t => ({ ...t, [record.id]: { ok: false, error: 'Request failed' } }));
+    } catch (err) {
+      setTest(t => ({ ...t, [record.id]: { ok: false, error: err.response?.data?.error || 'Request failed' } }));
     } finally {
       setTesting(t => ({ ...t, [record.id]: false }));
     }
@@ -140,7 +140,7 @@ export default function VMHosts({ onDiscoveryStarted }) {
         ? <Tag color="blue">Every {r.interval_minutes}m</Tag>
         : <Tag color="default">Off</Tag>,
     },
-    {
+    isAdmin && {
       title: 'Test', key: 'test',
       render: (_, r) => (
         <Space size="small">

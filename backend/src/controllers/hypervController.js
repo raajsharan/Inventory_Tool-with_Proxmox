@@ -1,5 +1,6 @@
-const db      = require('../services/hypervDbService');
-const svc     = require('../services/hypervService');
+const db        = require('../services/hypervDbService');
+const svc       = require('../services/hypervService');
+const scheduler = require('../services/hypervSchedulerService');
 
 // ── Hosts ─────────────────────────────────────────────────────────────────────
 
@@ -10,7 +11,8 @@ async function listHosts(req, res, next) {
 async function addHost(req, res, next) {
   try {
     const host = await db.upsertHost(req.body);
-    if (req.body.runNow) runDiscovery(host.id).catch(() => {});
+    scheduler.upsert(host, host.interval_minutes, host.scheduler_enabled);
+    if (req.body.runNow) scheduler.runNow(host.id);
     res.status(201).json(host);
   } catch (e) { next(e); }
 }
@@ -19,14 +21,17 @@ async function updateHost(req, res, next) {
   try {
     const host = await db.updateHostById(parseInt(req.params.id, 10), req.body);
     if (!host) return res.status(404).json({ error: 'Not found' });
+    scheduler.upsert(host, host.interval_minutes, host.scheduler_enabled);
     res.json(host);
   } catch (e) { next(e); }
 }
 
 async function removeHost(req, res, next) {
   try {
-    const ok = await db.deleteHost(parseInt(req.params.id, 10));
+    const id = parseInt(req.params.id, 10);
+    const ok = await db.deleteHost(id);
     if (!ok) return res.status(404).json({ error: 'Not found' });
+    scheduler.remove(id);
     res.status(204).end();
   } catch (e) { next(e); }
 }
@@ -34,14 +39,18 @@ async function removeHost(req, res, next) {
 async function testHost(req, res, next) {
   try {
     const id = parseInt(req.params.id, 10);
-    let cfg;
-    if (id === 0) {
-      cfg = { ...req.body, password: req.body.password };
-    } else {
+    let effectivePassword = req.body.password || null;
+
+    // Editing an existing host: the form intentionally leaves password blank
+    // ("leave blank to keep current"), so fall back to the stored credential
+    // when the user didn't type a new one.
+    if (id) {
       const h = await db.getHostById(id);
       if (!h) return res.status(404).json({ error: 'Not found' });
-      cfg = { host: h.host, username: h.username, password: db.getDecryptedPassword(h), port: h.port, useSSL: h.use_ssl, verifySSL: h.verify_ssl };
+      effectivePassword = effectivePassword || db.getDecryptedPassword(h);
     }
+
+    const cfg = { ...req.body, password: effectivePassword };
     const result = await svc.testConnection(cfg);
     res.json(result);
   } catch (e) { next(e); }
@@ -50,36 +59,9 @@ async function testHost(req, res, next) {
 async function triggerRun(req, res, next) {
   try {
     const id = parseInt(req.params.id, 10);
-    runDiscovery(id).catch(() => {});
+    scheduler.runNow(id);
     res.json({ started: true });
   } catch (e) { next(e); }
-}
-
-// ── Discovery run (background) ────────────────────────────────────────────────
-
-async function runDiscovery(hostId) {
-  const h = await db.getHostById(hostId);
-  if (!h || h.is_running) return;
-
-  await db.setHostRunning(hostId, true);
-  const runId = await db.startRun(hostId, h.host);
-  try {
-    const cfg = {
-      host:      h.host,
-      username:  h.username,
-      password:  db.getDecryptedPassword(h),
-      port:      h.port,
-      useSSL:    h.use_ssl,
-      verifySSL: h.verify_ssl,
-    };
-    const vms = await svc.discoverVMs(cfg);
-    await db.saveVMs(runId, hostId, h.host, vms);
-    await db.finishRun(runId, vms.length);
-    await db.setLastDiscovery(hostId, vms.length);
-  } catch (e) {
-    await db.failRun(runId, e.message);
-    await db.setHostRunning(hostId, false);
-  }
 }
 
 // ── Data endpoints ─────────────────────────────────────────────────────────────

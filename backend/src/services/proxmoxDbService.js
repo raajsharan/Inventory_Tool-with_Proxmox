@@ -70,6 +70,44 @@ async function upsertHost({
   return rows[0];
 }
 
+async function updateHostById(id, {
+  host, hostType = 've', username, realm = 'pam',
+  password, tokenId, tokenSecret,
+  port, verifySSL, intervalMinutes, schedulerEnabled,
+}) {
+  const passwordEnc    = password     ? crypto.encrypt(password)     : null;
+  const tokenSecretEnc = tokenSecret  ? crypto.encrypt(tokenSecret)  : null;
+
+  const { rows } = await db.query(
+    `UPDATE proxmox_hosts SET
+       host                    = $2,
+       host_type               = $3,
+       username                = $4,
+       realm                   = $5,
+       password_encrypted      = COALESCE($6, password_encrypted),
+       token_id                = $7,
+       token_secret_encrypted  = COALESCE($8, token_secret_encrypted),
+       port                    = $9,
+       verify_ssl              = $10,
+       interval_minutes        = $11,
+       scheduler_enabled       = $12,
+       updated_at              = NOW()
+     WHERE id = $1
+     RETURNING id, host, host_type, username, realm, token_id, port, verify_ssl,
+               interval_minutes, scheduler_enabled, last_discovery_at, last_vm_count, is_running`,
+    [
+      id,
+      host, hostType, username, realm,
+      passwordEnc, tokenId || null, tokenSecretEnc,
+      port || (hostType === 'pdm' ? 8007 : 8006),
+      verifySSL !== false,
+      intervalMinutes || 60,
+      schedulerEnabled || false,
+    ]
+  );
+  return rows[0] || null;
+}
+
 async function deleteHost(id) {
   const { rowCount } = await db.query('DELETE FROM proxmox_hosts WHERE id = $1', [id]);
   return rowCount > 0;
@@ -364,7 +402,7 @@ async function getSnapshotVMs() {
 }
 
 module.exports = {
-  listHosts, getHostById, getHostByName, upsertHost, deleteHost,
+  listHosts, getHostById, getHostByName, upsertHost, updateHostById, deleteHost,
   setHostRunning, setLastDiscovery, getDecryptedPassword, getDecryptedTokenSecret,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
