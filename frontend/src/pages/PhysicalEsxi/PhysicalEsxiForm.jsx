@@ -2,15 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Card, Form, Input, Select, Switch, Row, Col, Button, Space, App,
-  Typography, InputNumber, Divider,
+  Typography, InputNumber, Divider, Tag,
 } from 'antd';
 import {
   ArrowLeftOutlined, ReloadOutlined,
   CheckCircleFilled, CloseCircleFilled,
+  ThunderboltOutlined, EditOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import AssetTagPicker from '../Assets/AssetTagPicker.jsx';
+import { AutoAssignedTagDisplay } from '../Assets/AssetForm.jsx';
 import {
   useInventoryFieldMeta,
   overridableFormItem as sharedOverridableFormItem,
@@ -21,6 +24,11 @@ import {
 const { Text, Link } = Typography;
 
 const ipRe = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+
+function extractTagNumber(tag) {
+  const m = String(tag || '').match(/\d+/);
+  return m ? parseInt(m[0], 10) : NaN;
+}
 
 const PAGE_KEY = 'physical_esxi_servers';
 
@@ -50,7 +58,9 @@ export default function PhysicalEsxiForm({ mode }) {
   const [submitting, setSubmitting] = useState(false);
   const [originalIp, setOriginalIp] = useState(null);
   const [selectedDept, setSelectedDept] = useState(null);
-  const [pendingTag, setPendingTag] = useState(null);
+  const [autoTagInfo, setAutoTagInfo] = useState(null);
+  const [autoTagLoading, setAutoTagLoading] = useState(false);
+  const [manualOverride, setManualOverride] = useState(false);
   const [osType, setOsType] = useState();
   const { isHidden, fieldMeta, labelOf } = useInventoryFieldMeta(PAGE_KEY);
 
@@ -95,6 +105,7 @@ export default function PhysicalEsxiForm({ mode }) {
           osVersion:       d.os_version,
           assetUsername:   d.asset_username,
           serverStatus:    d.server_status,
+          assetTag:        d.asset_tag,
           extras: Object.fromEntries(
             Object.entries(d.extras || {}).map(([k, v]) =>
               [k, v && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? dayjs(v) : v]
@@ -103,7 +114,6 @@ export default function PhysicalEsxiForm({ mode }) {
         });
         setOriginalIp(d.ip_address || null);
         setSelectedDept(d.department);
-        setPendingTag(d.asset_tag);
         setOsType(d.os_type);
       });
     }
@@ -111,11 +121,31 @@ export default function PhysicalEsxiForm({ mode }) {
 
   // ── Auto-assign next asset tag when department changes (create mode) ───────
   useEffect(() => {
-    if (mode !== 'create' || !selectedDept) { setPendingTag(null); return; }
+    if (mode !== 'create') return;
+    if (!selectedDept) {
+      setAutoTagInfo(null);
+      form.setFieldValue('assetTag', undefined);
+      return;
+    }
+    if (manualOverride) return;
+
+    let cancelled = false;
+    setAutoTagLoading(true);
     api.get('/physical-esxi/tag-stats', { params: { department: selectedDept } })
-      .then(({ data }) => setPendingTag(data.nextAvailable != null ? String(data.nextAvailable) : null))
-      .catch(() => setPendingTag(null));
-  }, [selectedDept, mode]);
+      .then(({ data }) => {
+        if (cancelled) return;
+        setAutoTagInfo(data);
+        if (data.nextAvailable != null) {
+          form.setFieldValue('assetTag', String(data.nextAvailable));
+        } else {
+          form.setFieldValue('assetTag', undefined);
+        }
+      })
+      .catch(() => { if (!cancelled) setAutoTagInfo(null); })
+      .finally(() => { if (!cancelled) setAutoTagLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [selectedDept, manualOverride, mode]); // eslint-disable-line
 
   const opts = (cat, parent) => (dd[cat] || [])
     .filter(d => parent === undefined ? true : d.parent_value === parent)
@@ -125,6 +155,9 @@ export default function PhysicalEsxiForm({ mode }) {
     label: `${d.name} (${String(d.min_tag).padStart(4, '0')}–${String(d.max_tag).padStart(4, '0')})`,
     value: d.name,
   }));
+
+  const rangeFor = (name) => departments.find(d => d.name === name);
+  const showAutoTagBlock = mode === 'create' && !manualOverride;
 
   // Thin wrapper around the shared implementation (frontend/src/utils/dynamicFormFields.jsx)
   // so every fieldKey-based call site below keeps working unchanged.
@@ -163,7 +196,7 @@ export default function PhysicalEsxiForm({ mode }) {
         ...(values.serverStatus !== undefined ? { serverStatus: values.serverStatus } : {}),
         ...(values.serverStatus && /^decom/i.test(values.serverStatus) ? { decommissionReason: values.decommissionReason } : {}),
         ...(values.assetPassword ? { assetPassword: values.assetPassword } : {}),
-        ...(pendingTag ? { assetTag: pendingTag } : {}),
+        ...(values.assetTag ? { assetTag: values.assetTag } : {}),
       };
 
       if (values.extras && typeof values.extras === 'object' && Object.keys(values.extras).length) {
@@ -266,10 +299,57 @@ export default function PhysicalEsxiForm({ mode }) {
           </Form.Item>
         );
       case 'asset_tag':
-        // Auto-assigned behind the scenes via `pendingTag` + department
-        // selection (see effect above) — no standalone widget, matching
-        // the form's existing UX (tag isn't shown until after creation).
-        return null;
+        return (
+          <Col key="asset_tag" xs={24}>
+            <Form.Item
+              name="assetTag"
+              label={
+                <Space>
+                  <span>{labelOf('asset_tag', 'Asset Tag')}</span>
+                  {isCreate && isAdmin && (
+                    <Tag color={manualOverride ? 'orange' : 'blue'}
+                      icon={manualOverride ? <EditOutlined /> : <ThunderboltOutlined />}>
+                      {manualOverride ? 'Manual override' : 'Auto-assigned'}
+                    </Tag>
+                  )}
+                </Space>
+              }
+              dependencies={['department']}
+              rules={[
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value) return Promise.resolve();
+                    const dept = getFieldValue('department');
+                    const r = rangeFor(dept);
+                    if (!r) return Promise.resolve();
+                    const n = extractTagNumber(value);
+                    if (Number.isNaN(n)) return Promise.reject(new Error('Asset tag must contain a number'));
+                    if (n < r.min_tag || n > r.max_tag) {
+                      return Promise.reject(new Error(`Tag ${n} is outside ${r.name}'s range ${r.min_tag}–${r.max_tag}`));
+                    }
+                    return Promise.resolve();
+                  },
+                }),
+              ]}
+            >
+              {showAutoTagBlock ? (
+                <AutoAssignedTagDisplay
+                  department={selectedDept} range={rangeFor(selectedDept)} info={autoTagInfo}
+                  loading={autoTagLoading} isAdmin={isAdmin}
+                  onEnableOverride={() => setManualOverride(true)}
+                />
+              ) : (
+                <AssetTagPicker department={selectedDept} apiPrefix="/physical-esxi" />
+              )}
+            </Form.Item>
+            {isCreate && isAdmin && manualOverride && (
+              <Button size="small" type="link" style={{ paddingLeft: 0, marginTop: -8 }}
+                onClick={() => { setManualOverride(false); form.setFieldValue('assetTag', undefined); }}>
+                ← Back to auto-assign
+              </Button>
+            )}
+          </Col>
+        );
       case 'location':
         return wrap(
           <Form.Item name="location" label={labelOf('location', 'Location')}>
@@ -477,7 +557,7 @@ export default function PhysicalEsxiForm({ mode }) {
           title="Reset form"
           onClick={() => {
             form.resetFields();
-            if (isCreate) { setSelectedDept(null); setPendingTag(null); }
+            if (isCreate) { setSelectedDept(null); setAutoTagInfo(null); setManualOverride(false); }
           }}
         />
       </div>

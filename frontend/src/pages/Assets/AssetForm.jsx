@@ -549,7 +549,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   );
 }
 
-function AutoAssignedTagDisplay({ department, range, info, loading, isAdmin, onEnableOverride, value }) {
+export function AutoAssignedTagDisplay({ department, range, info, loading, isAdmin, onEnableOverride, value }) {
   if (!department) {
     return <Alert type="info" showIcon message="Select a department to auto-assign an asset tag." />;
   }
