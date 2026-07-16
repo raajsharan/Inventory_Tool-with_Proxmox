@@ -25,15 +25,15 @@ async function summary(_req, res, next) {
       WITH inv AS (
         SELECT 'assets'::text AS source, asset_type, server_status, patching_type, eol_status,
                manage_engine_installed, tenable_installed
-          FROM assets
+          FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL
         SELECT 'beijing_assets', asset_type, server_status, patching_type, eol_status,
                manage_engine_installed, tenable_installed
-          FROM beijing_assets
+          FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL
         SELECT 'physical_esxi_servers', asset_type, server_status, NULL::text AS patching_type, NULL::text AS eol_status,
                NULL::boolean AS manage_engine_installed, NULL::boolean AS tenable_installed
-          FROM physical_esxi_servers
+          FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
       SELECT
         COUNT(*)::int AS total,
@@ -65,48 +65,51 @@ async function summary(_req, res, next) {
         )::int                                                                              AS inactive,
         COUNT(*) FILTER (WHERE manage_engine_installed = TRUE)::int                          AS me_installed,
         COUNT(*) FILTER (WHERE tenable_installed     = TRUE)::int                            AS tenable_installed
-      FROM ext_assets;
+      FROM ext_assets
+      WHERE deleted_at IS NULL AND decommissioned_at IS NULL;
     `);
 
     // Chart data (kept for Asset Inventory tab).
     const osQ = db.query(`
       SELECT COALESCE(os_type,'Unspecified') AS key, COUNT(*)::int AS value
         FROM (
-          SELECT os_type FROM assets
-          UNION ALL SELECT os_type FROM beijing_assets
-          UNION ALL SELECT os_type FROM physical_esxi_servers
+          SELECT os_type FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT os_type FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT os_type FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x GROUP BY 1 ORDER BY 2 DESC`);
     const statusQ = db.query(`
       SELECT COALESCE(server_status,'Unspecified') AS key, COUNT(*)::int AS value
         FROM (
-          SELECT server_status FROM assets
-          UNION ALL SELECT server_status FROM beijing_assets
-          UNION ALL SELECT server_status FROM physical_esxi_servers
+          SELECT server_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT server_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT server_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x GROUP BY 1 ORDER BY 2 DESC`);
     const locQ = db.query(`
       SELECT COALESCE(location,'Unspecified') AS key, COUNT(*)::int AS value
         FROM (
-          SELECT location FROM assets
-          UNION ALL SELECT location FROM beijing_assets
-          UNION ALL SELECT location FROM physical_esxi_servers
+          SELECT location FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT location FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT location FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x GROUP BY 1 ORDER BY 2 DESC`);
     const eolQ = db.query(`
       SELECT COALESCE(eol_status,'Unspecified') AS key, COUNT(*)::int AS value
         FROM (
-          SELECT eol_status FROM assets
-          UNION ALL SELECT eol_status FROM beijing_assets
-          UNION ALL SELECT NULL::text AS eol_status FROM physical_esxi_servers
+          SELECT eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT eol_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x GROUP BY 1 ORDER BY 2 DESC`);
     const recentQ = db.query(`
       SELECT id, vm_name, ip_address, os_type, server_status, location, created_at
-        FROM assets ORDER BY created_at DESC LIMIT 10`);
+        FROM assets
+        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        ORDER BY created_at DESC LIMIT 10`);
 
     // Weekly Report counters (created in the last 7 days vs prior 7 days).
     const weeklyQ = db.query(`
       WITH inv AS (
-        SELECT created_at, server_status, patching_type FROM assets
-        UNION ALL SELECT created_at, server_status, patching_type FROM beijing_assets
-        UNION ALL SELECT created_at, server_status, NULL::text AS patching_type FROM physical_esxi_servers
+        SELECT created_at, server_status, patching_type FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT created_at, server_status, patching_type FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT created_at, server_status, NULL::text AS patching_type FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
       SELECT
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int                              AS added_this_week,
@@ -124,9 +127,9 @@ async function summary(_req, res, next) {
     // ---------------------------------------------------------------
     const mslQ = db.query(`
       WITH inv AS (
-        SELECT server_status, eol_status FROM assets
-        UNION ALL SELECT server_status, eol_status FROM beijing_assets
-        UNION ALL SELECT server_status, NULL::text AS eol_status FROM physical_esxi_servers
+        SELECT server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT server_status, eol_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
       SELECT COUNT(*)::int AS msl
         FROM inv
@@ -195,10 +198,10 @@ async function summary(_req, res, next) {
     const locationCountQ = db.query(`
       SELECT COALESCE(location, 'Unspecified') AS location, COUNT(*)::int AS count
         FROM (
-          SELECT location FROM assets
-          UNION ALL SELECT location FROM beijing_assets
-          UNION ALL SELECT location FROM physical_esxi_servers
-          UNION ALL SELECT location FROM ext_assets
+          SELECT location FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT location FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT location FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT location FROM ext_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x
         WHERE location IS NOT NULL AND location <> ''
         GROUP BY 1
@@ -221,9 +224,9 @@ async function summary(_req, res, next) {
     // ---------------------------------------------------------------
     const activeStatusQ = db.query(`
       WITH inv AS (
-        SELECT os_type, server_status FROM assets
-        UNION ALL SELECT os_type, server_status FROM beijing_assets
-        UNION ALL SELECT os_type, server_status FROM physical_esxi_servers
+        SELECT os_type, server_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT os_type, server_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT os_type, server_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       ), filtered AS (
         SELECT * FROM inv
          WHERE (os_type ILIKE '%windows%' OR os_type ILIKE '%linux%')
@@ -254,9 +257,9 @@ async function summary(_req, res, next) {
     // ---------------------------------------------------------------
     const patchingStatusQ = db.query(`
       WITH inv AS (
-        SELECT 'assets'::text AS source, server_status, patching_type, eol_status FROM assets
-        UNION ALL SELECT 'beijing_assets', server_status, patching_type, eol_status FROM beijing_assets
-        UNION ALL SELECT 'physical_esxi_servers', server_status, NULL::text AS patching_type, NULL::text AS eol_status FROM physical_esxi_servers
+        SELECT 'assets'::text AS source, server_status, patching_type, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT 'beijing_assets', server_status, patching_type, eol_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT 'physical_esxi_servers', server_status, NULL::text AS patching_type, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
       SELECT
         COUNT(*)::int                                                                                AS total,
@@ -279,8 +282,8 @@ async function summary(_req, res, next) {
     const vmLocationQ = db.query(`
       SELECT COALESCE(location, 'Unspecified') AS location, COUNT(*)::int AS count
         FROM (
-          SELECT location FROM assets
-          UNION ALL SELECT location FROM beijing_assets
+          SELECT location FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT location FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x
         WHERE location IS NOT NULL AND location <> ''
         GROUP BY 1
@@ -444,8 +447,9 @@ async function summary(_req, res, next) {
           END AS bucket,
           COALESCE(manage_engine_installed, false) AS me
         FROM ext_assets
-        WHERE server_status IS NULL
-           OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%')
+        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          AND (server_status IS NULL
+           OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
       )
       SELECT
         bucket,
@@ -484,7 +488,8 @@ async function summary(_req, res, next) {
           WHERE eol_status IS NULL
              OR (eol_status NOT ILIKE 'Not Applicable%' AND eol_status NOT IN ('NA','N/A'))
         )::int                                                                                  AS total_excl_na
-      FROM ext_assets;
+      FROM ext_assets
+      WHERE deleted_at IS NULL AND decommissioned_at IS NULL;
     `);
 
     // Department-wise breakdown of ext_assets — one row per department
@@ -516,6 +521,7 @@ async function summary(_req, res, next) {
         COUNT(*) FILTER (WHERE manage_engine_installed = TRUE)::int                            AS me,
         COUNT(*) FILTER (WHERE tenable_installed = TRUE)::int                                  AS tenable
       FROM ext_assets
+      WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       GROUP BY 1
       ORDER BY 2 DESC;
     `);

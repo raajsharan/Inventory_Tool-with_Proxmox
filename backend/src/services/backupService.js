@@ -349,24 +349,38 @@ async function restoreTableFromCsv({ table, buffer, mode, userId }) {
       if (!cols.length) continue;
       const vals = cols.map(c => row[c]);
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
-      try {
-        if (mode === 'merge') {
+      if (mode === 'merge') {
+        // Guard each row with a SAVEPOINT. In Postgres, once any statement in a
+        // transaction errors, the whole transaction is "aborted" and every later
+        // statement -- including all subsequent rows' INSERTs and the final
+        // COMMIT -- is rejected or silently turned into a no-op ROLLBACK. Without
+        // a savepoint, a single row collision (e.g. a unique-constraint hit on
+        // ip_address/asset_tag that the ON CONFLICT (id) target doesn't cover)
+        // would silently discard the entire import while still reporting success.
+        await client.query('SAVEPOINT row_sp');
+        try {
           const updates = cols.filter(c => c !== 'id').map(c => `${c} = EXCLUDED.${c}`).join(',');
           await client.query(
             `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})
              ON CONFLICT (id) DO UPDATE SET ${updates || 'id = ' + table + '.id'}`,
             vals
           );
-        } else {
+          await client.query('RELEASE SAVEPOINT row_sp');
+          inserted++;
+        } catch (e) {
+          skipped++;
+          try { await client.query('ROLLBACK TO SAVEPOINT row_sp'); } catch {}
+          try { await client.query('RELEASE SAVEPOINT row_sp'); } catch {}
+        }
+      } else {
+        try {
           await client.query(
             `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`,
             vals
           );
-        }
-        inserted++;
-      } catch (e) {
-        skipped++;
-        if (mode === 'replace') {
+          inserted++;
+        } catch (e) {
+          skipped++;
           await client.query('ROLLBACK');
           throw new ApiError(500, `Row failed in replace mode (transaction aborted): ${e.message}`);
         }

@@ -86,7 +86,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
     {
       title: 'Status', dataIndex: 'migration_status', key: 'migration_status', width: 140,
       render: (v, r) => canEdit
-        ? <StatusSelect value={v} onChange={val => val === 'Deleted' ? remove(r.id) : patch(r.id, { migration_status: val })} />
+        ? <StatusSelect value={v} onChange={val => patch(r.id, { migration_status: val })} />
         : <MigrationStatusBadge status={v} />,
     },
     {

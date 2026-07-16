@@ -3,6 +3,7 @@ const ExcelJS = require('exceljs');
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const audit = require('../services/auditService');
 
 const writeRoles = ['admin', 'superadmin', 'asset_manager'];
 
@@ -11,6 +12,13 @@ const SOURCE_SERVICE = {
   beijing_assets:         () => require('../services/beijingAssetService'),
   ext_assets:             () => require('../services/extAssetService'),
   physical_esxi_servers:  () => require('../services/physicalEsxiService'),
+};
+
+const SOURCE_ENTITY_TYPE = {
+  assets:                 'asset',
+  beijing_assets:         'beijing_asset',
+  ext_assets:             'ext_asset',
+  physical_esxi_servers:  'physical_esxi_server',
 };
 
 // ── GET /api/decommissioned — currently decommissioned assets, all sources ──
@@ -108,6 +116,14 @@ router.post('/:source/:id/reactivate', authenticate, authorize(...writeRoles), a
     const newStatus = req.body?.serverStatus || 'Active';
     if (/^decom/i.test(newStatus)) throw new ApiError(400, 'Reactivation status cannot be Decommissioned');
     const updated = await getSvc().update(req.params.id, { serverStatus: newStatus }, req.user.id);
+    await audit.log({
+      user: req.user,
+      action: 'REACTIVATE',
+      entityType: SOURCE_ENTITY_TYPE[req.params.source] || req.params.source,
+      entityId: req.params.id,
+      details: { serverStatus: newStatus },
+      ipAddress: req.ip,
+    });
     res.json(updated);
   } catch (e) { next(e); }
 });

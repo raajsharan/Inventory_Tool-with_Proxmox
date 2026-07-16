@@ -137,8 +137,14 @@ async function run({ source, columns = [], filters = [], limit = 5000 }) {
     if (!cols.length) cols.push('id');
     const params = [];
     const whereSql = buildAssetWhere(filters, params, tableFields);
+    // Baseline exclusion of soft-deleted/decommissioned rows, consistent with
+    // every other read path over these tables (see assetService.list(), etc.).
+    const liveWhere = 'deleted_at IS NULL AND decommissioned_at IS NULL';
+    const combinedWhere = whereSql
+      ? whereSql.replace(/^WHERE /, `WHERE ${liveWhere} AND `)
+      : `WHERE ${liveWhere}`;
     const { rows } = await db.query(
-      `SELECT ${cols.join(',')} FROM ${src.table} ${whereSql} ORDER BY created_at DESC LIMIT ${cap}`,
+      `SELECT ${cols.join(',')} FROM ${src.table} ${combinedWhere} ORDER BY created_at DESC LIMIT ${cap}`,
       params
     );
     return { columns: cols.map(c => src.fields.find(f => f.key === c) || { key: c, label: c, type: 'string' }), rows };
@@ -148,7 +154,9 @@ async function run({ source, columns = [], filters = [], limit = 5000 }) {
   const fieldMap = new Map(src.fields.map(f => [f.key, f]));
   const selected = (columns.length ? columns : src.fields.map(f => f.key)).filter(c => fieldMap.has(c));
   const params = [src.pageId];
-  const where = ['page_id = $1'];
+  // Baseline exclusion of soft-deleted rows, consistent with
+  // customPageController's own list/detail routes.
+  const where = ['page_id = $1', 'deleted_at IS NULL'];
   for (const f of filters || []) {
     const meta = fieldMap.get(f.field);
     if (!meta) continue;

@@ -223,7 +223,8 @@ async function deleteProject(id) {
       'SELECT id FROM migration_projects WHERE is_default AND id != $1 LIMIT 1', [id]);
     const defaultId = defProj[0]?.id;
     if (defaultId) {
-      for (const t of ['migration_hosts','migration_bomgar_vms','migration_security_vms','migration_standalone_esxi']) {
+      for (const t of ['migration_hosts','migration_bomgar_vms','migration_security_vms','migration_standalone_esxi',
+                        'migration_custom_tabs','migration_custom_vms','migration_field_definitions']) {
         await client.query(`UPDATE ${t} SET project_id = $1 WHERE project_id = $2`, [defaultId, id]);
       }
     }
@@ -669,8 +670,6 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
         for (const r of ex) existingStatuses[r[key]] = r;
       }
 
-      await client.query(`DELETE FROM ${table} WHERE project_id = $1`, [pid]);
-
       const insertedRows = [];
       ws.eachRow((row, rowNumber) => {
         if (rowNumber < dataStartRow) return;
@@ -694,7 +693,11 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
         insertedRows.push({ ...mapped, project_id: pid });
       });
 
+      // Skip entirely (including the DELETE below) if the sheet has no
+      // parseable data rows, so a blank/header-only tab can't wipe existing data.
       if (insertedRows.length === 0) { counts[ws.name] = 0; continue; }
+
+      await client.query(`DELETE FROM ${table} WHERE project_id = $1`, [pid]);
 
       const keys = Object.keys(insertedRows[0]);
       const colNames = keys.join(', ');
@@ -730,11 +733,6 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
         for (const r of ex) existingStatuses[r.vm] = r.migration_status;
       }
 
-      await client.query(
-        `DELETE FROM migration_custom_vms WHERE custom_tab_id = $1 AND project_id = $2`,
-        [customTab.id, pid]
-      );
-
       const insertedRows = [];
       ws.eachRow((row, rowNumber) => {
         if (rowNumber < customDataStart) return;
@@ -746,7 +744,14 @@ async function confirmImport(buffer, preserveStatus = false, projectId) {
         insertedRows.push({ ...mapped, custom_tab_id: customTab.id, project_id: pid });
       });
 
+      // Skip entirely (including the DELETE below) if the sheet has no
+      // parseable data rows, so a blank/header-only tab can't wipe existing data.
       if (insertedRows.length === 0) { counts[ws.name] = 0; continue; }
+
+      await client.query(
+        `DELETE FROM migration_custom_vms WHERE custom_tab_id = $1 AND project_id = $2`,
+        [customTab.id, pid]
+      );
 
       const keys = Object.keys(insertedRows[0]);
       const colNames = keys.join(', ');
