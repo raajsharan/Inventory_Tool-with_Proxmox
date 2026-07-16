@@ -74,6 +74,7 @@ export default function PhysicalEsxiForm({ mode }) {
           assetType:       d.asset_type,
           osType:          d.os_type,
           osVersion:       d.os_version,
+          assetUsername:   d.asset_username,
         });
         setOriginalIp(d.ip_address || null);
         setSelectedDept(d.department);
@@ -124,6 +125,8 @@ export default function PhysicalEsxiForm({ mode }) {
         assetType:         values.assetType,
         osType:            values.osType,
         osVersion:         values.osVersion,
+        assetUsername:     values.assetUsername,
+        ...(values.assetPassword ? { assetPassword: values.assetPassword } : {}),
         ...(pendingTag ? { assetTag: pendingTag } : {}),
       };
 
@@ -329,6 +332,25 @@ export default function PhysicalEsxiForm({ mode }) {
                   disabled={!osType}
                   placeholder={osType ? 'Select OS Version' : 'Select OS Type first'}
                   options={osType ? opts('os_version', osType) : []}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            {/* Asset Username */}
+            <Col xs={24} md={8}>
+              <Form.Item name="assetUsername" label="Asset Username">
+                <Input placeholder="e.g. svc_admin" autoComplete="off" />
+              </Form.Item>
+            </Col>
+
+            {/* Asset Password */}
+            <Col xs={24} md={8}>
+              <Form.Item name="assetPassword" label="Asset Password" extra="Encrypted (AES-256-GCM) at rest">
+                <Input.Password
+                  placeholder={mode === 'edit' ? 'Leave blank to keep existing' : ''}
+                  autoComplete="new-password"
                 />
               </Form.Item>
             </Col>

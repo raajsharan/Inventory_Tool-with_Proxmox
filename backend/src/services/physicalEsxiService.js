@@ -13,7 +13,7 @@ const ASSET_COLUMNS = [
   'server_model', 'serial_number', 'asset_type', 'os_type', 'os_version',
   'cpu_cores', 'ram_gb', 'total_disks',
   'ome_status', 'rack_number', 'server_position', 'additional_remarks',
-  'idrac_ip', 'idrac_enabled', 'asset_tag',
+  'idrac_ip', 'idrac_enabled', 'asset_tag', 'asset_username',
 ];
 
 function mapBody(body) {
