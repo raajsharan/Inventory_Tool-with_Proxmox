@@ -142,7 +142,6 @@ export default function PhysicalEsxiForm({ mode }) {
     try {
       const payload = {
         ipAddress:         values.ipAddress,
-        hostedIp:          values.ipAddress,   // keep hosted_ip in sync
         vmName:            values.vmName,
         department:        values.department,
         location:          values.location,

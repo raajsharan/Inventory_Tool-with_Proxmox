@@ -197,7 +197,7 @@ async function list({ search, osType, serverStatus, location, serverModel, page 
   if (search) {
     params.push(`%${search}%`);
     const i = params.length;
-    where.push(`(vm_name ILIKE $${i} OR os_hostname ILIKE $${i} OR ip_address ILIKE $${i} OR assigned_user ILIKE $${i} OR department ILIKE $${i})`);
+    where.push(`(vm_name ILIKE $${i} OR ip_address ILIKE $${i} OR department ILIKE $${i})`);
   }
   if (osType)       { params.push(osType);       where.push(`os_type = $${params.length}`); }
   if (serverStatus) { params.push(serverStatus); where.push(`server_status = $${params.length}`); }

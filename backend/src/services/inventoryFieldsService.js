@@ -304,7 +304,11 @@ async function upsertOverrides(pageKey, updates, userId) {
                section     = EXCLUDED.section,
                input_type  = COALESCE(EXCLUDED.input_type, builtin_field_overrides.input_type),
                options     = EXCLUDED.options,
-               dropdown_category = COALESCE(EXCLUDED.dropdown_category, builtin_field_overrides.dropdown_category),
+               dropdown_category = CASE
+                 WHEN COALESCE(EXCLUDED.input_type, builtin_field_overrides.input_type) = 'dropdown'
+                   THEN COALESCE(EXCLUDED.dropdown_category, builtin_field_overrides.dropdown_category)
+                 ELSE NULL
+               END,
                is_required = EXCLUDED.is_required,
                sort_order  = EXCLUDED.sort_order,
                updated_by  = EXCLUDED.updated_by,
@@ -380,7 +384,10 @@ async function updateExtra(pageKey, fieldKey, body, userId) {
             section     = COALESCE($4, section),
             input_type  = COALESCE($5, input_type),
             options     = COALESCE($6::jsonb, options),
-            dropdown_category = COALESCE($10, dropdown_category),
+            dropdown_category = CASE
+              WHEN COALESCE($5, input_type) = 'dropdown' THEN COALESCE($10, dropdown_category)
+              ELSE NULL
+            END,
             is_required = COALESCE($7, is_required),
             sort_order  = COALESCE($8, sort_order),
             updated_by  = $9,

@@ -31,6 +31,8 @@ const COLUMNS = [
   { key: 'manage_engine_installed',  header: 'ManageEngine Installed',   width: 22 },
   { key: 'tenable_installed',        header: 'Tenable Installed',        width: 20 },
   { key: 'idrac_enabled',            header: 'iDRAC Enabled',            width: 16 },
+  { key: 'idrac_ip',                 header: 'iDRAC IP',                 width: 16 },
+  { key: 'mac_address',              header: 'MAC Address',              width: 18 },
 ];
 
 const IP_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -144,6 +146,7 @@ async function downloadTemplate(_req, res, next) {
       serial_number: 'BJ-EX-001', ome_status: 'OK', hosted_ip: '', asset_tag: '',
       asset_username: 'svc_admin', asset_password: 'secret', additional_remarks: 'remove this row before import',
       manage_engine_installed: 'TRUE', tenable_installed: 'TRUE', idrac_enabled: 'FALSE',
+      idrac_ip: '', mac_address: '',
     });
 
     const ws2 = wb.addWorksheet('Department Tag Ranges');

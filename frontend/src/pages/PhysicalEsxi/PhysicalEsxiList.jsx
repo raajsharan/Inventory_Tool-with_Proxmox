@@ -325,10 +325,6 @@ export default function PhysicalEsxiList() {
       title: labelOf('asset_type', 'Asset Type'), render: dash,
     },
     {
-      key: 'assigned_user', dataIndex: 'assigned_user', width: 150,
-      title: labelOf('assigned_user', 'Assigned User'), render: dash,
-    },
-    {
       key: 'asset_tag', dataIndex: 'asset_tag', width: 110,
       title: labelOf('asset_tag', 'Asset Tag'),
       render: v => v ? <Tag>{v}</Tag> : dash(v),
@@ -412,7 +408,7 @@ export default function PhysicalEsxiList() {
         <Col xs={24} md={8}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="Search by name, hostname, IP, user, department…"
+            placeholder="Search by name, IP, department…"
             value={filters.search}
             onChange={e => setFilters({ ...filters, search: e.target.value })}
             onPressEnter={onSearch}

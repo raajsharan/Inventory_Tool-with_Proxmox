@@ -31,6 +31,8 @@ const COLUMNS = [
   { key: 'manage_engine_installed',  header: 'ManageEngine Installed',   width: 22 },
   { key: 'tenable_installed',        header: 'Tenable Installed',        width: 20 },
   { key: 'idrac_enabled',            header: 'iDRAC Enabled',            width: 16 },
+  { key: 'idrac_ip',                 header: 'iDRAC IP',                 width: 16 },
+  { key: 'mac_address',              header: 'MAC Address',              width: 18 },
 ];
 
 const IP_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
