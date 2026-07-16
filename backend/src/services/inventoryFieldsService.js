@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const fieldVis = require('./fieldVisibilityService');
+const physicalEsxiSvc = require('./physicalEsxiService');
 
 // Default groups (sections) with their order.
 const DEFAULT_GROUPS = [
@@ -98,12 +99,19 @@ const FIELD_DEFAULTS = {
 
 const PAGE_KEYS = new Set(['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers']);
 
-// Fields that exist in the global FIELD_DEFAULTS but have been dropped from
-// the physical_esxi_servers table — exclude them from its field editor.
-const PHYSICAL_ESXI_EXCLUDED = new Set([
-  'manage_engine_installed', 'tenable_installed',
-  'eol_status', 'patching_type', 'server_patch_type', 'patching_schedule',
-]);
+// physicalEsxiService.ASSET_COLUMNS is the single source of truth for which
+// fields the Physical & ESXi Servers form/table/import actually use.
+// asset_password is handled specially by mapBody (not listed in
+// ASSET_COLUMNS) but is still a real, editable field — included here too.
+// Deriving the exclusion set from ASSET_COLUMNS (rather than hand-maintaining
+// a separate list) means any future addition/removal there — the same array
+// that drives the Register form, download template, and import mapping —
+// automatically reflects in the "Change Field Types" editor with no second
+// edit required.
+const PHYSICAL_ESXI_ALLOWED = new Set([...physicalEsxiSvc.ASSET_COLUMNS, 'asset_password']);
+function physicalEsxiExcluded() {
+  return new Set(Object.keys(FIELD_DEFAULTS).filter(k => !PHYSICAL_ESXI_ALLOWED.has(k)));
+}
 
 function slugifyKey(label) {
   return String(label || '')
@@ -132,7 +140,7 @@ async function get(pageKey) {
 
   // Built-in fields (in registry order), excluding columns that don't
   // exist in this page's table (e.g. dropped physical_esxi_servers cols).
-  const excluded = pageKey === 'physical_esxi_servers' ? PHYSICAL_ESXI_EXCLUDED : new Set();
+  const excluded = pageKey === 'physical_esxi_servers' ? physicalEsxiExcluded() : new Set();
   const builtIns = Object.keys(FIELD_DEFAULTS).filter(k => !excluded.has(k)).map((key, idx) => {
     const def = FIELD_DEFAULTS[key];
     const ov = overrideMap[key];
