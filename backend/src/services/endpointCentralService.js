@@ -468,6 +468,11 @@ function normalizeComputer(c) {
 // Authentication strategies to try per path
 // ---------------------------------------------------------------------------
 
+// ME EC paginates list endpoints (default page size ~25). Request a page
+// limit comfortably above real-world endpoint counts so a single request
+// returns everything instead of just the first page.
+const PAGE_LIMIT = 850;
+
 function authStrategies(base, path, apiKey, customerId) {
   const cid = encodeURIComponent(customerId || '1');
   const key = encodeURIComponent(apiKey);
@@ -475,31 +480,31 @@ function authStrategies(base, path, apiKey, customerId) {
     // ME EC v11+ API key via Authorization header (most common for newer versions)
     {
       label:   'authtoken-header',
-      url:     `${base}${path}?customerid=${cid}`,
+      url:     `${base}${path}?customerid=${cid}&pagelimit=${PAGE_LIMIT}`,
       headers: { 'Authorization': `Authtoken ${apiKey}` },
     },
     // Bare key, no prefix — some ME EC instances only accept the raw key value
     {
       label:   'raw-key-header',
-      url:     `${base}${path}?customerid=${cid}`,
+      url:     `${base}${path}?customerid=${cid}&pagelimit=${PAGE_LIMIT}`,
       headers: { 'Authorization': apiKey },
     },
     // Bearer token (OAuth-style — some ME EC setups require this format)
     {
       label:   'bearer-header',
-      url:     `${base}${path}?customerid=${cid}`,
+      url:     `${base}${path}?customerid=${cid}&pagelimit=${PAGE_LIMIT}`,
       headers: { 'Authorization': `Bearer ${apiKey}` },
     },
     // Bearer without customerid
     {
       label:   'bearer-no-cid',
-      url:     `${base}${path}`,
+      url:     `${base}${path}?pagelimit=${PAGE_LIMIT}`,
       headers: { 'Authorization': `Bearer ${apiKey}` },
     },
     // Legacy: API key as query parameter (older Desktop Central)
     {
       label:   'query-param',
-      url:     `${base}${path}?apikey=${key}&customerid=${cid}`,
+      url:     `${base}${path}?apikey=${key}&customerid=${cid}&pagelimit=${PAGE_LIMIT}`,
       headers: {},
     },
   ];
@@ -513,13 +518,13 @@ function sessionTokenStrategies(base, path, token, customerId) {
     // Raw token (no prefix) — standard for credential-obtained tokens
     {
       label:   'session-raw',
-      url:     `${base}${path}?customerid=${cid}`,
+      url:     `${base}${path}?customerid=${cid}&pagelimit=${PAGE_LIMIT}`,
       headers: { 'Authorization': token },
     },
     // Also try Authtoken prefix in case the server expects that format
     {
       label:   'session-authtoken',
-      url:     `${base}${path}?customerid=${cid}`,
+      url:     `${base}${path}?customerid=${cid}&pagelimit=${PAGE_LIMIT}`,
       headers: { 'Authorization': `Authtoken ${token}` },
     },
   ];
