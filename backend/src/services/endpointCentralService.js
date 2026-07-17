@@ -478,6 +478,12 @@ function authStrategies(base, path, apiKey, customerId) {
       url:     `${base}${path}?customerid=${cid}`,
       headers: { 'Authorization': `Authtoken ${apiKey}` },
     },
+    // Bare key, no prefix — some ME EC instances only accept the raw key value
+    {
+      label:   'raw-key-header',
+      url:     `${base}${path}?customerid=${cid}`,
+      headers: { 'Authorization': apiKey },
+    },
     // Bearer token (OAuth-style — some ME EC setups require this format)
     {
       label:   'bearer-header',
