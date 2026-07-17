@@ -442,6 +442,27 @@ function extractComputers(json) {
 // Data normalisation — field names vary across ME EC versions
 // ---------------------------------------------------------------------------
 
+// /api/1.4/inventory/scancomputers documents live_status as
+// 1 = Live, 2 = Down, 3 = Unknown. Map to the app's agent_status
+// convention: 0 = Online, 1 = Offline, 2 = Unknown.
+function mapLiveStatus(v) {
+  const n = Number(v);
+  if (n === 1) return 0;
+  if (n === 2) return 1;
+  if (n === 3) return 2;
+  return null;
+}
+
+// Same endpoint documents installation_status as 21 = Yet to install,
+// 22 = Installed, 23 = Uninstalled, 24 = Yet to uninstall, 29 = Install
+// failure. Map to the app's managed_status convention: 0 = Not Managed,
+// 1 = Managed (only a confirmed agent install counts as managed).
+function mapInstallStatus(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return n === 22 ? 1 : 0;
+}
+
 function normalizeComputer(c) {
   return {
     resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? c.computer_id   ?? c.COMPUTER_ID   ?? null,
@@ -454,9 +475,14 @@ function normalizeComputer(c) {
                  ?? c.os             ?? c.OS             ?? c.operatingsystem ?? '—',
     os_platform:    c.osplatform     ?? c.OS_PLATFORM    ?? null,
     agent_version:  c.agentversion   ?? c.AGENT_VERSION  ?? c.agent_version ?? c.AGENTVERSION  ?? '—',
-    managed_status: c.managed_status ?? c.MANAGED_STATUS ?? c.managedstatus ?? 1,
-    // agent_status: 0 = Online/Live, 1 = Offline/Dead
-    agent_status:   c.agent_status   ?? c.AGENT_STATUS   ?? c.agentstatus   ?? 1,
+    // managed_status: 0 = Not Managed, 1 = Managed. Prefer the documented
+    // installation_status field (scancomputers API) over older guessed names.
+    managed_status: mapInstallStatus(c.installation_status ?? c.INSTALLATION_STATUS ?? c.installationstatus)
+                  ?? c.managed_status ?? c.MANAGED_STATUS ?? c.managedstatus ?? 1,
+    // agent_status: 0 = Online, 1 = Offline, 2 = Unknown. Prefer the
+    // documented live_status field (scancomputers API) over older guessed names.
+    agent_status:   mapLiveStatus(c.live_status ?? c.LIVE_STATUS ?? c.livestatus)
+                  ?? c.agent_status ?? c.AGENT_STATUS ?? c.agentstatus ?? 1,
     last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
                  ?? c.last_contact   ?? c.LAST_CONTACT   ?? c.last_scan_time ?? c.LAST_SCAN_TIME
                  ?? c.lastscantime   ?? c.last_successful_scan ?? null,

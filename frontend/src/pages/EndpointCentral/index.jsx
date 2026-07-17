@@ -19,6 +19,7 @@ const { Title, Text } = Typography;
 const AGENT_STATUS = {
   0: { label: 'Online',  color: 'success', icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
   1: { label: 'Offline', color: 'default', icon: <CloseCircleFilled style={{ color: '#d9d9d9' }} /> },
+  2: { label: 'Unknown', color: 'warning', icon: <QuestionCircleOutlined style={{ color: '#faad14' }} /> },
 };
 
 const MANAGED_STATUS = {
@@ -499,19 +500,21 @@ function SummaryCards({ agents }) {
   const total      = agents.length;
   const online     = agents.filter(a => a.agent_status === 0).length;
   const offline    = agents.filter(a => a.agent_status === 1).length;
+  const unknown    = agents.filter(a => a.agent_status === 2).length;
   const notManaged = agents.filter(a => a.managed_status === 0).length;
 
   const cards = [
     { label: 'Total Endpoints', value: total,      color: undefined,  icon: <DesktopOutlined /> },
     { label: 'Online',          value: online,     color: '#52c41a',  icon: <WifiOutlined /> },
     { label: 'Offline',         value: offline,    color: '#8c8c8c',  icon: <CloseCircleFilled /> },
+    { label: 'Unknown',         value: unknown,     color: '#faad14',  icon: <QuestionCircleOutlined /> },
     { label: 'Not Managed',     value: notManaged, color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
   ];
 
   return (
     <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
       {cards.map(c => (
-        <Col xs={12} sm={6} key={c.label}>
+        <Col xs={12} sm={8} key={c.label}>
           <Card size="small" styles={{ body: { padding: '10px 16px' } }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 22, color: c.color || '#1677ff' }}>{c.icon}</span>
@@ -881,6 +884,7 @@ export default function EndpointCentral() {
                     options={[
                       { value: 0, label: 'Online'  },
                       { value: 1, label: 'Offline' },
+                      { value: 2, label: 'Unknown' },
                     ]}
                   />
                   <Select
