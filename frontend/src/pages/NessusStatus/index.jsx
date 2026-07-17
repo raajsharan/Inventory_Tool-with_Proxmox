@@ -568,6 +568,8 @@ export default function NessusStatus() {
       <style>{`
         .row-warning td { background: #fff7e6 !important; }
         .row-warning:hover td { background: #ffe7ba !important; }
+        body[data-theme="dark"] .row-warning td { background: rgba(250,173,20,0.14) !important; }
+        body[data-theme="dark"] .row-warning:hover td { background: rgba(250,173,20,0.22) !important; }
       `}</style>
     </div>
   );

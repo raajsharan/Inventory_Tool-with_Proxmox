@@ -607,6 +607,8 @@ export default function SoftwareStatus() {
       <style>{`
         .row-warning td { background: #fff2f0 !important; }
         .row-warning:hover td { background: #ffe7e4 !important; }
+        body[data-theme="dark"] .row-warning td { background: rgba(255,77,79,0.14) !important; }
+        body[data-theme="dark"] .row-warning:hover td { background: rgba(255,77,79,0.22) !important; }
       `}</style>
     </div>
   );
