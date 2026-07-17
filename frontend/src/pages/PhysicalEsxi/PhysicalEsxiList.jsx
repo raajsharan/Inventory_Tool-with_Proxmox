@@ -256,7 +256,7 @@ export default function PhysicalEsxiList() {
     {
       key: 'vm_name', dataIndex: 'vm_name', fixed: 'left', width: 180,
       title: labelOf('vm_name', 'Device Name'),
-      render: (v, r) => <Link to={`/physical-esxi/${r.id}`}>{v || '(unnamed)'}</Link>,
+      render: (v, r) => <Link className="vm-name-link" to={`/physical-esxi/${r.id}`}>{v || '(unnamed)'}</Link>,
     },
 
     // ── HARDWARE INFORMATION (top section of form) ──────────────────────────

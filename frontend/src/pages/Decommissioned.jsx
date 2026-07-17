@@ -83,7 +83,7 @@ export default function Decommissioned() {
   const currentColumns = [
     { title: 'VM Name', render: (_, r) => {
       const m = SOURCE_META[r.source] || SOURCE_META.assets;
-      return <Link to={`${m.base}/${r.id}`}>{r.vm_name || '(unnamed)'}</Link>;
+      return <Link className="vm-name-link" to={`${m.base}/${r.id}`}>{r.vm_name || '(unnamed)'}</Link>;
     } },
     { title: 'IP Address', dataIndex: 'ip_address', render: v => v ? <Text style={mono}>{v}</Text> : '—' },
     { title: 'Asset Tag', dataIndex: 'asset_tag', width: 110,

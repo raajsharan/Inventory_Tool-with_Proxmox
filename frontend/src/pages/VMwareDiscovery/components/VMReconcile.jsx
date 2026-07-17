@@ -97,7 +97,7 @@ export default function VMReconcile() {
                     columns={[
                       { title: 'Record', render: (_, r) => {
                         const m = SOURCE_META[r.source] || SOURCE_META.assets;
-                        return <Link to={`${m.base}/${r.id}`}>{r.vm_name || r.ip_address}</Link>;
+                        return <Link className="vm-name-link" to={`${m.base}/${r.id}`}>{r.vm_name || r.ip_address}</Link>;
                       } },
                       { title: 'IP Address', dataIndex: 'ip_address',
                         render: v => v ? <Text style={mono}>{v}</Text> : '—' },

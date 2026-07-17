@@ -23,7 +23,7 @@ const srcTag = (s) => {
 };
 const recordLink = (r) => {
   const m = SOURCE_META[r.source] || SOURCE_META.assets;
-  return <Link to={`${m.base}/${r.id}`}>{r.vm_name || r.ip_address || r.id}</Link>;
+  return <Link className="vm-name-link" to={`${m.base}/${r.id}`}>{r.vm_name || r.ip_address || r.id}</Link>;
 };
 
 export default function DataHealth() {
