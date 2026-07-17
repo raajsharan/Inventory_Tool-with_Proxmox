@@ -391,7 +391,7 @@ export default function PhysicalEsxiList() {
   ];
 
   // Always-visible keys (never controlled by field-visibility toggle).
-  const pinned = new Set(['vm_name', '__actions__', 'asset_password', 'idrac_password',
+  const pinned = new Set(['vm_name', 'asset_tag', '__actions__', 'asset_password', 'idrac_password',
     'created_by_name', 'created_at', 'updated_by_name', 'updated_at']);
 
   const visibleColumns = allColumns.filter(c => pinned.has(c.key) || !hiddenSet.has(c.key));
