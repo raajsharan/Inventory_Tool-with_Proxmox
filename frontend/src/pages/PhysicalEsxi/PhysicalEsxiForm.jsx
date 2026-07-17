@@ -32,18 +32,12 @@ function extractTagNumber(tag) {
 
 const PAGE_KEY = 'physical_esxi_servers';
 
-// Width map for built-in widgets so a moved field keeps a sensible size.
-const FIELD_WIDTHS = {
-  vm_name: { xs: 24, md: 8 }, ip_address: { xs: 24, md: 8 },
-  asset_type: { xs: 24, md: 8 }, os_type: { xs: 24, md: 8 }, os_version: { xs: 24, md: 8 },
-  department: { xs: 24, md: 8 }, asset_tag: { xs: 24, md: 24 }, assigned_user: { xs: 24, md: 8 },
-  server_status: { xs: 24, md: 8 }, location: { xs: 24, md: 8 },
-  asset_username: { xs: 24, md: 8 }, asset_password: { xs: 24, md: 8 }, additional_remarks: { xs: 24, md: 24 },
-  idrac_enabled: { xs: 24, md: 8 }, serial_number: { xs: 24, md: 8 }, ome_status: { xs: 24, md: 8 }, idrac_ip: { xs: 24, md: 8 },
-  idrac_username: { xs: 24, md: 8 }, idrac_password: { xs: 24, md: 8 },
-  server_model: { xs: 24, md: 8 }, cpu_cores: { xs: 24, md: 8 }, ram_gb: { xs: 24, md: 8 }, total_disks: { xs: 24, md: 8 },
-  rack_number: { xs: 24, md: 8 }, server_position: { xs: 24, md: 8 },
-};
+// Fields that always take the full row width, regardless of neighbors.
+// Everything else gets a flexible ~300px column that grows to fill any
+// leftover space on its row (e.g. a lone trailing field on a row of 1 or 2
+// stretches instead of leaving a ragged gap), and wraps naturally when the
+// row is full — no need to hand-tune spans every time a field is added.
+const FULL_WIDTH_FIELDS = new Set(['asset_tag', 'additional_remarks']);
 
 export default function PhysicalEsxiForm({ mode }) {
   const { id } = useParams();
@@ -243,8 +237,12 @@ export default function PhysicalEsxiForm({ mode }) {
 
   function renderBuiltinWidget(field_key) {
     if (isHidden(field_key)) return null;
-    const width = FIELD_WIDTHS[field_key] || { xs: 24, md: 8 };
-    const wrap = (children) => <Col key={field_key} xs={width.xs} md={width.md}>{children}</Col>;
+    const isFull = FULL_WIDTH_FIELDS.has(field_key);
+    const wrap = (children) => (
+      <Col key={field_key} flex={isFull ? '1 1 100%' : '1 1 300px'} style={isFull ? undefined : { minWidth: 220 }}>
+        {children}
+      </Col>
+    );
 
     switch (field_key) {
       case 'vm_name':
@@ -312,7 +310,7 @@ export default function PhysicalEsxiForm({ mode }) {
         );
       case 'asset_tag':
         return (
-          <Col key="asset_tag" xs={24}>
+          <Col key="asset_tag" flex="1 1 100%">
             <Form.Item
               name="assetTag"
               label={
