@@ -533,6 +533,9 @@ body[data-theme="dark"] .dd-row:hover { background: rgba(255,255,255,0.05); }
 .dd-row-value { color: #1677ff; font-weight: 500; }
 body[data-theme="dark"] .dd-row-value { color: #69b1ff; }
 
+.vm-name-link { color: #1677ff; font-weight: 500; }
+body[data-theme="dark"] .vm-name-link { color: #69b1ff; }
+
 .dd-add-row {
   margin-top: 12px;
   display: flex; gap: 8px; align-items: center;

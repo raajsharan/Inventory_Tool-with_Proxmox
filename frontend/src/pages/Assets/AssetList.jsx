@@ -195,7 +195,7 @@ export default function AssetList({
   const allColumns = [
     { key: 'vm_name', dataIndex: 'vm_name', fixed: 'left', width: 160,
       title: labelOf('vm_name', 'VM Name'),
-      render: (v, r) => <Link to={`${basePath}/${r.id}`}>{v || '(unnamed)'}</Link> },
+      render: (v, r) => <Link className="vm-name-link" to={`${basePath}/${r.id}`}>{v || '(unnamed)'}</Link> },
     { key: 'ip_address', dataIndex: 'ip_address', width: 130,
       title: labelOf('ip_address', 'IP Address'), render: cell },
     { key: 'os_hostname', dataIndex: 'os_hostname', width: 180,
