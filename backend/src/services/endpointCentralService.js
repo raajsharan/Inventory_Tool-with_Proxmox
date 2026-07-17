@@ -458,9 +458,26 @@ function normalizeComputer(c) {
     // agent_status: 0 = Online/Live, 1 = Offline/Dead
     agent_status:   c.agent_status   ?? c.AGENT_STATUS   ?? c.agentstatus   ?? 1,
     last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
-                 ?? c.last_contact   ?? c.LAST_CONTACT   ?? null,
-    office:         c.resourceoffice ?? c.RESOURCE_OFFICE ?? c.office       ?? c.site ?? c.SITE ?? '—',
+                 ?? c.last_contact   ?? c.LAST_CONTACT   ?? c.last_scan_time ?? c.LAST_SCAN_TIME
+                 ?? c.lastscantime   ?? c.last_successful_scan ?? null,
+    office:         c.resourceoffice ?? c.RESOURCE_OFFICE ?? c.office       ?? c.site ?? c.SITE
+                 ?? c.location       ?? c.LOCATION        ?? '—',
     resource_type:  c.resourcetype   ?? c.RESOURCE_TYPE  ?? 0,
+    // Fields below are best-effort — ME EC field names vary by endpoint/version
+    // and haven't been confirmed against a live /inventory/scancomputers
+    // response yet. If any render as "—" in the UI, capture a sample JSON
+    // response and add the real key names here.
+    logged_on_users:  c.user_name    ?? c.USER_NAME      ?? c.loggedonuser  ?? c.LOGGED_ON_USER
+                   ?? c.logged_on_user ?? c.LOGGED_ON_USERS ?? c.loggedonusers
+                   ?? c.current_logged_users ?? c.currently_logged_user ?? '—',
+    service_pack:     c.service_pack ?? c.SERVICE_PACK   ?? c.servicepack  ?? c.SERVICEPACK ?? '—',
+    os_version:       c.os_version   ?? c.OS_VERSION     ?? c.osversion    ?? c.OSVERSION
+                   ?? c.os_build     ?? c.build_number   ?? c.osbuildnumber ?? '—',
+    os_license_status: c.os_license_status ?? c.OS_LICENSE_STATUS ?? c.oslicensestatus
+                     ?? c.license_status   ?? c.LICENSE_STATUS   ?? c.activation_status
+                     ?? c.ACTIVATION_STATUS ?? '—',
+    assigned_to:      c.assigned_to  ?? c.ASSIGNED_TO    ?? c.assignedto   ?? c.ASSIGNEDTO
+                   ?? c.resource_user ?? c.RESOURCE_USER ?? c.primary_user ?? c.PRIMARY_USER ?? '—',
   };
 }
 
@@ -806,9 +823,14 @@ async function testConnection() {
 
   const base = config.server_url.replace(/\/$/, '');
 
-  // Always try ALL known paths during test, plus any custom configured path first
-  const customPath = config.api_path && !KNOWN_PATHS.includes(config.api_path) ? config.api_path : null;
-  const paths = customPath ? [customPath, ...KNOWN_PATHS] : KNOWN_PATHS;
+  // Try the configured path first — whether it's a custom path or one of the
+  // KNOWN_PATHS entries — so Test Connection validates the admin's actual
+  // selection instead of always preferring whichever KNOWN_PATHS entry
+  // happens to be tried first. Falls back to the rest of KNOWN_PATHS if the
+  // configured path doesn't work.
+  const paths = config.api_path
+    ? [config.api_path, ...KNOWN_PATHS.filter(p => p !== config.api_path)]
+    : KNOWN_PATHS;
 
   const strategies = useCredentials ? sessionTokenStrategies : authStrategies;
   const stratKey   = useCredentials ? config.session_token   : config.api_key;

@@ -240,14 +240,15 @@ function ConfigModal({ open, onClose, onSaved }) {
     setTesting(true);
     setTestResult(null);
     try {
-      // Save current config before testing so the backend uses the latest values
-      await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode, api_path: '' });
+      // Save current config before testing — keep whatever API Path the admin
+      // has set so Test Connection validates that selection first, rather
+      // than discarding it in favour of auto-detection.
+      await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode });
       const r = await api.post('/endpoint-central/test');
-      if (r.data.success && r.data.working_path) {
+      if (r.data.success && r.data.working_path && r.data.working_path !== vals.api_path) {
+        // The configured path didn't work but a fallback did — reflect that.
         form.setFieldValue('api_path', r.data.working_path);
         await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode, api_path: r.data.working_path });
-      } else {
-        await api.put('/endpoint-central/config', { ...vals, auth_mode: authMode });
       }
       setTestResult(r.data);
     } catch (e) {
@@ -730,6 +731,10 @@ export default function EndpointCentral() {
       title: 'IP Address', dataIndex: 'ip_address', key: 'ip_address', width: 140,
       render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
     },
+    {
+      title: 'Logged On Users', dataIndex: 'logged_on_users', key: 'logged_on_users', width: 160, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
     { title: 'Domain',    dataIndex: 'domain',   key: 'domain',   width: 160, ellipsis: true },
     {
       title: 'OS', dataIndex: 'os_name', key: 'os_tag', width: 90,
@@ -738,6 +743,14 @@ export default function EndpointCentral() {
     {
       title: 'OS Name', dataIndex: 'os_name', key: 'os_name', width: 220, ellipsis: true,
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
+    {
+      title: 'Service Pack', dataIndex: 'service_pack', key: 'service_pack', width: 140, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
+    {
+      title: 'OS Version', dataIndex: 'os_version', key: 'os_version', width: 120, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : <Text code style={{ fontSize: 12 }}>{v}</Text>,
     },
     {
       title: 'Agent Version', dataIndex: 'agent_version', key: 'agent_version', width: 130,
@@ -756,7 +769,15 @@ export default function EndpointCentral() {
       },
     },
     {
+      title: 'OS License Status', dataIndex: 'os_license_status', key: 'os_license_status', width: 150, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
+    {
       title: 'Office / Location', dataIndex: 'office', key: 'office', width: 160, ellipsis: true,
+      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
+    {
+      title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 160, ellipsis: true,
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
     },
   ];
