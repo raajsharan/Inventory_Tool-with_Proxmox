@@ -104,10 +104,11 @@ export default function MigrationOverview({ projectId }) {
                 </Col>
               </Row>
               <Progress
-                percent={pct(d.migrated, d.total)}
+                percent={pct((d.migrated ?? 0) + (d.cleaned_up ?? 0), d.total)}
                 size="small"
                 style={{ marginTop: 8 }}
                 strokeColor="#52c41a"
+                format={(percent) => <span style={{ fontSize: 24 }}>{percent}%</span>}
               />
               <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {d.not_started > 0 && (
