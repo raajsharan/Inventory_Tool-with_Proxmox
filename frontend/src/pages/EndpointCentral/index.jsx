@@ -165,6 +165,8 @@ function ConfigModal({ open, onClose, onSaved }) {
   const [saving,     setSaving]     = useState(false);
   const [logging,    setLogging]    = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [checkingUrl,   setCheckingUrl]   = useState(false);
+  const [urlCheckResult, setUrlCheckResult] = useState(null);
   const [authMode,   setAuthMode]   = useState('api_key');
   const [sessionActive, setSessionActive] = useState(false);
   const [otpOpen,       setOtpOpen]       = useState(false);
@@ -187,10 +189,27 @@ function ConfigModal({ open, onClose, onSaved }) {
         auth_password: '',
       });
       setTestResult(null);
+      setUrlCheckResult(null);
     });
   }, [open, form]);
 
   const currentVals = () => form.getFieldsValue();
+
+  const handleCheckUrl = async () => {
+    const url = form.getFieldValue('server_url');
+    if (!url) { message.warning('Enter the Server URL first'); return; }
+    setCheckingUrl(true);
+    setUrlCheckResult(null);
+    try {
+      const r = await api.post('/endpoint-central/check-url', {
+        server_url: url,
+        verify_ssl: form.getFieldValue('verify_ssl'),
+      });
+      setUrlCheckResult(r.data);
+    } catch (e) {
+      setUrlCheckResult({ reachable: false, error: e?.response?.data?.error || 'Request failed' });
+    } finally { setCheckingUrl(false); }
+  };
 
   const handleSave = async () => {
     try {
@@ -366,6 +385,17 @@ function ConfigModal({ open, onClose, onSaved }) {
           >
             <Input placeholder="https://your-me-ec-server:8383" autoComplete="off" />
           </Form.Item>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-8px 0 16px' }}>
+            <Button size="small" icon={<WifiOutlined />} loading={checkingUrl} onClick={handleCheckUrl}>
+              Check URL
+            </Button>
+            {urlCheckResult && (
+              urlCheckResult.reachable
+                ? <Tag color="success" icon={<CheckCircleFilled />}>Reachable (HTTP {urlCheckResult.status})</Tag>
+                : <Tag color="error" icon={<CloseCircleFilled />}>Unreachable — {urlCheckResult.error}</Tag>
+            )}
+          </div>
 
           <Form.Item
             name="customer_id"

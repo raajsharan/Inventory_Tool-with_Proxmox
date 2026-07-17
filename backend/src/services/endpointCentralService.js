@@ -755,6 +755,30 @@ async function fetchAgents() {
   throw err;
 }
 
+// ---------------------------------------------------------------------------
+// Quick reachability check — network-level only (no auth, no API-path
+// guessing) so the admin gets an instant signal on whether the host/port
+// is even reachable, before running the slower full testConnection() below.
+// ---------------------------------------------------------------------------
+
+async function checkReachability(serverUrl, verifySsl) {
+  if (!serverUrl) return { reachable: false, error: 'Server URL is required' };
+
+  const base = serverUrl.trim().replace(/\/$/, '');
+  try {
+    new URL(base);
+  } catch {
+    return { reachable: false, error: 'Invalid URL format' };
+  }
+
+  try {
+    const { status } = await httpRequest(base, { verifySsl, timeout: 5000 });
+    return { reachable: true, status };
+  } catch (e) {
+    return { reachable: false, error: e.message };
+  }
+}
+
 async function testConnection() {
   const config = await getConfig();
   const useCredentials = config.auth_mode === 'credentials';
@@ -868,6 +892,7 @@ module.exports = {
   validateOtpCode,
   fetchAgents,
   fetchSoftware,
+  checkReachability,
   testConnection,
   KNOWN_PATHS,
 };

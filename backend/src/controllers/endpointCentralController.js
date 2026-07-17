@@ -97,6 +97,22 @@ async function testConnection(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// POST /endpoint-central/check-url
+// Fast network-reachability probe. Accepts server_url/verify_ssl directly in
+// the body so the admin can check a URL before saving it.
+async function checkUrl(req, res, next) {
+  try {
+    let { server_url, verify_ssl } = req.body;
+    if (!server_url) {
+      const cfg = await svc.getConfig();
+      server_url = cfg.server_url;
+      verify_ssl = cfg.verify_ssl;
+    }
+    const result = await svc.checkReachability(server_url, !!verify_ssl);
+    res.json(result);
+  } catch (e) { next(e); }
+}
+
 async function listAgents(req, res, next) {
   try {
     const agents = await svc.fetchAgents();
@@ -118,4 +134,4 @@ async function listSoftware(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { getConfig, saveConfig, testConnection, listAgents, listSoftware, loginWithCredentials, validateOtp };
+module.exports = { getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };

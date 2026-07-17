@@ -9,6 +9,7 @@ router.get('/',             ...guard,      ctrl.listAgents);
 router.get('/software',     ...guard,      ctrl.listSoftware);
 router.get('/config',       ...guard,      ctrl.getConfig);
 router.put('/config',       ...adminGuard, ctrl.saveConfig);
+router.post('/check-url',   ...adminGuard, ctrl.checkUrl);
 router.post('/test',        ...adminGuard, ctrl.testConnection);
 router.post('/login',       ...adminGuard, ctrl.loginWithCredentials);
 router.post('/login/otp',   ...adminGuard, ctrl.validateOtp);
