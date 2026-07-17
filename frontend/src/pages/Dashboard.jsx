@@ -1037,22 +1037,26 @@ function WeeklyReportRow({ label, children }) {
 // All possible patching-type columns; only those with at least one non-zero
 // value across the rows are rendered, so the table adapts to the data.
 const BREAKDOWN_METRICS = [
-  { key: 'alive_powered_off', title: 'Alive But Powered Off', color: '#c2410c', darkColor: '#fb923c' },
-  { key: 'auto_patching',     title: 'Auto',                  color: '#15803d', darkColor: '#4ade80' },
-  { key: 'beijing_it',        title: 'Beijing IT Team',       color: '#7e22ce', darkColor: '#c084fc' },
-  { key: 'eol',               title: 'EOL - No Patches',      color: '#b91c1c', darkColor: '#f87171' },
-  { key: 'exception',         title: 'Exception',             color: '#a16207', darkColor: '#fbbf24' },
-  { key: 'manual_patching',   title: 'Manual',                color: '#1d4ed8', darkColor: '#60a5fa' },
-  { key: 'on_hold',           title: 'On Hold',               color: '#475569', darkColor: '#94a3b8' },
-  { key: 'onboard_pending',   title: 'Onboard Pending',       color: '#0e7490', darkColor: '#22d3ee' },
+  { key: 'alive_powered_off', title: 'Alive But Powered Off' },
+  { key: 'auto_patching',     title: 'Auto' },
+  { key: 'beijing_it',        title: 'Beijing IT Team' },
+  { key: 'eol',               title: 'EOL - No Patches' },
+  { key: 'exception',         title: 'Exception' },
+  { key: 'manual_patching',   title: 'Manual' },
+  { key: 'on_hold',           title: 'On Hold' },
+  { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
 
 function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'] }) {
-  // Each cell: link-coloured number when > 0, "-" when zero.
-  const numCell = (v, color, darkColor) => {
+  // Single accent colour + dimmed dash — same scheme as the Auto Patching
+  // Group Count table (MEComplianceTable) for visual consistency across
+  // Weekly Report breakdown tables.
+  const accent   = isDark ? '#60a5fa' : '#1d4ed8';
+  const dimColor = isDark ? '#555' : '#bbb';
+  const numCell = (v) => {
     const n = Number(v ?? 0);
-    if (n === 0) return <span style={{ color: '#94a3b8' }}>-</span>;
-    return <span style={{ color: isDark ? (darkColor || color) : color, fontWeight: 600 }}>{n.toLocaleString()}</span>;
+    if (n === 0) return <span style={{ color: dimColor }}>-</span>;
+    return <span style={{ color: accent, fontWeight: 600 }}>{n.toLocaleString()}</span>;
   };
 
   // Percentage = (Total - out-of-scope types) / Total using pctExclude config.
@@ -1070,9 +1074,14 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
 
   // Dynamic columns: drop any metric that is zero/empty for every row, then apply explicit hidden list.
   const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0 && !hiddenColumns.includes(m.key));
+  const groupColW = 200;
+  const numColW = 110;
+  // Narrower, centered width instead of stretching full card width — scales
+  // with however many metric columns are active for this data set.
+  const tableMaxWidth = groupColW + (activeMetrics.length + 2) * numColW;
 
   const columns = [
-    { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: '16%',
+    { title: `${groupLabel} \\ Patching Type`, dataIndex: 'bucket', width: groupColW,
       render: v => {
         const to = linkFor && v && v !== 'Unknown' ? linkFor(v) : null;
         return to
@@ -1080,38 +1089,42 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
           : <strong>{v}</strong>;
       } },
     ...activeMetrics.map(m => ({
-      title: m.title, dataIndex: m.key, align: 'center', render: v => numCell(v, m.color, m.darkColor),
+      title: m.title, dataIndex: m.key, align: 'center', width: numColW, render: numCell,
     })),
-    { title: 'Total',      dataIndex: 'total', align: 'center',
+    { title: 'Total',      dataIndex: 'total', align: 'center', width: numColW,
       render: v => <strong>{Number(v ?? 0).toLocaleString()}</strong> },
-    { title: 'Percentage', dataIndex: 'pct',   align: 'center',
+    { title: 'Percentage', dataIndex: 'pct',   align: 'center', width: numColW,
       render: v => <strong>{(v ?? 0).toFixed(2)}%</strong> },
   ];
 
   return (
-    <Table
-      rowKey="bucket"
-      size="small"
-      dataSource={enriched}
-      columns={columns}
-      pagination={false}
-      tableLayout="fixed"
-      summary={() => (
-        <Table.Summary.Row style={{ background: 'rgba(22,119,255,0.06)', fontWeight: 700 }}>
-          <Table.Summary.Cell index={0}><strong>Total</strong></Table.Summary.Cell>
-          {activeMetrics.map((m, i) => {
-            const v = sumKey(m.key);
-            return (
-              <Table.Summary.Cell key={m.key} index={i + 1} align="center">
-                {v === 0 ? <span style={{ color: '#94a3b8' }}>-</span> : <strong>{v.toLocaleString()}</strong>}
-              </Table.Summary.Cell>
-            );
-          })}
-          <Table.Summary.Cell index={activeMetrics.length + 1} align="center"><strong>{totalSum.toLocaleString()}</strong></Table.Summary.Cell>
-          <Table.Summary.Cell index={activeMetrics.length + 2} align="center"><strong>{totalPct.toFixed(2)}%</strong></Table.Summary.Cell>
-        </Table.Summary.Row>
-      )}
-    />
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: tableMaxWidth }}>
+        <Table
+          rowKey="bucket"
+          size="small"
+          dataSource={enriched}
+          columns={columns}
+          pagination={false}
+          tableLayout="fixed"
+          summary={() => (
+            <Table.Summary.Row style={{ fontWeight: 700 }}>
+              <Table.Summary.Cell index={0}><strong>Total</strong></Table.Summary.Cell>
+              {activeMetrics.map((m, i) => {
+                const v = sumKey(m.key);
+                return (
+                  <Table.Summary.Cell key={m.key} index={i + 1} align="center">
+                    {v === 0 ? <span style={{ color: dimColor }}>-</span> : <strong style={{ color: accent }}>{v.toLocaleString()}</strong>}
+                  </Table.Summary.Cell>
+                );
+              })}
+              <Table.Summary.Cell index={activeMetrics.length + 1} align="center"><strong>{totalSum.toLocaleString()}</strong></Table.Summary.Cell>
+              <Table.Summary.Cell index={activeMetrics.length + 2} align="center"><strong>{totalPct.toFixed(2)}%</strong></Table.Summary.Cell>
+            </Table.Summary.Row>
+          )}
+        />
+      </div>
+    </div>
   );
 }
 
