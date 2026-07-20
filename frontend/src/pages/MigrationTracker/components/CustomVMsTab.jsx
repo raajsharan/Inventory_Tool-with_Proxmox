@@ -44,10 +44,14 @@ function useCustomTable(tabId, projectId) {
   const [search,     setSearch]     = useState('');
   const [filters,    setFilters]    = useState({});
   const [filterOpts, setFilterOpts] = useState({});
+  const [sortKey,    setSortKey]    = useState(null);
+  const [sortDir,    setSortDir]    = useState(null); // 'ascend' | 'descend' | null
 
   const load = useCallback((params = {}) => {
     if (!tabId) return;
     setLoading(true);
+    const sKey = params.sortKey !== undefined ? params.sortKey : sortKey;
+    const sDir = params.sortDir !== undefined ? params.sortDir : sortDir;
     api.get('/migration/custom-vms', {
       params: {
         tab_id:    tabId,
@@ -55,6 +59,7 @@ function useCustomTable(tabId, projectId) {
         page:      params.page     ?? pagination.current,
         pageSize:  params.pageSize ?? pagination.pageSize,
         search:    params.search   ?? search,
+        ...(sKey && sDir ? { sort_key: sKey, sort_dir: sDir === 'descend' ? 'desc' : 'asc' } : {}),
         ...filters,
         ...params.filters,
       },
@@ -65,7 +70,7 @@ function useCustomTable(tabId, projectId) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [tabId, projectId, search, filters, pagination.current, pagination.pageSize]);
+  }, [tabId, projectId, search, filters, pagination.current, pagination.pageSize, sortKey, sortDir]);
 
   useEffect(() => { load(); }, [tabId, projectId]);
 
@@ -99,21 +104,25 @@ function useCustomTable(tabId, projectId) {
     setPagination(p => ({ ...p, current: 1 }));
   };
 
-  const handleTableChange = (pag) => {
+  const handleTableChange = (pag, _filters, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    const newKey = (s?.order && s.field === 'migration_status') ? s.field : null;
+    const newDir = (s?.order && s.field === 'migration_status') ? s.order : null;
+    setSortKey(newKey); setSortDir(newDir);
     setPagination(p => ({ ...p, current: pag.current, pageSize: pag.pageSize }));
-    load({ page: pag.current, pageSize: pag.pageSize });
+    load({ page: pag.current, pageSize: pag.pageSize, sortKey: newKey, sortDir: newDir });
   };
 
   return {
     data, loading, density, setDensity,
     search, onSearch, filters, onFilter, clearFilters, filterOpts,
     pagination: { ...pagination, onChange: handleTableChange, showSizeChanger: true, showTotal: t => `${t} VMs` },
-    reload,
+    reload, sortKey, sortDir,
   };
 }
 
 // ── Column builder ─────────────────────────────────────────────────────────────
-function buildColumns(hiddenColumns, canEdit, patch, remove) {
+function buildColumns(hiddenColumns, canEdit, patch, remove, sortKey, sortDir) {
   const hidden = new Set(hiddenColumns);
 
   const all = [
@@ -124,6 +133,7 @@ function buildColumns(hiddenColumns, canEdit, patch, remove) {
     },
     !hidden.has('migration_status') && {
       title: 'Status', dataIndex: 'migration_status', key: 'migration_status', width: 140,
+      sorter: true, sortOrder: sortKey === 'migration_status' ? sortDir : null,
       render: (v, r) => canEdit
         ? <StatusSelect value={v} onChange={val => patch(r.id, { migration_status: val })} />
         : <MigrationStatusBadge status={v} />,
@@ -169,6 +179,7 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
   const {
     data, loading, pagination, density, setDensity,
     search, onSearch, filters, onFilter, clearFilters, filterOpts, reload,
+    sortKey, sortDir,
   } = useCustomTable(tabId, projectId);
 
   const recordIds = data.items.map(r => r.id);
@@ -198,12 +209,16 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
     } catch { message.error('Delete failed'); }
   };
 
-  const allBuilt = buildColumns(hiddenColumns, canEdit, patch, remove);
+  const allBuilt = buildColumns(hiddenColumns, canEdit, patch, remove, sortKey, sortDir);
   const staticToggleable = allBuilt.filter(c => c.key !== 'vm');
   const customFieldCols = fieldDefs.map(fd => ({
     key:   `cf_${fd.id}`,
     title: fd.label,
     width: fd.field_type === 'textarea' ? 160 : fd.field_type === 'date' ? 140 : 150,
+    // Client-side only — sorts the current page. A true server-side sort
+    // would need a per-field-definition join and isn't worth the complexity
+    // for an ad-hoc, per-project custom field.
+    sorter: (a, b) => String(getValue(a.id, fd.id) ?? '').localeCompare(String(getValue(b.id, fd.id) ?? '')),
     render: (_, r) => (
       <FieldValueCell
         fieldDef={fd}

@@ -204,6 +204,8 @@ export function useMigrTable(endpoint, extraParams = {}) {
   const [loading,   setLoading]   = useState(false);
   const [density,   setDensity]   = useState('small'); // 'small' | 'middle'
   const [filterOpts,setFilterOpts]= useState({});
+  const [sortKey,   setSortKey]   = useState(null);
+  const [sortDir,   setSortDir]   = useState(null); // 'ascend' | 'descend' | null
   const abortRef = useRef(null);
 
   const extraKey = JSON.stringify(extraParams);
@@ -214,6 +216,7 @@ export function useMigrTable(endpoint, extraParams = {}) {
     try {
       const params = { page, pageSize, ...extraParams };
       if (search) params.search = search;
+      if (sortKey && sortDir) { params.sort_key = sortKey; params.sort_dir = sortDir === 'descend' ? 'desc' : 'asc'; }
       Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
       const r = await api.get(endpoint, { params, signal: abortRef.current.signal });
       setData(r.data);
@@ -223,9 +226,19 @@ export function useMigrTable(endpoint, extraParams = {}) {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, page, pageSize, search, filters, extraKey]);
+  }, [endpoint, page, pageSize, search, filters, extraKey, sortKey, sortDir]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Wire directly to antd <Table onChange={onTableChange} />. Only
+  // migration_status is server-sorted for now (see backend listVMs/
+  // listCustomVMs) — other columns fall back to their own client sorter.
+  const onTableChange = useCallback((_pagination, _filters, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s?.order && s.field === 'migration_status') { setSortKey(s.field); setSortDir(s.order); setPage(1); }
+    else if (sortKey) { setSortKey(null); setSortDir(null); setPage(1); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortKey]);
 
   // Load filter options scoped to current project
   useEffect(() => {
@@ -254,7 +267,7 @@ export function useMigrTable(endpoint, extraParams = {}) {
   return {
     data, loading, pagination, density, setDensity,
     search, onSearch, filters, onFilter, clearFilters, filterOpts,
-    reload,
+    reload, onTableChange, sortKey, sortDir,
   };
 }
 

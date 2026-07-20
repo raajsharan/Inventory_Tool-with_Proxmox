@@ -326,10 +326,17 @@ async function listVMs(table, searchCols, params) {
   const countQ = await db.query(`SELECT COUNT(*)::int AS total FROM ${table} WHERE ${where} AND cleared_at IS NULL`, values);
   const total  = countQ.rows[0]?.total ?? 0;
 
+  // sort_key/sort_dir are matched against a strict whitelist below and never
+  // interpolated as arbitrary strings, so this stays injection-safe.
+  const dir = params.sort_dir === 'desc' ? 'DESC' : 'ASC';
+  const orderBy = params.sort_key === 'migration_status'
+    ? `migration_status ${dir} NULLS LAST, vm`
+    : `CASE migration_status WHEN 'Completed' THEN 1 ELSE 0 END, vm`;
+
   const dataQ = await db.query(
     `SELECT * FROM ${table}
       WHERE ${where} AND cleared_at IS NULL
-      ORDER BY CASE migration_status WHEN 'Completed' THEN 1 ELSE 0 END, vm
+      ORDER BY ${orderBy}
       LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
     [...values, pageSize, offset]);
 
@@ -957,9 +964,13 @@ async function listCustomVMs(params) {
 
   conds.push(`cleared_at IS NULL`);
   const where = `WHERE ${conds.join(' AND ')}`;
+  // sort_key/sort_dir are matched against a strict whitelist below and never
+  // interpolated as arbitrary strings, so this stays injection-safe.
+  const dir = params.sort_dir === 'desc' ? 'DESC' : 'ASC';
+  const orderBy = params.sort_key === 'migration_status' ? `migration_status ${dir} NULLS LAST, vm` : 'vm';
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM migration_custom_vms ${where}`, values),
-    db.query(`SELECT * FROM migration_custom_vms ${where} ORDER BY vm LIMIT $${idx} OFFSET $${idx + 1}`,
+    db.query(`SELECT * FROM migration_custom_vms ${where} ORDER BY ${orderBy} LIMIT $${idx} OFFSET $${idx + 1}`,
       [...values, limit, offset]),
   ]);
 

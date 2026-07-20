@@ -35,6 +35,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
   const {
     data, loading, pagination, density, setDensity,
     search, onSearch, filters, onFilter, clearFilters, filterOpts, reload,
+    onTableChange, sortKey, sortDir,
   } = useMigrTable('/migration/standalone-esxi', projectId ? { project_id: projectId } : {});
 
   const recordIds = data.items.map(r => r.id);
@@ -85,6 +86,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
     },
     {
       title: 'Status', dataIndex: 'migration_status', key: 'migration_status', width: 140,
+      sorter: true, sortOrder: sortKey === 'migration_status' ? sortDir : null,
       render: (v, r) => canEdit
         ? <StatusSelect value={v} onChange={val => patch(r.id, { migration_status: val })} />
         : <MigrationStatusBadge status={v} />,
@@ -127,6 +129,10 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
     key:   `cf_${fd.id}`,
     title: fd.label,
     width: fd.field_type === 'textarea' ? 160 : fd.field_type === 'date' ? 140 : 150,
+    // Client-side only — sorts the current page. A true server-side sort
+    // would need a per-field-definition join and isn't worth the complexity
+    // for an ad-hoc, per-project custom field.
+    sorter: (a, b) => String(getValue(a.id, fd.id) ?? '').localeCompare(String(getValue(b.id, fd.id) ?? '')),
     render: (_, r) => (
       <FieldValueCell
         fieldDef={fd}
@@ -204,6 +210,7 @@ export default function StandaloneESXiTab({ projectId, hiddenColumns = [] }) {
         dataSource={data.items}
         columns={columns}
         pagination={pagination}
+        onChange={onTableChange}
         scroll={{ x: 'max-content' }}
         sticky
       />
