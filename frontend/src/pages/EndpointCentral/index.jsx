@@ -4,7 +4,7 @@ import {
   Modal, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
-  AppstoreOutlined, CheckCircleFilled, CloseCircleFilled, DesktopOutlined,
+  AppstoreOutlined, CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, DesktopOutlined,
   ExclamationCircleFilled, KeyOutlined, LockOutlined, LoginOutlined,
   MobileOutlined, QuestionCircleOutlined, ReloadOutlined,
   SafetyCertificateOutlined, SettingOutlined, UserOutlined, WifiOutlined,
@@ -27,6 +27,16 @@ const MANAGED_STATUS = {
   1: { label: 'Managed',     color: 'success' },
 };
 
+// agent_install_status (documented on /som/computers as agent_install_status,
+// on /inventory/scancomputers as installation_status): 21/22/23/24/29.
+const INSTALL_STATUS = {
+  21: { label: 'Yet to Install',       color: 'default' },
+  22: { label: 'Installed',            color: 'success' },
+  23: { label: 'Uninstalled',          color: 'default' },
+  24: { label: 'Yet to Uninstall',     color: 'warning' },
+  29: { label: 'Installation Failure', color: 'error'   },
+};
+
 function AgentStatusBadge({ status }) {
   const meta = AGENT_STATUS[status] ?? { label: 'Unknown', color: 'default', icon: <QuestionCircleOutlined /> };
   return <Badge status={meta.color} text={meta.label} />;
@@ -34,6 +44,11 @@ function AgentStatusBadge({ status }) {
 
 function ManagedTag({ status }) {
   const meta = MANAGED_STATUS[status] ?? { label: 'Unknown', color: 'default' };
+  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
+}
+
+function InstallStatusTag({ status }) {
+  const meta = INSTALL_STATUS[status] ?? { label: 'Not Reported', color: 'default' };
   return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
 }
 
@@ -436,7 +451,8 @@ function ConfigModal({ open, onClose, onSaved }) {
             extra={
               <span>
                 Leave blank to auto-detect. Recommended:{' '}
-                <code>/api/1.4/som/computers</code>
+                <code>/api/1.4/inventory/scancomputers</code> — the only endpoint
+                with confirmed field names for live/install status.
               </span>
             }
           >
@@ -444,9 +460,9 @@ function ConfigModal({ open, onClose, onSaved }) {
               allowClear
               placeholder="Auto-detect (tries known paths)"
               options={[
-                { value: '/api/1.4/som/computers',                label: '/api/1.4/som/computers (recommended)' },
+                { value: '/api/1.4/inventory/scancomputers',      label: '/api/1.4/inventory/scancomputers (recommended)' },
+                { value: '/api/1.4/som/computers',                label: '/api/1.4/som/computers' },
                 { value: '/api/1.4/inventory/computers',          label: '/api/1.4/inventory/computers' },
-                { value: '/api/1.4/inventory/scancomputers',      label: '/api/1.4/inventory/scancomputers' },
                 { value: '/api/1.4/inventory/compdetailssummary', label: '/api/1.4/inventory/compdetailssummary' },
                 { value: '/api/1.4/inventory/compdetailssummary?resid={resource_id}',
                   label: '/api/1.4/inventory/compdetailssummary?resid={resource_id} (single resource — needs a real resource_id, not for auto-detect)' },
@@ -569,6 +585,42 @@ function SoftwareSummaryCards({ software }) {
   );
 }
 
+// ── Installation status summary cards ──────────────────────────────────────
+
+function InstallSummaryCards({ agents }) {
+  const total       = agents.length;
+  const installed    = agents.filter(a => a.agent_install_status === 22).length;
+  const yetToInstall = agents.filter(a => a.agent_install_status === 21).length;
+  const uninstalled  = agents.filter(a => a.agent_install_status === 23 || a.agent_install_status === 24).length;
+  const failed       = agents.filter(a => a.agent_install_status === 29).length;
+
+  const cards = [
+    { label: 'Total Endpoints',  value: total,        color: undefined,  icon: <DesktopOutlined /> },
+    { label: 'Installed',        value: installed,    color: '#52c41a',  icon: <CheckCircleFilled /> },
+    { label: 'Yet to Install',   value: yetToInstall, color: '#8c8c8c',  icon: <ClockCircleOutlined /> },
+    { label: 'Uninstalled',      value: uninstalled,  color: '#faad14',  icon: <CloseCircleFilled /> },
+    { label: 'Install Failure',  value: failed,       color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
+  ];
+
+  return (
+    <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+      {cards.map(c => (
+        <Col xs={12} sm={8} key={c.label}>
+          <Card size="small" styles={{ body: { padding: '10px 16px' } }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 22, color: c.color || '#1677ff' }}>{c.icon}</span>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
+                <div style={{ fontSize: 12, color: '#8c8c8c' }}>{c.label}</div>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      ))}
+    </Row>
+  );
+}
+
 // ── OS filter helper ───────────────────────────────────────────────────────
 
 function osFamily(osName) {
@@ -614,6 +666,10 @@ export default function EndpointCentral() {
   const [swTypeFilter,  setSwTypeFilter]  = useState(null);
   const [swUsageFilter, setSwUsageFilter] = useState(null);
   const [swCompliance,  setSwCompliance]  = useState(null);
+
+  // Installation Status filters
+  const [instSearch, setInstSearch] = useState('');
+  const [instFilter,  setInstFilter]  = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -716,6 +772,18 @@ export default function EndpointCentral() {
       if (!s.software_name.toLowerCase().includes(q)
        && !s.manufacturer.toLowerCase().includes(q)
        && !s.version.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // ── Filtered installation status (reuses the same agents dataset) ──────
+  const filteredInstall = agents.filter(a => {
+    if (instFilter !== null && a.agent_install_status !== instFilter) return false;
+    if (instSearch) {
+      const q = instSearch.toLowerCase();
+      if (!a.computer_name.toLowerCase().includes(q)
+       && !a.ip_address.toLowerCase().includes(q)
+       && !a.domain.toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -825,6 +893,37 @@ export default function EndpointCentral() {
     },
   ];
 
+  // ── Installation Status columns ────────────────────────────────────────
+  const installColumns = [
+    {
+      title: 'Computer Name', dataIndex: 'computer_name', key: 'computer_name',
+      fixed: 'left', width: 200, ellipsis: true,
+      render: v => <Text strong style={{ fontSize: 13 }}>{v}</Text>,
+    },
+    {
+      title: 'IP Address', dataIndex: 'ip_address', key: 'ip_address', width: 140,
+      render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
+    },
+    { title: 'Domain', dataIndex: 'domain', key: 'domain', width: 160, ellipsis: true },
+    {
+      title: 'Install Status', dataIndex: 'agent_install_status', key: 'agent_install_status', width: 170,
+      render: v => <InstallStatusTag status={v} />,
+    },
+    {
+      title: 'Agent Status', dataIndex: 'agent_status', key: 'agent_status', width: 120,
+      render: v => <AgentStatusBadge status={v} />,
+    },
+    {
+      title: 'Last Sync', dataIndex: 'last_sync', key: 'last_sync', width: 160,
+      render: v => {
+        if (!v || v === '—') return <Text type="secondary">—</Text>;
+        const d = new Date(v);
+        if (isNaN(d)) return <Text type="secondary">{v}</Text>;
+        return <span>{d.toLocaleString()}</span>;
+      },
+    },
+  ];
+
   const notConfiguredAlert = !configured && !loading && (
     <Alert
       type="info"
@@ -926,6 +1025,84 @@ export default function EndpointCentral() {
                 loading={loading}
                 dataSource={filteredAgents}
                 columns={agentColumns}
+                pagination={{ pageSize: PAGE_SIZE, showSizeChanger: true, showTotal: t => `${t} endpoints` }}
+                scroll={{ x: 'max-content' }}
+                sticky
+              />
+            </>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'install-status',
+      label: <span><ClockCircleOutlined /> Installation Status</span>,
+      children: (
+        <>
+          {configured && connectionError && (
+            <Alert
+              type="error"
+              showIcon
+              message="Could not reach Endpoint Central"
+              description={
+                <span>
+                  {connectionError}
+                  {isAdmin && (
+                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update the connection details, regenerate the API key, or re-login.</>
+                  )}
+                </span>
+              }
+              style={{ marginBottom: 16 }}
+              action={
+                <Button size="small" icon={<ReloadOutlined />} onClick={load}>Retry</Button>
+              }
+            />
+          )}
+          {configured && !connectionError && (
+            <>
+              <InstallSummaryCards agents={agents} />
+              <Card size="small" style={{ marginBottom: 12 }}>
+                <Space wrap>
+                  <Input.Search
+                    placeholder="Search name / IP / domain…"
+                    allowClear
+                    style={{ width: 280 }}
+                    value={instSearch}
+                    onChange={e => setInstSearch(e.target.value)}
+                  />
+                  <Select
+                    allowClear placeholder="Install Status"
+                    style={{ width: 190 }}
+                    value={instFilter}
+                    onChange={v => setInstFilter(v ?? null)}
+                    options={[
+                      { value: 22, label: 'Installed'            },
+                      { value: 21, label: 'Yet to Install'       },
+                      { value: 23, label: 'Uninstalled'          },
+                      { value: 24, label: 'Yet to Uninstall'     },
+                      { value: 29, label: 'Installation Failure' },
+                    ]}
+                  />
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={loading}
+                    onClick={load}
+                  >
+                    Refresh
+                  </Button>
+                </Space>
+              </Card>
+              <div style={{ marginBottom: 6 }}>
+                <Text type="secondary">
+                  Showing {filteredInstall.length} of {agents.length} endpoints
+                </Text>
+              </div>
+              <Table
+                rowKey={(r, i) => r.resource_id ?? `${r.computer_name}-${i}`}
+                size="small"
+                loading={loading}
+                dataSource={filteredInstall}
+                columns={installColumns}
                 pagination={{ pageSize: PAGE_SIZE, showSizeChanger: true, showTotal: t => `${t} endpoints` }}
                 scroll={{ x: 'max-content' }}
                 sticky

@@ -22,10 +22,15 @@ const crypto  = require('../utils/crypto');
 // ---------------------------------------------------------------------------
 
 const KNOWN_PATHS = [
+  // Inventory scan details — tried first: this is the only endpoint we have
+  // confirmed field names for (live_status/installation_status/scan_status,
+  // per ME EC's own API Explorer docs). som/computers may use different,
+  // unconfirmed field names, which silently defaults every row to
+  // Offline/Managed if tried first.
+  '/api/1.4/inventory/scancomputers',
   // Official documented paths (ME EC 10.x / Endpoint Central)
   '/api/1.4/som/computers',            // Systems of Management — primary documented endpoint
   '/api/1.4/inventory/computers',      // Inventory module computers
-  '/api/1.4/inventory/scancomputers',  // Inventory scan details
   '/api/1.4/inventory/compdetailssummary', // Computer detail summary
   // Patch management paths (older / alternate)
   '/api/1.4/patch/allsystems',
@@ -453,10 +458,17 @@ function mapLiveStatus(v) {
   return null;
 }
 
-// Same endpoint documents installation_status as 21 = Yet to install,
-// 22 = Installed, 23 = Uninstalled, 24 = Yet to uninstall, 29 = Install
-// failure. Map to the app's managed_status convention: 0 = Not Managed,
-// 1 = Managed (only a confirmed agent install counts as managed).
+// Install status codes (documented on both /som/computers as
+// agent_install_status and /inventory/scancomputers as installation_status):
+// 21 = Yet to install, 22 = Installed, 23 = Uninstalled,
+// 24 = Yet to uninstall, 29 = Installation failure.
+function rawInstallStatus(c) {
+  return c.agent_install_status ?? c.AGENT_INSTALL_STATUS ?? c.agentinstallstatus
+      ?? c.installation_status  ?? c.INSTALLATION_STATUS  ?? c.installationstatus;
+}
+
+// Map the raw install status code to the app's managed_status convention:
+// 0 = Not Managed, 1 = Managed (only a confirmed agent install counts).
 function mapInstallStatus(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
@@ -464,6 +476,8 @@ function mapInstallStatus(v) {
 }
 
 function normalizeComputer(c) {
+  const installStatusRaw = rawInstallStatus(c);
+  const installStatusNum = Number(installStatusRaw);
   return {
     resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? c.computer_id   ?? c.COMPUTER_ID   ?? null,
     computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? c.COMPUTER_NAME
@@ -476,9 +490,14 @@ function normalizeComputer(c) {
     os_platform:    c.osplatform     ?? c.OS_PLATFORM    ?? null,
     agent_version:  c.agentversion   ?? c.AGENT_VERSION  ?? c.agent_version ?? c.AGENTVERSION  ?? '—',
     // managed_status: 0 = Not Managed, 1 = Managed. Prefer the documented
-    // installation_status field (scancomputers API) over older guessed names.
-    managed_status: mapInstallStatus(c.installation_status ?? c.INSTALLATION_STATUS ?? c.installationstatus)
+    // agent_install_status (som/computers) / installation_status
+    // (scancomputers) fields over older guessed names.
+    managed_status: mapInstallStatus(installStatusRaw)
                   ?? c.managed_status ?? c.MANAGED_STATUS ?? c.managedstatus ?? 1,
+    // Raw install status code (21/22/23/24/29) for the Installation Status
+    // page, which needs the granular state rather than the collapsed
+    // managed/not-managed binary above.
+    agent_install_status: Number.isFinite(installStatusNum) ? installStatusNum : null,
     // agent_status: 0 = Online, 1 = Offline, 2 = Unknown. Prefer the
     // documented live_status field (scancomputers API) over older guessed names.
     agent_status:   mapLiveStatus(c.live_status ?? c.LIVE_STATUS ?? c.livestatus)
