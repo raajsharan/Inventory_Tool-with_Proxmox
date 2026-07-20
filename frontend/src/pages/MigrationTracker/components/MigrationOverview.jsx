@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme, Popover, List } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
+import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme, Popover, List, Button } from 'antd';
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined,
-  DatabaseOutlined, ClusterOutlined, StopOutlined, DeleteOutlined,
+  DatabaseOutlined, ClusterOutlined, StopOutlined, DeleteOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -14,16 +14,19 @@ function pct(n, total) {
 }
 
 export default function MigrationOverview({ projectId }) {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data,       setData]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { token } = theme.useToken();
 
-  useEffect(() => {
-    setLoading(true);
-    api.get('/migration/overview', { params: projectId ? { project_id: projectId } : {} })
+  const load = useCallback((isRefresh) => {
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    return api.get('/migration/overview', { params: projectId ? { project_id: projectId } : {} })
       .then(r => setData(r.data))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setRefreshing(false); });
   }, [projectId]);
+
+  useEffect(() => { load(false); }, [load]);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
   if (!data)   return null;
@@ -38,7 +41,12 @@ export default function MigrationOverview({ projectId }) {
 
   return (
     <div style={{ padding: '0 0 24px' }}>
-      <Title level={5} style={{ marginBottom: 16 }}>Overall Migration Progress</Title>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <Title level={5} style={{ margin: 0 }}>Overall Migration Progress</Title>
+        <Button icon={<ReloadOutlined />} loading={refreshing} onClick={() => load(true)}>
+          Refresh
+        </Button>
+      </div>
 
       {/* ── Big progress bar ─────────────────────────────────────────────── */}
       <Card size="small" style={{ marginBottom: 20 }}>
