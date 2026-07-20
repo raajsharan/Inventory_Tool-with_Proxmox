@@ -115,8 +115,11 @@ export default function SecurityVMsTab({ projectId, hiddenColumns = [] }) {
     width: fd.field_type === 'textarea' ? 160 : fd.field_type === 'date' ? 140 : 150,
     // Client-side only — sorts the current page. A true server-side sort
     // would need a per-field-definition join and isn't worth the complexity
-    // for an ad-hoc, per-project custom field.
+    // for an ad-hoc, per-project custom field. sortOrder is explicit (not
+    // left for antd to track internally) so it survives columns being
+    // rebuilt on every render.
     sorter: (a, b) => String(getValue(a.id, fd.id) ?? '').localeCompare(String(getValue(b.id, fd.id) ?? '')),
+    sortOrder: sortKey === `cf_${fd.id}` ? sortDir : null,
     render: (_, r) => (
       <FieldValueCell
         fieldDef={fd}

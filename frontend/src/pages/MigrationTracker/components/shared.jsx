@@ -208,6 +208,16 @@ export function useMigrTable(endpoint, extraParams = {}) {
   const [sortDir,   setSortDir]   = useState(null); // 'ascend' | 'descend' | null
   const abortRef = useRef(null);
 
+  // Only migration_status is server-sorted (see backend listVMs/
+  // listCustomVMs) — everything else (custom fields) sorts client-side.
+  // Both kinds are tracked through this one sortKey/sortDir pair and every
+  // sortable column gets an explicit sortOrder derived from it, so antd
+  // treats the whole table as controlled — mixing controlled and
+  // uncontrolled sorters on a `columns` array that's rebuilt every render
+  // (as this one is) causes antd to silently drop the uncontrolled ones.
+  const serverSortKey = sortKey === 'migration_status' ? sortKey : null;
+  const serverSortDir = sortKey === 'migration_status' ? sortDir : null;
+
   const extraKey = JSON.stringify(extraParams);
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -216,7 +226,10 @@ export function useMigrTable(endpoint, extraParams = {}) {
     try {
       const params = { page, pageSize, ...extraParams };
       if (search) params.search = search;
-      if (sortKey && sortDir) { params.sort_key = sortKey; params.sort_dir = sortDir === 'descend' ? 'desc' : 'asc'; }
+      if (serverSortKey && serverSortDir) {
+        params.sort_key = serverSortKey;
+        params.sort_dir = serverSortDir === 'descend' ? 'desc' : 'asc';
+      }
       Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
       const r = await api.get(endpoint, { params, signal: abortRef.current.signal });
       setData(r.data);
@@ -226,19 +239,17 @@ export function useMigrTable(endpoint, extraParams = {}) {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, page, pageSize, search, filters, extraKey, sortKey, sortDir]);
+  }, [endpoint, page, pageSize, search, filters, extraKey, serverSortKey, serverSortDir]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Wire directly to antd <Table onChange={onTableChange} />. Only
-  // migration_status is server-sorted for now (see backend listVMs/
-  // listCustomVMs) — other columns fall back to their own client sorter.
+  // Wire directly to antd <Table onChange={onTableChange} />.
   const onTableChange = useCallback((_pagination, _filters, sorter) => {
     const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s?.order && s.field === 'migration_status') { setSortKey(s.field); setSortDir(s.order); setPage(1); }
-    else if (sortKey) { setSortKey(null); setSortDir(null); setPage(1); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortKey]);
+    if (s?.order) { setSortKey(s.field); setSortDir(s.order); }
+    else { setSortKey(null); setSortDir(null); }
+    setPage(1);
+  }, []);
 
   // Load filter options scoped to current project
   useEffect(() => {

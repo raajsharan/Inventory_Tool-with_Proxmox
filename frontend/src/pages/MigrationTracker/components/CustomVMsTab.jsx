@@ -47,11 +47,15 @@ function useCustomTable(tabId, projectId) {
   const [sortKey,    setSortKey]    = useState(null);
   const [sortDir,    setSortDir]    = useState(null); // 'ascend' | 'descend' | null
 
+  // Only migration_status is server-sorted — everything else (custom
+  // fields) sorts client-side but still gets an explicit sortOrder (see
+  // handleTableChange) so antd doesn't lose track of it on re-render.
   const load = useCallback((params = {}) => {
     if (!tabId) return;
     setLoading(true);
     const sKey = params.sortKey !== undefined ? params.sortKey : sortKey;
     const sDir = params.sortDir !== undefined ? params.sortDir : sortDir;
+    const serverSort = sKey === 'migration_status' ? { sortKey: sKey, sortDir: sDir } : {};
     api.get('/migration/custom-vms', {
       params: {
         tab_id:    tabId,
@@ -59,7 +63,9 @@ function useCustomTable(tabId, projectId) {
         page:      params.page     ?? pagination.current,
         pageSize:  params.pageSize ?? pagination.pageSize,
         search:    params.search   ?? search,
-        ...(sKey && sDir ? { sort_key: sKey, sort_dir: sDir === 'descend' ? 'desc' : 'asc' } : {}),
+        ...(serverSort.sortKey && serverSort.sortDir
+          ? { sort_key: serverSort.sortKey, sort_dir: serverSort.sortDir === 'descend' ? 'desc' : 'asc' }
+          : {}),
         ...filters,
         ...params.filters,
       },
@@ -106,11 +112,13 @@ function useCustomTable(tabId, projectId) {
 
   const handleTableChange = (pag, _filters, sorter) => {
     const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    const newKey = (s?.order && s.field === 'migration_status') ? s.field : null;
-    const newDir = (s?.order && s.field === 'migration_status') ? s.order : null;
+    const newKey = s?.order ? s.field : null;
+    const newDir = s?.order ? s.order : null;
+    const sortChanged = newKey !== sortKey || newDir !== sortDir;
+    const page = sortChanged ? 1 : pag.current;
     setSortKey(newKey); setSortDir(newDir);
-    setPagination(p => ({ ...p, current: pag.current, pageSize: pag.pageSize }));
-    load({ page: pag.current, pageSize: pag.pageSize, sortKey: newKey, sortDir: newDir });
+    setPagination(p => ({ ...p, current: page, pageSize: pag.pageSize }));
+    load({ page, pageSize: pag.pageSize, sortKey: newKey, sortDir: newDir });
   };
 
   return {
@@ -217,8 +225,11 @@ export default function CustomVMsTab({ tabId, projectId, hiddenColumns = [] }) {
     width: fd.field_type === 'textarea' ? 160 : fd.field_type === 'date' ? 140 : 150,
     // Client-side only — sorts the current page. A true server-side sort
     // would need a per-field-definition join and isn't worth the complexity
-    // for an ad-hoc, per-project custom field.
+    // for an ad-hoc, per-project custom field. sortOrder is explicit (not
+    // left for antd to track internally) so it survives columns being
+    // rebuilt on every render.
     sorter: (a, b) => String(getValue(a.id, fd.id) ?? '').localeCompare(String(getValue(b.id, fd.id) ?? '')),
+    sortOrder: sortKey === `cf_${fd.id}` ? sortDir : null,
     render: (_, r) => (
       <FieldValueCell
         fieldDef={fd}
