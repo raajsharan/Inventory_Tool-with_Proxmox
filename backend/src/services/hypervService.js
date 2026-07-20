@@ -1,285 +1,28 @@
 /**
  * hypervService.js
  * ----------------
- * Connects to Hyper-V hosts via WinRM (WS-Management over HTTP/HTTPS).
- * Supports both NTLM (Windows default) and Basic authentication.
+ * Connects to Hyper-V hosts via WinRM by shelling out to PowerShell (pwsh),
+ * which handles the Negotiate/Kerberos/NTLM/CredSSP handshake natively.
  *
- * WinRM must be enabled on the target host:
+ * A previous version of this file hand-rolled the WS-Management SOAP
+ * protocol directly over HTTP with a custom NTLM implementation. That only
+ * ever worked against hosts configured for bare NTLM or Basic auth — the
+ * out-of-the-box `Enable-PSRemoting -Force` configuration on modern Windows
+ * hosts advertises "Negotiate, Kerberos, CredSSP" (SPNEGO-wrapped), which a
+ * bare "Authorization: NTLM ..." header doesn't satisfy, and reimplementing
+ * SPNEGO/Kerberos from scratch in Node.js isn't worth it when PowerShell's
+ * own WSMan client already does this correctly.
+ *
+ * Requires PowerShell (pwsh) installed on this server:
+ *   https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux
+ *
+ * On the target Hyper-V host, WinRM must be enabled:
  *   Enable-PSRemoting -Force
- *
- * For NTLM (default — no extra config needed on the host):
- *   Works out of the box with domain or local accounts.
- *
- * For Basic auth (optional alternative):
- *   Set-Item WSMan:\localhost\Service\Auth\Basic $true
- *   Set-Item WSMan:\localhost\Service\AllowUnencrypted $true  # HTTP only
  */
 
-const http  = require('http');
-const https = require('https');
-const { v4: uuidv4 } = require('uuid');
-const { buildType1, parseType2, buildType3, parseUsername } = require('../utils/ntlm');
+const { spawn } = require('child_process');
 
-// ── WS-Management namespaces ──────────────────────────────────────────────────
-const NS_ADDR  = 'http://schemas.xmlsoap.org/ws/2004/08/addressing';
-const NS_SHELL = 'http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd';
-const NS_WSMAN = 'http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd';
-const NS_RSP   = 'http://schemas.microsoft.com/wbem/wsman/1/windows/shell';
-
-// ── SOAP helpers ──────────────────────────────────────────────────────────────
-
-function soapHeader(action, shellId) {
-  const sel = shellId
-    ? `<w:SelectorSet><w:Selector Name="ShellId">${shellId}</w:Selector></w:SelectorSet>`
-    : '';
-  return `
-  <s:Header>
-    <a:To>HTTP://placeholder</a:To>
-    <w:ResourceURI s:mustUnderstand="true">${NS_SHELL}</w:ResourceURI>
-    <a:ReplyTo><a:Address s:mustUnderstand="true">${NS_ADDR}/role/anonymous</a:Address></a:ReplyTo>
-    <a:Action s:mustUnderstand="true">${action}</a:Action>
-    <w:MaxEnvelopeSize s:mustUnderstand="true">512000</w:MaxEnvelopeSize>
-    <a:MessageID>uuid:${uuidv4()}</a:MessageID>
-    <w:Locale xml:lang="en-US" s:mustUnderstand="false"/>
-    <p:DataLocale xml:lang="en-US" s:mustUnderstand="false" xmlns:p="${NS_WSMAN}"/>
-    <w:OperationTimeout>PT120S</w:OperationTimeout>
-    ${sel}
-  </s:Header>`;
-}
-
-function envelope(header, body) {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-            xmlns:a="${NS_ADDR}"
-            xmlns:w="${NS_WSMAN}"
-            xmlns:rsp="${NS_RSP}">
-${header}
-  <s:Body>${body}</s:Body>
-</s:Envelope>`;
-}
-
-// ── Low-level HTTP transport ──────────────────────────────────────────────────
-
-function httpRequest(proto, opts, bodyBuf) {
-  return new Promise((resolve, reject) => {
-    const req = proto.request(opts, res => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => resolve({
-        status:  res.statusCode,
-        headers: res.headers,
-        body:    Buffer.concat(chunks).toString('utf8'),
-      }));
-    });
-    req.on('error', e => reject(new Error(`WinRM connection to ${opts.hostname}:${opts.port} failed — ${e.message}`)));
-    // Must comfortably exceed the PT120S <w:OperationTimeout> advertised in
-    // soapHeader() — a Receive request is allowed to block up to 120s waiting
-    // for new output, so a shorter client socket timeout fires first and
-    // aborts perfectly healthy long-polls.
-    req.setTimeout(130000, () => { req.destroy(); reject(new Error('WinRM request timed out after 130s')); });
-    if (bodyBuf && bodyBuf.length) req.write(bodyBuf);
-    req.end();
-  });
-}
-
-// ── NTLM-authenticated POST ───────────────────────────────────────────────────
-
-async function winrmPost(cfg, soapBody) {
-  const proto   = cfg.useSSL ? https : http;
-  const port    = cfg.port   || (cfg.useSSL ? 5986 : 5985);
-  const soapBuf = Buffer.from(soapBody, 'utf8');
-
-  // Keep-alive agent: ensures Type1 and Type3 go over the SAME TCP socket
-  const agentOpts = { keepAlive: true, maxSockets: 1 };
-  if (cfg.useSSL) agentOpts.rejectUnauthorized = !!cfg.verifySSL;
-  const agent = new proto.Agent(agentOpts);
-
-  try {
-    const base = {
-      hostname: cfg.host,
-      port,
-      path:     '/wsman',
-      method:   'POST',
-      agent,
-    };
-
-    const { username, domain } = parseUsername(cfg.username);
-
-    // ── Step 1: NTLM Type 1 (Negotiate) ─────────────────────────────────────
-    const type1b64 = buildType1().toString('base64');
-    const res1 = await httpRequest(proto, {
-      ...base,
-      headers: {
-        'Authorization':  `NTLM ${type1b64}`,
-        'Content-Type':   'application/soap+xml;charset=UTF-8',
-        'Content-Length': 0,
-        'Connection':     'keep-alive',
-      },
-    }, null);
-
-    if (res1.status !== 401) {
-      // Server accepted without challenge (unlikely) or failed for other reason
-      if (res1.status === 200 || res1.status === 201) return res1;
-      const hint = buildHint(res1.status, res1.headers['www-authenticate'] || '');
-      throw new Error(`WinRM CreateShell failed (HTTP ${res1.status}): ${hint}`);
-    }
-
-    // ── Step 2: Parse NTLM Type 2 challenge ─────────────────────────────────
-    const wwwAuth  = res1.headers['www-authenticate'] || '';
-    const ntlmPart = wwwAuth.match(/(?:^|,)\s*NTLM\s+([A-Za-z0-9+/=]+)/i);
-    const negoPart = wwwAuth.match(/(?:^|,)\s*Negotiate\s+([A-Za-z0-9+/=]+)/i);
-    const challenge = ntlmPart || negoPart;
-
-    if (!challenge) {
-      // Server returned 401 but no NTLM challenge — check if Basic is offered
-      if (/Basic/i.test(wwwAuth)) {
-        return await winrmBasic(proto, base, soapBuf, cfg.username, cfg.password);
-      }
-      throw new Error(
-        `WinRM 401 — server offered: "${wwwAuth || '(none)'}". ` +
-        `Enable WinRM on the host: run  Enable-PSRemoting -Force  as Administrator.`
-      );
-    }
-
-    const type2Buf = Buffer.from(challenge[1], 'base64');
-    const { serverChallenge, targetInfo } = parseType2(type2Buf);
-
-    // ── Step 3: NTLM Type 3 (Authenticate) + actual SOAP body ───────────────
-    const type3b64 = buildType3(username, cfg.password, domain, serverChallenge, targetInfo).toString('base64');
-    const res2 = await httpRequest(proto, {
-      ...base,
-      headers: {
-        'Authorization':  `NTLM ${type3b64}`,
-        'Content-Type':   'application/soap+xml;charset=UTF-8',
-        'Content-Length': soapBuf.length,
-        'Connection':     'keep-alive',
-      },
-    }, soapBuf);
-
-    if (res2.status !== 200 && res2.status !== 201) {
-      const hint = buildHint(res2.status, res2.headers['www-authenticate'] || '');
-      throw new Error(`WinRM request failed (HTTP ${res2.status}): ${hint}`);
-    }
-    return res2;
-  } finally {
-    // Always release the keep-alive socket/agent — success, thrown error, or
-    // rejected httpRequest (connection refused, DNS failure, 30s timeout, etc).
-    agent.destroy();
-  }
-}
-
-async function winrmBasic(proto, base, soapBuf, username, password) {
-  const auth = Buffer.from(`${username}:${password}`).toString('base64');
-  const res  = await httpRequest(proto, {
-    ...base,
-    headers: {
-      'Authorization':  `Basic ${auth}`,
-      'Content-Type':   'application/soap+xml;charset=UTF-8',
-      'Content-Length': soapBuf.length,
-    },
-  }, soapBuf);
-  if (res.status !== 200 && res.status !== 201) {
-    throw new Error(`WinRM Basic auth failed (HTTP ${res.status}) — check username/password.`);
-  }
-  return res;
-}
-
-function buildHint(status, wwwAuth) {
-  if (status === 401) {
-    if (!wwwAuth) return 'No WWW-Authenticate header. Run Enable-PSRemoting -Force on the host.';
-    if (/Negotiate|NTLM/i.test(wwwAuth)) return 'NTLM authentication failed — check username and password.';
-    return `Authentication rejected (${wwwAuth}) — check credentials.`;
-  }
-  if (status === 403) return 'Access denied — ensure the user has permission to run remote PS commands.';
-  if (status === 500) return 'WinRM internal error — check Windows Event Log on the host.';
-  return '';
-}
-
-// ── WinRM shell helpers ───────────────────────────────────────────────────────
-
-function extractShellId(xml) {
-  const m = xml.match(/Selector Name="ShellId">([\w-]+)</i);
-  return m ? m[1] : null;
-}
-
-function extractCommandId(xml) {
-  const m = xml.match(/<rsp:CommandId>([\w-]+)<\/rsp:CommandId>/i);
-  return m ? m[1] : null;
-}
-
-function extractOutput(xml) {
-  return [...xml.matchAll(/<rsp:Stream Name="stdout"[^>]*>([^<]*)<\/rsp:Stream>/gi)]
-    .map(m => Buffer.from(m[1], 'base64').toString('utf8'))
-    .join('');
-}
-
-function isDone(xml) {
-  return xml.includes('CommandState') && xml.includes('Done');
-}
-
-// ── High-level WinRM session ──────────────────────────────────────────────────
-
-async function runPowerShell(cfg, psScript) {
-  // CreateShell
-  const createXml = envelope(
-    soapHeader(`${NS_ADDR}/transfer/Create`, null),
-    `<rsp:Shell><rsp:InputStreams>stdin</rsp:InputStreams><rsp:OutputStreams>stdout stderr</rsp:OutputStreams></rsp:Shell>`
-  );
-  const createRes = await winrmPost(cfg, createXml);
-  const shellId = extractShellId(createRes.body);
-  if (!shellId) throw new Error('Could not extract ShellId from WinRM response');
-
-  try {
-    // Execute powershell via EncodedCommand (avoids XML escaping issues)
-    const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-    const cmd     = `powershell -NonInteractive -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`;
-    const escapedCmd = cmd.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    const execXml = envelope(
-      soapHeader(`${NS_RSP}/Command`, shellId),
-      `<rsp:CommandLine><rsp:Command>${escapedCmd}</rsp:Command></rsp:CommandLine>`
-    );
-    const execRes = await winrmPost(cfg, execXml);
-    if (execRes.status !== 200) throw new Error(`WinRM Execute failed (HTTP ${execRes.status})`);
-
-    const cmdId = extractCommandId(execRes.body);
-    if (!cmdId) throw new Error('Could not extract CommandId from WinRM response');
-
-    // Receive output (loop until Done)
-    let output = '';
-    for (let i = 0; i < 60; i++) {
-      const recvXml = envelope(
-        soapHeader(`${NS_RSP}/Receive`, shellId),
-        `<rsp:Receive><rsp:DesiredStream CommandId="${cmdId}">stdout stderr</rsp:DesiredStream></rsp:Receive>`
-      );
-      let recvRes;
-      try {
-        recvRes = await winrmPost(cfg, recvXml);
-      } catch (e) {
-        // A Receive is allowed to legitimately take up to the 120s
-        // OperationTimeout advertised in soapHeader(). A client-side socket
-        // timeout, or the routine WSMan "no new output yet" SOAP fault
-        // (surfaced here as an HTTP 500), just means output isn't ready —
-        // retry instead of aborting the whole discovery run.
-        if (/timed out|HTTP 500/i.test(e.message)) {
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
-        }
-        throw e;
-      }
-      output += extractOutput(recvRes.body);
-      if (isDone(recvRes.body)) break;
-      await new Promise(r => setTimeout(r, 1000));
-    }
-    return output;
-  } finally {
-    // DeleteShell (best-effort)
-    const delXml = envelope(soapHeader(`${NS_ADDR}/transfer/Delete`, shellId), '');
-    await winrmPost(cfg, delXml).catch(() => {});
-  }
-}
-
-// ── PowerShell discovery script ───────────────────────────────────────────────
+// ── PowerShell discovery script (runs ON the remote Hyper-V host) ────────────
 
 const DISCOVERY_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
@@ -345,11 +88,87 @@ function parseVMs(raw) {
   }
 }
 
+// ── PowerShell wrapper — connects to the remote host and runs a scriptblock ──
+
+function psSingleQuote(str) {
+  // PowerShell single-quoted strings only need '' to escape a literal '
+  return `'${String(str).replace(/'/g, "''")}'`;
+}
+
+function buildWrapperScript(cfg, remoteScriptEnvVar) {
+  const useSSL   = !!cfg.useSSL;
+  const port     = cfg.port || (useSSL ? 5986 : 5985);
+  const skipCert = useSSL && !cfg.verifySSL;
+
+  return `
+$ErrorActionPreference = 'Stop'
+try {
+  $securePass = ConvertTo-SecureString $env:HYPERV_PASS -AsPlainText -Force
+  $cred = New-Object System.Management.Automation.PSCredential($env:HYPERV_USER, $securePass)
+  ${skipCert ? '$sessionOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck' : '$sessionOpt = New-PSSessionOption'}
+  $remoteScript = [ScriptBlock]::Create($env:${remoteScriptEnvVar})
+  $icmParams = @{
+    ComputerName  = ${psSingleQuote(cfg.host)}
+    Port          = ${port}
+    Credential    = $cred
+    SessionOption = $sessionOpt
+    ScriptBlock   = $remoteScript
+    ErrorAction   = 'Stop'
+  }
+  ${useSSL ? '$icmParams.UseSSL = $true' : ''}
+  $result = Invoke-Command @icmParams
+  $result | ConvertTo-Json -Compress -Depth 6
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
+`;
+}
+
+function runPwsh(cfg, remoteScript) {
+  return new Promise((resolve, reject) => {
+    const wrapper = buildWrapperScript(cfg, 'HYPERV_SCRIPT');
+    const child = spawn('pwsh', ['-NonInteractive', '-NoProfile', '-Command', '-'], {
+      env: {
+        ...process.env,
+        HYPERV_USER:   cfg.username || '',
+        HYPERV_PASS:   cfg.password || '',
+        HYPERV_SCRIPT: remoteScript,
+      },
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => { stdout += d; });
+    child.stderr.on('data', d => { stderr += d; });
+
+    child.on('error', (e) => {
+      if (e.code === 'ENOENT') {
+        reject(new Error('PowerShell (pwsh) is not installed on this server. Install it and retry — see https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux'));
+      } else {
+        reject(new Error(`Failed to launch pwsh: ${e.message}`));
+      }
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        const msg = stderr.trim() || `pwsh exited with code ${code}`;
+        reject(new Error(msg));
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+
+    child.stdin.write(wrapper);
+    child.stdin.end();
+  });
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 async function testConnection(cfg) {
   try {
-    const out = await runPowerShell(cfg, `(Get-VM | Measure-Object).Count`);
+    const out = await runPwsh(cfg, '(Get-VM | Measure-Object).Count');
     const count = parseInt(out.trim(), 10);
     return { ok: true, vmCount: isNaN(count) ? 0 : count };
   } catch (e) {
@@ -358,7 +177,7 @@ async function testConnection(cfg) {
 }
 
 async function discoverVMs(cfg) {
-  const raw = await runPowerShell(cfg, DISCOVERY_SCRIPT);
+  const raw = await runPwsh(cfg, DISCOVERY_SCRIPT);
   return parseVMs(raw);
 }
 
