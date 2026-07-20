@@ -158,6 +158,12 @@ function FieldDefManager({ projectId, tabKey }) {
   const [newOptions,  setNewOptions]  = useState([]);
   const [optionInput, setOptionInput] = useState('');
 
+  const [editingId,      setEditingId]      = useState(null);
+  const [editLabel,      setEditLabel]      = useState('');
+  const [editType,       setEditType]       = useState('text');
+  const [editOptions,    setEditOptions]    = useState([]);
+  const [editOptionInput, setEditOptionInput] = useState('');
+
   const loadDefs = useCallback(() => {
     if (!projectId || !tabKey) return;
     api.get(`/admin/migration-projects/${projectId}/field-definitions`, { params: { tab_key: tabKey } })
@@ -198,33 +204,123 @@ function FieldDefManager({ projectId, tabKey }) {
     if (v && !newOptions.includes(v)) { setNewOptions(p => [...p, v]); setOptionInput(''); }
   };
 
+  const startEdit = (def) => {
+    setAdding(false);
+    setEditingId(def.id);
+    setEditLabel(def.label);
+    setEditType(def.field_type);
+    setEditOptions(Array.isArray(def.options) ? def.options : []);
+    setEditOptionInput('');
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null); setEditLabel(''); setEditType('text'); setEditOptions([]); setEditOptionInput('');
+  };
+
+  const addEditOption = () => {
+    const v = editOptionInput.trim();
+    if (v && !editOptions.includes(v)) { setEditOptions(p => [...p, v]); setEditOptionInput(''); }
+  };
+
+  const handleSaveEdit = async (def) => {
+    if (!editLabel.trim()) { message.warning('Field label is required'); return; }
+    const body = { label: editLabel.trim(), field_type: editType };
+    body.options = editType === 'dropdown' ? editOptions : null;
+    try {
+      await api.patch(`/admin/migration-projects/${projectId}/field-definitions/${def.id}`, body);
+      message.success(`Field "${editLabel.trim()}" updated`);
+      cancelEdit();
+      loadDefs();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to update field');
+    }
+  };
+
   return (
     <div style={{ marginTop: 4 }}>
       {defs.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
           {defs.map(def => (
-            <div key={def.id} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: 'rgba(0,0,0,0.025)', borderRadius: 6, padding: '4px 10px',
-            }}>
-              <Text style={{ flex: 1, fontSize: 13 }}>{def.label}</Text>
-              <Tag color={FIELD_TYPE_COLOR[def.field_type] || 'default'} style={{ margin: 0 }}>
-                {FIELD_TYPES.find(t => t.value === def.field_type)?.label || def.field_type}
-              </Tag>
-              {def.field_type === 'dropdown' && Array.isArray(def.options) && def.options.length > 0 && (
-                <Tooltip title={def.options.join(', ')}>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{def.options.length} opts</Text>
-                </Tooltip>
-              )}
-              <Popconfirm
-                title={`Delete "${def.label}" field?`}
-                description="All saved values for this field will be permanently deleted."
-                okText="Delete" okButtonProps={{ danger: true }}
-                onConfirm={() => handleDelete(def)}
-              >
-                <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
-            </div>
+            editingId === def.id ? (
+              <div key={def.id} style={{ background: 'rgba(0,0,0,0.025)', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <Input
+                    placeholder="Field label"
+                    value={editLabel}
+                    onChange={e => setEditLabel(e.target.value)}
+                    onPressEnter={() => handleSaveEdit(def)}
+                    autoFocus
+                    style={{ flex: 1 }}
+                  />
+                  <Select
+                    value={editType}
+                    onChange={v => { setEditType(v); if (v !== 'dropdown') setEditOptions([]); }}
+                    options={FIELD_TYPES}
+                    style={{ width: 130 }}
+                  />
+                </div>
+                {editType === 'dropdown' && (
+                  <div style={{ marginBottom: 10 }}>
+                    <Text style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                      Options <Text type="secondary">(press Enter to add each)</Text>
+                    </Text>
+                    {editOptions.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                        {editOptions.map(opt => (
+                          <Tag
+                            key={opt} closable
+                            onClose={() => setEditOptions(p => p.filter(o => o !== opt))}
+                            style={{ margin: 0 }}
+                          >
+                            {opt}
+                          </Tag>
+                        ))}
+                      </div>
+                    )}
+                    <Input
+                      placeholder="Add option…"
+                      value={editOptionInput}
+                      onChange={e => setEditOptionInput(e.target.value)}
+                      onPressEnter={addEditOption}
+                      style={{ maxWidth: 240 }}
+                      suffix={
+                        <Button type="link" size="small" onClick={addEditOption} style={{ padding: 0 }}>
+                          Add
+                        </Button>
+                      }
+                    />
+                  </div>
+                )}
+                <Space>
+                  <Button type="primary" size="small" onClick={() => handleSaveEdit(def)}>Save</Button>
+                  <Button size="small" onClick={cancelEdit}>Cancel</Button>
+                </Space>
+              </div>
+            ) : (
+              <div key={def.id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'rgba(0,0,0,0.025)', borderRadius: 6, padding: '4px 10px',
+              }}>
+                <Text style={{ flex: 1, fontSize: 13 }}>{def.label}</Text>
+                <Tag color={FIELD_TYPE_COLOR[def.field_type] || 'default'} style={{ margin: 0 }}>
+                  {FIELD_TYPES.find(t => t.value === def.field_type)?.label || def.field_type}
+                </Tag>
+                {def.field_type === 'dropdown' && Array.isArray(def.options) && def.options.length > 0 && (
+                  <Tooltip title={def.options.join(', ')}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>{def.options.length} opts</Text>
+                  </Tooltip>
+                )}
+                <Button size="small" type="text" icon={<EditOutlined />} onClick={() => startEdit(def)} />
+                <Popconfirm
+                  title={`Delete "${def.label}" field?`}
+                  description="All saved values for this field will be permanently deleted."
+                  okText="Delete" okButtonProps={{ danger: true }}
+                  onConfirm={() => handleDelete(def)}
+                >
+                  <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              </div>
+            )
           ))}
         </div>
       )}
@@ -291,7 +387,7 @@ function FieldDefManager({ projectId, tabKey }) {
           </Space>
         </div>
       ) : (
-        <Button size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)}>
+        <Button size="small" icon={<PlusOutlined />} onClick={() => { cancelEdit(); setAdding(true); }}>
           Add Field
         </Button>
       )}
