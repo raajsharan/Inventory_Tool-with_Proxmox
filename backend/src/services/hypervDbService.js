@@ -15,7 +15,7 @@ async function listHosts() {
   const { rows } = await db.query(
     `SELECT id, host, display_name, username, port, use_ssl, verify_ssl,
             interval_minutes, scheduler_enabled, last_discovery_at, last_vm_count,
-            is_running, created_at, updated_at
+            is_running, last_status, last_error, last_attempt_at, created_at, updated_at
      FROM hyperv_hosts ORDER BY host`
   );
   return rows;
@@ -86,8 +86,22 @@ async function setHostRunning(id, running) {
 
 async function setLastDiscovery(id, vmCount) {
   await db.query(
-    'UPDATE hyperv_hosts SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE, updated_at = NOW() WHERE id = $1',
+    `UPDATE hyperv_hosts
+        SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE,
+            last_status = 'success', last_error = NULL, last_attempt_at = NOW(),
+            updated_at = NOW()
+      WHERE id = $1`,
     [id, vmCount]
+  );
+}
+
+async function setLastDiscoveryFailed(id, errorMessage) {
+  await db.query(
+    `UPDATE hyperv_hosts
+        SET is_running = FALSE, last_status = 'error', last_error = $2,
+            last_attempt_at = NOW(), updated_at = NOW()
+      WHERE id = $1`,
+    [id, errorMessage]
   );
 }
 
@@ -312,7 +326,7 @@ async function getSnapshotVMs() {
 
 module.exports = {
   listHosts, getHostById, upsertHost, updateHostById, deleteHost,
-  setHostRunning, setLastDiscovery, getDecryptedPassword,
+  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
   getDashboardStats, getDrift, getStaleVMs, getSnapshotVMs,

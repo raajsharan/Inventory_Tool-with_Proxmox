@@ -13,7 +13,14 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 const { Text } = Typography;
 
 function statusTag(h) {
-  if (h.is_running)        return <Tag color="processing">Running</Tag>;
+  if (h.is_running) return <Tag color="processing">Running</Tag>;
+  if (h.last_status === 'error') {
+    return (
+      <Tooltip title={h.last_error || 'Discovery failed'}>
+        <Tag color="error" style={{ cursor: 'help' }}>Failed</Tag>
+      </Tooltip>
+    );
+  }
   if (h.last_discovery_at) return <Tag color="success">Idle</Tag>;
   return <Tag color="default">Never run</Tag>;
 }
@@ -114,8 +121,13 @@ export default function HVHosts({ onDiscoveryStarted }) {
     { title: 'SSL',      dataIndex: 'use_ssl',           key: 'ssl',     width: 60,
       render: v => v ? <Tag color="blue">Yes</Tag> : <Tag>No</Tag> },
     { title: 'Status',   key: 'status',                  width: 120,     render: (_, h) => statusTag(h) },
-    { title: 'Last Run', dataIndex: 'last_discovery_at', key: 'last',    ellipsis: true,
-      render: v => v ? new Date(v).toLocaleString() : '—' },
+    { title: 'Last Run', key: 'last', ellipsis: true,
+      // last_discovery_at only updates on success — fall back to
+      // last_attempt_at so a failed run still shows when it was tried.
+      render: (_, h) => {
+        const t = h.last_discovery_at || h.last_attempt_at;
+        return t ? new Date(t).toLocaleString() : '—';
+      } },
     { title: 'VMs Found', dataIndex: 'last_vm_count',   key: 'vm_count', width: 100, render: v => v ?? '—' },
     { title: 'Scheduler', dataIndex: 'scheduler_enabled', key: 'sched', width: 110,
       render: (v, h) => v ? <Tag color="blue">Every {h.interval_minutes}m</Tag> : <Tag>Off</Tag> },

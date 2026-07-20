@@ -509,6 +509,13 @@ const STATEMENTS = [
       created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  // Last-run outcome is otherwise invisible: last_discovery_at/last_vm_count
+  // are only ever set on SUCCESS (see hypervDbService.setLastDiscovery), so
+  // a host that fails every run looks identical in the UI to one that has
+  // never been triggered at all.
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_status VARCHAR(20)`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
   `CREATE TABLE IF NOT EXISTS hyperv_discovery_runs (
       id            SERIAL PRIMARY KEY,
       host_id       INT NOT NULL REFERENCES hyperv_hosts(id) ON DELETE CASCADE,

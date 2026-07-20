@@ -15,6 +15,12 @@ CREATE TABLE IF NOT EXISTS hyperv_hosts (
   last_discovery_at TIMESTAMPTZ,
   last_vm_count     INT DEFAULT 0,
   is_running        BOOLEAN NOT NULL DEFAULT FALSE,
+  -- last_discovery_at/last_vm_count are only set on a SUCCESSFUL run — these
+  -- track the outcome of the most recent attempt (success or failure) so a
+  -- host that fails every run doesn't look identical to one never triggered.
+  last_status       VARCHAR(20),
+  last_error        TEXT,
+  last_attempt_at   TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
