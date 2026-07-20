@@ -372,13 +372,20 @@ function AnimatedValue({ value }) {
 export function useColumnVisibility(storageKey, allKeys) {
   const keysRef = useRef(allKeys);
 
+  // Custom fields load asynchronously, so `allKeys` on first render is often
+  // missing them. Keep every saved key here regardless of whether it's
+  // "known" yet — dropping unknown ones at this point would silently
+  // discard the user's saved position for any column that hadn't loaded
+  // yet, only for it to get re-appended at the end once it did.
   const [visible, setVisible] = useState(() => {
     try {
       const saved = localStorage.getItem(`col-vis:${storageKey}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        const valid = new Set(parsed.filter(k => keysRef.current.includes(k)));
-        if (valid.size > 0) return valid;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const added = keysRef.current.filter(k => !parsed.includes(k));
+          return new Set([...parsed, ...added]);
+        }
       }
     } catch {}
     return new Set(keysRef.current);
@@ -389,35 +396,40 @@ export function useColumnVisibility(storageKey, allKeys) {
       const saved = localStorage.getItem(`col-ord:${storageKey}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Merge: saved order first, then any new keys appended at end
-        const valid = parsed.filter(k => keysRef.current.includes(k));
-        const added = keysRef.current.filter(k => !valid.includes(k));
-        if (valid.length > 0) return [...valid, ...added];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const added = keysRef.current.filter(k => !parsed.includes(k));
+          return [...parsed, ...added];
+        }
       }
     } catch {}
     return [...keysRef.current];
   });
 
-  // React to new / removed keys (e.g. custom fields that load async or get deleted)
+  // React to new / removed keys (e.g. custom fields that load async or get deleted).
+  // "Added"/"removed" are computed against the live order/visible state
+  // (via the setOrder/setVisible updaters), not the keysRef snapshot, so a
+  // key already restored from localStorage is never treated as newly added.
   useEffect(() => {
-    const keySet  = new Set(allKeys);
-    const prevSet = new Set(keysRef.current);
-    const added   = allKeys.filter(k => !prevSet.has(k));
-    const removed = keysRef.current.filter(k => !keySet.has(k));
-    if (!added.length && !removed.length) return;
-
+    const keySet   = new Set(allKeys);
+    const prevKnown = keysRef.current;
+    const changed = allKeys.length !== prevKnown.length
+      || allKeys.some(k => !prevKnown.includes(k))
+      || prevKnown.some(k => !keySet.has(k));
+    if (!changed) return;
     keysRef.current = allKeys;
 
     setOrder(prev => {
-      const next = [...prev.filter(k => keySet.has(k)), ...added];
+      const stillValid = prev.filter(k => keySet.has(k));
+      const newlyAdded = allKeys.filter(k => !prev.includes(k));
+      const next = [...stillValid, ...newlyAdded];
       localStorage.setItem(`col-ord:${storageKey}`, JSON.stringify(next));
       return next;
     });
     setVisible(prev => {
-      const next = new Set([...prev].filter(k => keySet.has(k)));
-      added.forEach(k => next.add(k)); // new fields visible by default
-      localStorage.setItem(`col-vis:${storageKey}`, JSON.stringify([...next]));
-      return next;
+      const stillValid = new Set([...prev].filter(k => keySet.has(k)));
+      allKeys.filter(k => !prev.has(k)).forEach(k => stillValid.add(k)); // new fields visible by default
+      localStorage.setItem(`col-vis:${storageKey}`, JSON.stringify([...stillValid]));
+      return stillValid;
     });
   }, [allKeys.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
