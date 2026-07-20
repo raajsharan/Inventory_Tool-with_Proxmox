@@ -243,13 +243,21 @@ export function useMigrTable(endpoint, extraParams = {}) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Wire directly to antd <Table onChange={onTableChange} />.
-  const onTableChange = useCallback((_pagination, _filters, sorter) => {
+  // Wire directly to antd <Table onChange={onTableChange} />. This is the
+  // single handler for pagination AND sort changes — antd calls it for
+  // both, so a plain "next page" click must use the pagination it hands
+  // back rather than always resetting to page 1 (only an actual sort
+  // change should do that).
+  const onTableChange = useCallback((newPagination, _filters, sorter) => {
     const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s?.order) { setSortKey(s.field); setSortDir(s.order); }
-    else { setSortKey(null); setSortDir(null); }
-    setPage(1);
-  }, []);
+    const newKey = s?.order ? s.field : null;
+    const newDir = s?.order ? s.order : null;
+    const sortChanged = newKey !== sortKey || newDir !== sortDir;
+    setSortKey(newKey);
+    setSortDir(newDir);
+    setPage(sortChanged ? 1 : newPagination.current);
+    setPageSize(newPagination.pageSize);
+  }, [sortKey, sortDir]);
 
   // Load filter options scoped to current project
   useEffect(() => {
@@ -265,13 +273,16 @@ export function useMigrTable(endpoint, extraParams = {}) {
   const clearFilters = useCallback(() => { setFilters({}); setSearch(''); setPage(1); }, []);
   const reload = useCallback(() => load(), [load]);
 
+  // No pagination.onChange here — the Table-level onChange (onTableChange)
+  // is the single handler for both pagination and sort changes. Adding a
+  // second one here caused a race: antd fires both, and whichever ran last
+  // won, silently undoing the other's page change.
   const pagination = {
     current: page,
     pageSize,
     total: data.total,
     showSizeChanger: true,
     pageSizeOptions: [10, 20, 50, 100],
-    onChange: (p, ps) => { setPage(p); setPageSize(ps); },
     showTotal: (total) => `${total.toLocaleString()} rows`,
   };
 

@@ -89,6 +89,7 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
   const {
     data, loading, pagination, density, setDensity,
     search, onSearch, filters, onFilter, clearFilters, filterOpts, reload,
+    onTableChange,
   } = useMigrTable('/migration/hosts', projectId ? { project_id: projectId } : {});
 
   const [patchTick, setPatchTick] = useState(0);
@@ -286,6 +287,7 @@ export default function HostsTab({ projectId, refreshToken = 0, stageOptions, as
         dataSource={data.items}
         columns={visibleColumns}
         pagination={pagination}
+        onChange={onTableChange}
         scroll={{ x: 'max-content' }}
         sticky
         rowClassName={(r) => {
