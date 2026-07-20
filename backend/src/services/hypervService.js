@@ -125,12 +125,25 @@ try {
 `;
 }
 
+// Strip ANSI/VT100 CSI escape sequences (e.g. \x1b[?1h / \x1b[?1l cursor-key
+// mode toggles). pwsh's console host emits these even with -NonInteractive
+// when the script is piped in via stdin, contaminating stdout enough to
+// break JSON parsing — passing the script as -EncodedCommand avoids that
+// console-host initialization in the first place, but this is kept as a
+// defensive second layer in case anything else ever leaks through.
+function stripAnsi(str) {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+}
+
 function runPwsh(cfg, remoteScript) {
   return new Promise((resolve, reject) => {
     const wrapper = buildWrapperScript(cfg, 'HYPERV_SCRIPT');
-    const child = spawn('pwsh', ['-NonInteractive', '-NoProfile', '-Command', '-'], {
+    const encoded = Buffer.from(wrapper, 'utf16le').toString('base64');
+    const child = spawn('pwsh', ['-NonInteractive', '-NoProfile', '-EncodedCommand', encoded], {
       env: {
         ...process.env,
+        TERM:          'dumb',
         HYPERV_USER:   cfg.username || '',
         HYPERV_PASS:   cfg.password || '',
         HYPERV_SCRIPT: remoteScript,
@@ -151,15 +164,15 @@ function runPwsh(cfg, remoteScript) {
     });
 
     child.on('close', (code) => {
+      const cleanOut = stripAnsi(stdout).trim();
       if (code !== 0) {
-        const msg = stderr.trim() || `pwsh exited with code ${code}`;
+        const msg = stripAnsi(stderr).trim() || `pwsh exited with code ${code}`;
         reject(new Error(msg));
       } else {
-        resolve(stdout.trim());
+        resolve(cleanOut);
       }
     });
 
-    child.stdin.write(wrapper);
     child.stdin.end();
   });
 }
