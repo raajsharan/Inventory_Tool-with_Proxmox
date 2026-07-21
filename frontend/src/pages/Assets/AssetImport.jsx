@@ -33,6 +33,8 @@ export default function AssetImport({
   const [result, setResult] = useState(null);
   const [err, setErr] = useState('');
   const [rowFilter, setRowFilter] = useState('all'); // all | create | merge | errors
+  const [previewPageSize, setPreviewPageSize] = useState(10);
+  const [resultsPageSize, setResultsPageSize] = useState(5);
 
   const selectedCount = selectedRows.length;
 
@@ -280,7 +282,11 @@ export default function AssetImport({
             dataSource={filteredRows}
             columns={previewColumns}
             rowSelection={rowSelection}
-            pagination={{ pageSize: 10 }}
+            pagination={{
+              pageSize: previewPageSize,
+              onShowSizeChange: (_, size) => setPreviewPageSize(size),
+              onChange: (_, size) => setPreviewPageSize(size),
+            }}
             scroll={{ x: 700 }}
             locale={{ emptyText: `No "${rowFilter}" rows` }}
           />
@@ -307,7 +313,11 @@ export default function AssetImport({
                 { title: 'Data', dataIndex: 'data',
                   render: d => <code style={{ fontSize: 12 }}>{JSON.stringify(d).slice(0, 200)}</code> },
               ]}
-              pagination={{ pageSize: 5 }}
+              pagination={{
+                pageSize: resultsPageSize,
+                onShowSizeChange: (_, size) => setResultsPageSize(size),
+                onChange: (_, size) => setResultsPageSize(size),
+              }}
             />
           )}
         </Card>
