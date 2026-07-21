@@ -191,8 +191,16 @@ export default function HVHosts({ onDiscoveryStarted }) {
             <InputNumber min={1} max={65535} style={{ width: 120 }} />
           </Form.Item>
 
-          <Form.Item name="useSSL" label="Use HTTPS (WinRM over SSL)" valuePropName="checked">
-            <Switch />
+          <Form.Item name="useSSL" label="Use HTTPS (WinRM over SSL)" valuePropName="checked"
+            extra="Toggling this updates the port between the standard 5985 (HTTP) / 5986 (HTTPS) — only if you haven't set a custom port.">
+            <Switch onChange={(checked) => {
+              // Only auto-adjust if the port is still at one of the two
+              // standard WinRM values — never clobber a deliberately custom port.
+              const currentPort = form.getFieldValue('port');
+              if (currentPort === 5985 || currentPort === 5986) {
+                form.setFieldValue('port', checked ? 5986 : 5985);
+              }
+            }} />
           </Form.Item>
 
           <Form.Item name="verifySSL" label="Verify SSL Certificate" valuePropName="checked">

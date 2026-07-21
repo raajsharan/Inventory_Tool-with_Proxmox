@@ -166,7 +166,12 @@ function runPwsh(cfg, remoteScript) {
     child.on('close', (code) => {
       const cleanOut = stripAnsi(stdout).trim();
       if (code !== 0) {
-        const msg = stripAnsi(stderr).trim() || `pwsh exited with code ${code}`;
+        let msg = stripAnsi(stderr).trim() || `pwsh exited with code ${code}`;
+        if (/no supported WSMan client library/i.test(msg)) {
+          msg += ' — pwsh on Linux needs the native WSMan library installed separately. ' +
+            'Run once on this server: sudo pwsh -Command "Set-PSRepository -Name PSGallery ' +
+            '-InstallationPolicy Trusted; Install-Module -Name PSWSMan -Scope AllUsers -Force; Install-WSMan"';
+        }
         reject(new Error(msg));
       } else {
         resolve(cleanOut);
