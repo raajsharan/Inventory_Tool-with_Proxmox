@@ -105,7 +105,7 @@ $ErrorActionPreference = 'Stop'
 try {
   $securePass = ConvertTo-SecureString $env:HYPERV_PASS -AsPlainText -Force
   $cred = New-Object System.Management.Automation.PSCredential($env:HYPERV_USER, $securePass)
-  ${skipCert ? '$sessionOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck' : '$sessionOpt = New-PSSessionOption'}
+  ${skipCert ? '$sessionOpt = New-PSSessionOption -SkipCACheck -SkipCNCheck' : '$sessionOpt = New-PSSessionOption'}
   $remoteScript = [ScriptBlock]::Create($env:${remoteScriptEnvVar})
   $icmParams = @{
     ComputerName  = ${psSingleQuote(cfg.host)}
