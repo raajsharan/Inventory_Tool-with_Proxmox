@@ -42,6 +42,20 @@ function AgentStatusBadge({ status }) {
   return <Badge status={meta.color} text={meta.label} />;
 }
 
+// "Staged" — hasn't checked in (last_sync) for longer than this, regardless
+// of current live_status. Distinct dimension from Online/Offline/Unknown:
+// a device can show Offline right now but have synced an hour ago, or show
+// Offline and genuinely be stale for months. Adjust this threshold as needed.
+const STALE_DAYS = 15;
+
+function isStaged(agent) {
+  if (!agent.last_sync || agent.last_sync === '—') return true;
+  const d = new Date(agent.last_sync);
+  if (isNaN(d)) return false;
+  const diffDays = (Date.now() - d.getTime()) / 86400000;
+  return diffDays > STALE_DAYS;
+}
+
 function ManagedTag({ status }) {
   const meta = MANAGED_STATUS[status] ?? { label: 'Unknown', color: 'default' };
   return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
@@ -523,6 +537,7 @@ function SummaryCards({ agents }) {
   const offline    = agents.filter(a => a.agent_status === 1).length;
   const unknown    = agents.filter(a => a.agent_status === 2).length;
   const notManaged = agents.filter(a => a.managed_status === 0).length;
+  const staged     = agents.filter(isStaged).length;
 
   const cards = [
     { label: 'Total Endpoints', value: total,      color: undefined,  icon: <DesktopOutlined /> },
@@ -530,6 +545,7 @@ function SummaryCards({ agents }) {
     { label: 'Offline',         value: offline,    color: '#8c8c8c',  icon: <CloseCircleFilled /> },
     { label: 'Unknown',         value: unknown,     color: '#faad14',  icon: <QuestionCircleOutlined /> },
     { label: 'Not Managed',     value: notManaged, color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
+    { label: `Staged (${STALE_DAYS}+ days)`, value: staged, color: '#d4380d', icon: <ClockCircleOutlined /> },
   ];
 
   return (
@@ -660,6 +676,7 @@ export default function EndpointCentral() {
   const [statusFilter, setStatusFilter] = useState(null);
   const [osFilter,     setOsFilter]     = useState(null);
   const [managedFilt,  setManagedFilt]  = useState(null);
+  const [stagedFilt,   setStagedFilt]   = useState(null); // null | 'staged' | 'active'
 
   // Software filters
   const [swSearch,      setSwSearch]      = useState('');
@@ -752,6 +769,8 @@ export default function EndpointCentral() {
     if (statusFilter !== null && a.agent_status !== statusFilter) return false;
     if (managedFilt  !== null && a.managed_status !== managedFilt) return false;
     if (osFilter && osFamily(a.os_name) !== osFilter) return false;
+    if (stagedFilt === 'staged' && !isStaged(a)) return false;
+    if (stagedFilt === 'active' && isStaged(a)) return false;
     if (search) {
       const q = search.toLowerCase();
       if (!a.computer_name.toLowerCase().includes(q)
@@ -834,12 +853,13 @@ export default function EndpointCentral() {
     },
     {
       title: 'Last Sync', dataIndex: 'last_sync', key: 'last_sync', width: 160,
-      render: v => {
-        if (!v || v === '—') return <Text type="secondary">—</Text>;
+      render: (v, r) => {
+        if (!v || v === '—') return <Tag color="error">Staged — never synced</Tag>;
         const d = new Date(v);
         if (isNaN(d)) return <Text type="secondary">{v}</Text>;
         const diffH = (Date.now() - d.getTime()) / 3600000;
         const fmt = d.toLocaleString();
+        if (isStaged(r)) return <Tooltip title={`No sync in over ${STALE_DAYS} days`}><Tag color="error">{fmt}</Tag></Tooltip>;
         if (diffH > 72) return <Tooltip title={fmt}><Tag color="warning">{fmt}</Tag></Tooltip>;
         return <span>{fmt}</span>;
       },
@@ -1010,6 +1030,16 @@ export default function EndpointCentral() {
                       { value: 'Windows', label: 'Windows' },
                       { value: 'Linux',   label: 'Linux'   },
                       { value: 'Other',   label: 'Other'   },
+                    ]}
+                  />
+                  <Select
+                    allowClear placeholder="Staged"
+                    style={{ width: 150 }}
+                    value={stagedFilt}
+                    onChange={v => setStagedFilt(v ?? null)}
+                    options={[
+                      { value: 'staged', label: `Staged (${STALE_DAYS}+ days)` },
+                      { value: 'active', label: 'Active' },
                     ]}
                   />
                 </Space>
