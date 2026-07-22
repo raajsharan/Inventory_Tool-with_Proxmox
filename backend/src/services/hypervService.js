@@ -50,7 +50,14 @@ $vms = Get-VM | ForEach-Object {
   $diskGB = 0
   foreach ($d in $disks) { try { $diskGB += (Get-VHD -Path $d.Path).FileSize / 1GB } catch {} }
   $osName = ''
-  try { $info = Get-WmiObject -Class Win32_OperatingSystem -ComputerName $vm.VMName -ErrorAction Stop; $osName = $info.Caption } catch {}
+  # Only query the guest OS over the network for running VMs — a WMI call
+  # to a powered-off VM's hostname has nothing to respond and hangs until a
+  # slow RPC/DCOM timeout, which for several off VMs in a row can blow past
+  # the whole session's operation timeout and abort discovery partway
+  # through (silently dropping every VM after the one that was mid-timeout).
+  if ($vm.State.ToString() -eq 'Running') {
+    try { $info = Get-WmiObject -Class Win32_OperatingSystem -ComputerName $vm.VMName -ErrorAction Stop; $osName = $info.Caption } catch {}
+  }
   [PSCustomObject]@{
     VmId           = $vm.VMId.ToString()
     Name           = $vm.VMName
