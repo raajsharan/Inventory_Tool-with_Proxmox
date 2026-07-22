@@ -16,6 +16,19 @@
  * Requires PowerShell (pwsh) installed on this server:
  *   https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux
  *
+ * Also requires the native WSMan client library (pwsh on Linux doesn't ship
+ * with WinRM/PSRemoting support out of the box):
+ *   sudo pwsh -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module -Name PSWSMan -Scope AllUsers -Force; Install-WSMan"
+ *
+ * If hosts are authenticated with local accounts (e.g. ".\Administrator")
+ * rather than domain/Kerberos accounts, NTLM is used under Negotiate — the
+ * Linux WSMan client needs the separate `gss-ntlmssp` GSSAPI plugin for
+ * that, since Linux's GSSAPI stack (MIT Kerberos/Heimdal) doesn't include
+ * NTLM support by default:
+ *   sudo apt install gssntlmssp
+ * Without it, connections to non-domain-joined hosts using local admin
+ * credentials fail even though PSWSMan itself is correctly installed.
+ *
  * On the target Hyper-V host, WinRM must be enabled:
  *   Enable-PSRemoting -Force
  */
@@ -171,6 +184,10 @@ function runPwsh(cfg, remoteScript) {
           msg += ' — pwsh on Linux needs the native WSMan library installed separately. ' +
             'Run once on this server: sudo pwsh -Command "Set-PSRepository -Name PSGallery ' +
             '-InstallationPolicy Trusted; Install-Module -Name PSWSMan -Scope AllUsers -Force; Install-WSMan"';
+        } else if (/gss|ntlm|negotiate/i.test(msg) && /(auth|credential|denied|failed)/i.test(msg)) {
+          msg += ' — if this host uses a local account (not a domain/Kerberos account), the Linux ' +
+            'WSMan client needs the gss-ntlmssp package for NTLM support. Run once on this server: ' +
+            'sudo apt install gssntlmssp';
         }
         reject(new Error(msg));
       } else {
