@@ -22,6 +22,8 @@ const columns = [
   { title: 'Disk (GB)', dataIndex: 'disk_gb',     key: 'disk',    width: 110, render: v => v != null ? v : '—' },
   { title: 'IPs',      dataIndex: 'ips',           key: 'ips',     ellipsis: true,
     render: v => Array.isArray(v) ? v.join(', ') || '—' : '—' },
+  { title: 'MAC Address', dataIndex: 'mac_addresses', key: 'macs', ellipsis: true,
+    render: v => Array.isArray(v) ? v.join(', ') || '—' : '—' },
   { title: 'OS',       dataIndex: 'os_type',       key: 'os',      ellipsis: true, render: v => v || '—' },
   { title: 'Snapshots', dataIndex: 'snapshot_count', key: 'snaps', width: 100,
     render: v => v ? <Tag color="orange">{v}</Tag> : '0' },
