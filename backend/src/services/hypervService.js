@@ -76,7 +76,13 @@ $vms = Get-VM | ForEach-Object {
     SnapshotOldest = $oldest
   }
 }
-if ($vms) { $vms | ConvertTo-Json -Compress -Depth 5 } else { '[]' }
+# Return the raw collection — do NOT ConvertTo-Json here. The outer wrapper
+# script (buildWrapperScript) already serializes whatever this scriptblock
+# returns via Invoke-Command; converting to JSON here too double-encodes it
+# into a JSON string of a JSON string, which JSON.parse() on the Node side
+# then unwraps into a single opaque string (not the VM array), collapsing
+# every discovered VM into one blank record.
+@($vms)
 `;
 
 function parseVMs(raw) {
