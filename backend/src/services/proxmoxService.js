@@ -377,8 +377,21 @@ async function discover(host, port, username, realm, password, verifySSL, hostTy
     // API token auth — no session needed
     getter = path => getWithToken(host, port, path, tokenId, tokenSecret, verifySSL);
   } else {
-    const ticket = await createTicket(host, port, username, realm, password, verifySSL);
-    getter = path => getWithTicket(host, port, path, ticket, verifySSL);
+    // A single ticket is reused for the whole discovery run (which can hit
+    // many nodes/VMs and take a while). If any individual request comes
+    // back Unauthorized — expired/invalidated ticket, or a transient
+    // session hiccup — re-authenticate once and retry that request before
+    // giving up, instead of failing the entire run on one stale ticket.
+    let ticket = await createTicket(host, port, username, realm, password, verifySSL);
+    getter = async (path) => {
+      try {
+        return await getWithTicket(host, port, path, ticket, verifySSL);
+      } catch (e) {
+        if (!(e instanceof ProxmoxAuthError)) throw e;
+        ticket = await createTicket(host, port, username, realm, password, verifySSL);
+        return await getWithTicket(host, port, path, ticket, verifySSL);
+      }
+    };
   }
 
   if (hostType === 'pdm') return discoverPDM(host, port, getter);
