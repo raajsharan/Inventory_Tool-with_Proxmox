@@ -33,13 +33,14 @@ async function runDiscovery(hostId) {
   try {
     const password    = db.getDecryptedPassword(host);
     const tokenSecret = db.getDecryptedTokenSecret(host);
-    const vms = await pxSvc.discover(
+    const { vms, nodes } = await pxSvc.discover(
       host.host, host.port,
       host.username, host.realm,
       password, host.verify_ssl, host.host_type,
       host.token_id || null, tokenSecret
     );
     await db.saveVMs(runId, hostId, host.host, vms);
+    await db.saveNodes(runId, hostId, host.host, nodes);
     await db.finishRun(runId, vms.length);
     await db.setLastDiscovery(hostId, vms.length);
   } catch (err) {

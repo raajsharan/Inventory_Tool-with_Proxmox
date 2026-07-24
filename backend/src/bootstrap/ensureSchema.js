@@ -44,6 +44,32 @@ const STATEMENTS = [
   // ── Proxmox discovery: MAC addresses (proxmox_schema.sql predates this column)
   `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS macs TEXT[]`,
 
+  // ── Proxmox discovery: physical/cluster node inventory (proxmox_schema.sql predates this table)
+  `CREATE TABLE IF NOT EXISTS proxmox_discovered_nodes (
+      id              SERIAL PRIMARY KEY,
+      run_id          INTEGER      NOT NULL REFERENCES proxmox_discovery_runs(id) ON DELETE CASCADE,
+      host_id         INTEGER      NOT NULL REFERENCES proxmox_hosts(id) ON DELETE CASCADE,
+      source_host     VARCHAR(255),
+      node            VARCHAR(255),
+      status          VARCHAR(50),
+      ip_address      VARCHAR(64),
+      mac_address     VARCHAR(64),
+      os_type         VARCHAR(100),
+      os_version      VARCHAR(255),
+      kernel_version  VARCHAR(255),
+      cpu_model       VARCHAR(255),
+      cpu_cores       INTEGER,
+      cpu_sockets     INTEGER,
+      memory_mb       INTEGER,
+      uptime_seconds  BIGINT,
+      vm_count        INTEGER      DEFAULT 0,
+      snapshot_count  INTEGER      DEFAULT 0,
+      created_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_proxmox_nodes_run_id  ON proxmox_discovered_nodes(run_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_proxmox_nodes_host_id ON proxmox_discovered_nodes(host_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_proxmox_nodes_node    ON proxmox_discovered_nodes(node)`,
+
   // ── newer inventory columns some deployments predate (schema.sql ALTERs)
   ...['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'].flatMap(t => [
     `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb`,

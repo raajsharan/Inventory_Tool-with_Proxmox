@@ -104,7 +104,7 @@ async function testHost(req, res) {
   }
 
   try {
-    const vms = await pxSvc.discover(
+    const { vms } = await pxSvc.discover(
       host, port || (hostType === 'pdm' ? 8007 : 8006),
       username, realm || 'pam',
       effectivePassword, verifySSL,
@@ -141,7 +141,7 @@ async function runDiscoverySync(req, res) {
 
   const runId = await db.startRun(hostRecord.id, host);
   try {
-    const vms = await pxSvc.discover(
+    const { vms, nodes } = await pxSvc.discover(
       host, port || hostRecord.port,
       username, realm || hostRecord.realm,
       password || db.getDecryptedPassword(hostRecord), verifySSL,
@@ -149,9 +149,10 @@ async function runDiscoverySync(req, res) {
       tokenId || hostRecord.token_id || null, tokenSecret || db.getDecryptedTokenSecret(hostRecord)
     );
     await db.saveVMs(runId, hostRecord.id, host, vms);
+    await db.saveNodes(runId, hostRecord.id, host, nodes);
     await db.finishRun(runId, vms.length);
     await db.setLastDiscovery(hostRecord.id, vms.length);
-    res.json({ ok: true, vmCount: vms.length });
+    res.json({ ok: true, vmCount: vms.length, nodeCount: nodes.length });
   } catch (err) {
     await db.failRun(runId, err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -187,6 +188,11 @@ async function listVMs(req, res) {
   });
 }
 
+async function listNodes(req, res) {
+  const nodes = await db.getLatestNodes(req.query.hostId ? Number(req.query.hostId) : undefined);
+  res.json({ items: nodes, total: nodes.length });
+}
+
 async function getDashboard(req, res)    { res.json(await db.getDashboardStats()); }
 async function getDrift(req, res)        { res.json(await db.getDrift()); }
 async function getNodeTopology(req, res) { res.json(await db.getNodeTopology()); }
@@ -219,6 +225,6 @@ async function exportCSV(req, res) {
 module.exports = {
   listHosts, addHost, updateHost, deleteHost, testHost,
   runDiscovery, runDiscoverySync,
-  listVMs, exportCSV,
+  listVMs, exportCSV, listNodes,
   getDashboard, getDrift, getNodeTopology, getStaleVMs, getSnapshots, getRunHistory,
 };

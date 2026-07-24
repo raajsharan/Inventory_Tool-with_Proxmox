@@ -232,6 +232,57 @@ async function getLatestVMs(hostId) {
 }
 
 // ---------------------------------------------------------------------------
+// Cluster node records (physical/virtual Proxmox hosts, not guests)
+// ---------------------------------------------------------------------------
+
+async function saveNodes(runId, hostId, sourceHost, nodes) {
+  if (!nodes || !nodes.length) return;
+  const values = [];
+  const params = [];
+  let i = 1;
+  for (const n of nodes) {
+    values.push(
+      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
+    );
+    params.push(
+      runId, hostId, sourceHost,
+      n.node, n.status, n.ip_address, n.mac_address,
+      n.os_type, n.os_version, n.cpu_model, n.cpu_cores, n.cpu_sockets,
+      n.memory_mb, n.uptime_seconds, n.vm_count, n.snapshot_count
+    );
+  }
+  await db.query(
+    `INSERT INTO proxmox_discovered_nodes
+       (run_id, host_id, source_host,
+        node, status, ip_address, mac_address,
+        os_type, os_version, cpu_model, cpu_cores, cpu_sockets,
+        memory_mb, uptime_seconds, vm_count, snapshot_count)
+     VALUES ${values.join(',')}`,
+    params
+  );
+}
+
+async function getLatestNodes(hostId) {
+  const params = [];
+  let where = '';
+  if (hostId) { params.push(hostId); where = 'AND v.host_id = $1'; }
+  const { rows } = await db.query(
+    `WITH latest_runs AS (
+       SELECT DISTINCT ON (host_id) id AS run_id, host_id
+       FROM proxmox_discovery_runs
+       WHERE status = 'success' ${where}
+       ORDER BY host_id, run_at DESC
+     )
+     SELECT v.*
+     FROM proxmox_discovered_nodes v
+     JOIN latest_runs lr ON lr.run_id = v.run_id AND lr.host_id = v.host_id
+     ORDER BY v.source_host, v.node`,
+    params
+  );
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard stats
 // ---------------------------------------------------------------------------
 
@@ -406,5 +457,6 @@ module.exports = {
   setHostRunning, setLastDiscovery, getDecryptedPassword, getDecryptedTokenSecret,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
+  saveNodes, getLatestNodes,
   getDashboardStats, getDrift, getNodeTopology, getStaleVMs, getSnapshotVMs,
 };

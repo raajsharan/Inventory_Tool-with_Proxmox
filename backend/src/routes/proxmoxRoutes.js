@@ -18,6 +18,7 @@ router.post  ('/discover',        ...adminGuard, ctrl.runDiscoverySync);
 
 // All authenticated users: read data
 router.get('/vms',           ...guard, ctrl.listVMs);
+router.get('/nodes',         ...guard, ctrl.listNodes);
 router.get('/vms/export',    ...guard, ctrl.exportCSV);
 router.get('/dashboard',     ...guard, ctrl.getDashboard);
 router.get('/drift',         ...guard, ctrl.getDrift);

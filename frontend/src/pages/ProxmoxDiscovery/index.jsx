@@ -3,9 +3,11 @@ import { Typography, Tabs, Card } from 'antd';
 import {
   DashboardOutlined, UnorderedListOutlined, CloudServerOutlined,
   SwapOutlined, CameraOutlined, ApartmentOutlined, WarningOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons';
 import PVEDashboard    from './components/PVEDashboard.jsx';
 import PVEList         from './components/PVEList.jsx';
+import PVENodesList    from './components/PVENodesList.jsx';
 import PVEHosts        from './components/PVEHosts.jsx';
 import PVEDrift        from './components/PVEDrift.jsx';
 import PVESnapshots    from './components/PVESnapshots.jsx';
@@ -28,6 +30,11 @@ export default function ProxmoxDiscovery() {
       key: 'vms',
       label: <span><UnorderedListOutlined /> VMs &amp; Containers</span>,
       children: <PVEList />,
+    },
+    {
+      key: 'nodes',
+      label: <span><ClusterOutlined /> Cluster Nodes</span>,
+      children: <PVENodesList />,
     },
     {
       key: 'hosts',

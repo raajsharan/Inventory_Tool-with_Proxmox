@@ -229,6 +229,39 @@ function normalizeOsType(ostype) {
 }
 
 // ---------------------------------------------------------------------------
+// Node hardware/network extraction helpers
+// ---------------------------------------------------------------------------
+
+// Proxmox's /nodes/{node}/network endpoint reflects /etc/network/interfaces
+// config, not live link state, and rarely exposes a physical NIC's MAC
+// (only interfaces with an explicit "hwaddress" override do). Best-effort:
+// prefer the management bridge (vmbr0) if active and addressed, else the
+// first active+addressed interface found.
+function parseNodeNetwork(ifaces) {
+  if (!Array.isArray(ifaces)) return { ip: null, mac: null };
+  const candidates = ifaces.filter(i => i.active && i.address);
+  const primary = candidates.find(i => i.iface === 'vmbr0') || candidates[0];
+  return {
+    ip:  primary?.address || null,
+    mac: primary?.hwaddress || primary?.mac || null,
+  };
+}
+
+function parseNodeStatus(status) {
+  if (!status) return {};
+  const cpu = status.cpuinfo || {};
+  return {
+    cpu_model:      cpu.model || null,
+    cpu_cores:      cpu.cores   ? Number(cpu.cores)   : null,
+    cpu_sockets:    cpu.sockets ? Number(cpu.sockets) : null,
+    memory_mb:      status.memory?.total ? Math.round(status.memory.total / 1048576) : null,
+    uptime_seconds: status.uptime || 0,
+    os_version:     status.pveversion || null,
+    kernel_version: status.kversion || null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main discovery — Proxmox VE (ticket or token)
 // ---------------------------------------------------------------------------
 
@@ -238,6 +271,7 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
 
   const CONCURRENCY = 10;
   const inventory = [];
+  const nodesOut = [];
 
   // Proxmox proxies /nodes/{node}/... requests for OTHER cluster members
   // through this entry-point host, which requires that other node to
@@ -280,10 +314,13 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
     if (!node) continue;
     const nodeGetter = await getterForNode(node);
 
-    const [qemuList, lxcList] = await Promise.all([
+    const [qemuList, lxcList, nodeStatus, nodeNetwork] = await Promise.all([
       nodeGetter(`/api2/json/nodes/${node}/qemu`).then(r => Array.isArray(r) ? r : []),
       nodeGetter(`/api2/json/nodes/${node}/lxc`).then(r => Array.isArray(r) ? r : []),
+      nodeGetter(`/api2/json/nodes/${node}/status`).catch(() => null),
+      nodeGetter(`/api2/json/nodes/${node}/network`).catch(() => null),
     ]);
+    let nodeSnapshotCount = 0;
 
     // QEMU VMs
     for (let i = 0; i < qemuList.length; i += CONCURRENCY) {
@@ -323,7 +360,7 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
           return null;
         }
       }));
-      for (const r of results) if (r) inventory.push(r);
+      for (const r of results) if (r) { inventory.push(r); nodeSnapshotCount += r.snapshot_count || 0; }
     }
 
     // LXC containers
@@ -363,11 +400,30 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
           return null;
         }
       }));
-      for (const r of results) if (r) inventory.push(r);
+      for (const r of results) if (r) { inventory.push(r); nodeSnapshotCount += r.snapshot_count || 0; }
     }
+
+    const netInfo    = parseNodeNetwork(nodeNetwork);
+    const statusInfo = parseNodeStatus(nodeStatus);
+    nodesOut.push({
+      node,
+      status:         nodeInfo.status || 'unknown',
+      ip_address:     netInfo.ip,
+      mac_address:    netInfo.mac,
+      os_type:        'Proxmox VE',
+      os_version:     statusInfo.os_version || null,
+      kernel_version: statusInfo.kernel_version || null,
+      cpu_model:      statusInfo.cpu_model || null,
+      cpu_cores:      statusInfo.cpu_cores || null,
+      cpu_sockets:    statusInfo.cpu_sockets || null,
+      memory_mb:      statusInfo.memory_mb || (nodeInfo.maxmem ? Math.round(nodeInfo.maxmem / 1048576) : null),
+      uptime_seconds: statusInfo.uptime_seconds || nodeInfo.uptime || 0,
+      vm_count:       qemuList.length + lxcList.length,
+      snapshot_count: nodeSnapshotCount,
+    });
   }
 
-  return inventory;
+  return { vms: inventory, nodes: nodesOut };
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +434,9 @@ async function discoverPDM(hostname, port, getter) {
   // PDM exposes aggregated cluster resources; try that first
   const resources = await getter('/api2/json/resources/vms').catch(() => null);
   if (Array.isArray(resources) && resources.length > 0) {
-    return resources.map(vm => ({
+    // PDM's aggregated endpoint has no per-node hardware/network detail —
+    // that's only available by querying each remote's own VE API directly.
+    const vms = resources.map(vm => ({
       vmid:            vm.vmid,
       name:            vm.name || `VM-${vm.vmid}`,
       vm_type:         vm.type || 'qemu',
@@ -398,6 +456,7 @@ async function discoverPDM(hostname, port, getter) {
       pool:            vm.pool || null,
       cluster:         vm.remote || vm.cluster || null,
     }));
+    return { vms, nodes: [] };
   }
   // Fallback: treat PDM like a VE node
   return discoverVE(hostname, port, getter, false);
