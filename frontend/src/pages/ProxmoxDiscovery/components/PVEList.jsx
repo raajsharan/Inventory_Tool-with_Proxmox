@@ -79,7 +79,28 @@ export default function PVEList() {
       title: 'IPs', dataIndex: 'ips', key: 'ips', ellipsis: true,
       render: v => Array.isArray(v) ? v.filter(i => i !== 'Not Available').join(', ') || '—' : '—',
     },
+    {
+      title: 'MAC Address', dataIndex: 'macs', key: 'macs', ellipsis: true,
+      render: v => Array.isArray(v) ? v.join(', ') || '—' : '—',
+    },
     { title: 'OS',       dataIndex: 'os_type',      key: 'os_type',     ellipsis: true, render: v => v || '—' },
+    {
+      title: 'Uptime', dataIndex: 'uptime_seconds', key: 'uptime', width: 100,
+      render: v => {
+        if (!v) return '—';
+        const d = Math.floor(v / 86400), h = Math.floor((v % 86400) / 3600);
+        return d > 0 ? `${d}d ${h}h` : `${h}h`;
+      },
+    },
+    {
+      title: 'Snapshots', dataIndex: 'snapshot_count', key: 'snapshot_count', width: 100,
+      render: v => v ? <Tag color="orange">{v}</Tag> : '0',
+    },
+    {
+      title: 'Template', dataIndex: 'is_template', key: 'is_template', width: 90,
+      render: v => v ? <Tag color="purple">Template</Tag> : '—',
+    },
+    { title: 'Pool',     dataIndex: 'pool',         key: 'pool',        ellipsis: true, render: v => v || '—' },
     {
       title: 'Tags', dataIndex: 'tags', key: 'tags',
       render: v => Array.isArray(v) && v.length ? v.map(t => <Tag key={t}>{t}</Tag>) : '—',
