@@ -232,20 +232,43 @@ function normalizeOsType(ostype) {
 // Main discovery — Proxmox VE (ticket or token)
 // ---------------------------------------------------------------------------
 
-async function discoverVE(hostname, port, getter, verifySSL) {
+async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
   const nodes = await getter('/api2/json/nodes');
   if (!Array.isArray(nodes)) throw new Error('Could not retrieve nodes from Proxmox');
 
   const CONCURRENCY = 10;
   const inventory = [];
 
+  // Proxmox proxies /nodes/{node}/... requests for OTHER cluster members
+  // through this entry-point host, which requires that other node to
+  // validate a ticket it never issued — fragile if that node has any
+  // cluster-sync/clock-skew issue, even while it's otherwise healthy and
+  // directly reachable. Prefer connecting to each node directly (same
+  // credentials, its own hostname) and only fall back to the proxied path
+  // through the entry point if a direct connection isn't possible.
+  const nodeGetterCache = new Map();
+  async function getterForNode(node) {
+    if (!creds || node === hostname) return getter;
+    if (nodeGetterCache.has(node)) return nodeGetterCache.get(node) || getter;
+    try {
+      const direct = await makeGetter(node, port, creds.username, creds.realm, creds.password, verifySSL, creds.tokenId, creds.tokenSecret);
+      await direct('/api2/json/nodes'); // confirm it actually works before committing to it
+      nodeGetterCache.set(node, direct);
+      return direct;
+    } catch {
+      nodeGetterCache.set(node, null);
+      return getter;
+    }
+  }
+
   for (const nodeInfo of nodes) {
     const node = nodeInfo.node;
     if (!node) continue;
+    const nodeGetter = await getterForNode(node);
 
     const [qemuList, lxcList] = await Promise.all([
-      getter(`/api2/json/nodes/${node}/qemu`).then(r => Array.isArray(r) ? r : []),
-      getter(`/api2/json/nodes/${node}/lxc`).then(r => Array.isArray(r) ? r : []),
+      nodeGetter(`/api2/json/nodes/${node}/qemu`).then(r => Array.isArray(r) ? r : []),
+      nodeGetter(`/api2/json/nodes/${node}/lxc`).then(r => Array.isArray(r) ? r : []),
     ]);
 
     // QEMU VMs
@@ -256,9 +279,9 @@ async function discoverVE(hostname, port, getter, verifySSL) {
           const vmid = vm.vmid;
           const base  = `/api2/json/nodes/${node}/qemu/${vmid}`;
           const [config, snaps, agentNet] = await Promise.all([
-            getter(`${base}/config`),
-            getter(`${base}/snapshot`),
-            vm.status === 'running' ? getter(`${base}/agent/network-get-interfaces`).catch(() => null) : null,
+            nodeGetter(`${base}/config`),
+            nodeGetter(`${base}/snapshot`),
+            vm.status === 'running' ? nodeGetter(`${base}/agent/network-get-interfaces`).catch(() => null) : null,
           ]);
           const { snapshot_count, snapshot_oldest } = processSnapshots(snaps);
           return {
@@ -297,8 +320,8 @@ async function discoverVE(hostname, port, getter, verifySSL) {
           const vmid = ct.vmid;
           const base  = `/api2/json/nodes/${node}/lxc/${vmid}`;
           const [config, snaps] = await Promise.all([
-            getter(`${base}/config`),
-            getter(`${base}/snapshot`),
+            nodeGetter(`${base}/config`),
+            nodeGetter(`${base}/snapshot`),
           ]);
           const { snapshot_count, snapshot_oldest } = processSnapshots(snaps);
           return {
@@ -370,32 +393,31 @@ async function discoverPDM(hostname, port, getter) {
 // Public entry point
 // ---------------------------------------------------------------------------
 
-async function discover(host, port, username, realm, password, verifySSL, hostType = 've', tokenId = null, tokenSecret = null) {
-  let getter;
-
+// Builds an authenticated getter for a given host — either a token-based
+// getter (stateless) or a ticket-based one (re-authenticates once on 401).
+// Shared by the entry-point connection and by discoverVE's per-node direct
+// connection attempts, so both go through the same auth/retry logic.
+async function makeGetter(host, port, username, realm, password, verifySSL, tokenId = null, tokenSecret = null) {
   if (tokenId && tokenSecret) {
-    // API token auth — no session needed
-    getter = path => getWithToken(host, port, path, tokenId, tokenSecret, verifySSL);
-  } else {
-    // A single ticket is reused for the whole discovery run (which can hit
-    // many nodes/VMs and take a while). If any individual request comes
-    // back Unauthorized — expired/invalidated ticket, or a transient
-    // session hiccup — re-authenticate once and retry that request before
-    // giving up, instead of failing the entire run on one stale ticket.
-    let ticket = await createTicket(host, port, username, realm, password, verifySSL);
-    getter = async (path) => {
-      try {
-        return await getWithTicket(host, port, path, ticket, verifySSL);
-      } catch (e) {
-        if (!(e instanceof ProxmoxAuthError)) throw e;
-        ticket = await createTicket(host, port, username, realm, password, verifySSL);
-        return await getWithTicket(host, port, path, ticket, verifySSL);
-      }
-    };
+    return path => getWithToken(host, port, path, tokenId, tokenSecret, verifySSL);
   }
+  let ticket = await createTicket(host, port, username, realm, password, verifySSL);
+  return async (path) => {
+    try {
+      return await getWithTicket(host, port, path, ticket, verifySSL);
+    } catch (e) {
+      if (!(e instanceof ProxmoxAuthError)) throw e;
+      ticket = await createTicket(host, port, username, realm, password, verifySSL);
+      return await getWithTicket(host, port, path, ticket, verifySSL);
+    }
+  };
+}
+
+async function discover(host, port, username, realm, password, verifySSL, hostType = 've', tokenId = null, tokenSecret = null) {
+  const getter = await makeGetter(host, port, username, realm, password, verifySSL, tokenId, tokenSecret);
 
   if (hostType === 'pdm') return discoverPDM(host, port, getter);
-  return discoverVE(host, port, getter, verifySSL);
+  return discoverVE(host, port, getter, verifySSL, { username, realm, password, tokenId, tokenSecret });
 }
 
 module.exports = { discover, ProxmoxAuthError, ProxmoxConnectionError };
