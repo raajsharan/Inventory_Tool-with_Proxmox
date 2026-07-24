@@ -253,8 +253,22 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
     try {
       const direct = await makeGetter(node, port, creds.username, creds.realm, creds.password, verifySSL, creds.tokenId, creds.tokenSecret);
       await direct('/api2/json/nodes'); // confirm it actually works before committing to it
-      nodeGetterCache.set(node, direct);
-      return direct;
+      // The upfront check only proves the node is reachable and the ticket
+      // was accepted for THIS call — it doesn't guarantee every later
+      // endpoint on this node will succeed too. Wrap so a failure on any
+      // later call (e.g. a 401 on /lxc) falls back to the proxied
+      // entry-point path instead of crashing the whole discovery run.
+      const wrapped = async (path) => {
+        try {
+          return await direct(path);
+        } catch (err) {
+          console.warn(`[proxmox] direct connection to ${node} failed for ${path} (${err.message}); falling back to proxied entry point`);
+          nodeGetterCache.set(node, null);
+          return getter(path);
+        }
+      };
+      nodeGetterCache.set(node, wrapped);
+      return wrapped;
     } catch {
       nodeGetterCache.set(node, null);
       return getter;
