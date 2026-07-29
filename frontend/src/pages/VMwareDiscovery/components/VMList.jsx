@@ -25,12 +25,13 @@ export default function VMList({ hostId }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [prefill,   setPrefill]   = useState(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((overrides = {}) => {
     setLoading(true);
-    const params = { page, pageSize };
-    if (search)      params.search     = search;
-    if (powerFilter) params.powerState = powerFilter;
-    if (hostId)      params.hostId     = hostId;
+    const effective = { page, search, powerFilter, hostId, ...overrides };
+    const params = { page: effective.page, pageSize };
+    if (effective.search)      params.search     = effective.search;
+    if (effective.powerFilter) params.powerState = effective.powerFilter;
+    if (effective.hostId)      params.hostId     = effective.hostId;
     api.get('/vmware/vms', { params })
       .then(r => setData(r.data))
       .finally(() => setLoading(false));
@@ -38,7 +39,7 @@ export default function VMList({ hostId }) {
 
   useEffect(() => { load(); }, [page, powerFilter]); // eslint-disable-line
 
-  function onSearch() { setPage(1); load(); }
+  function onSearch() { setPage(1); load({ page: 1 }); }
 
   async function onExport() {
     const params = new URLSearchParams();
@@ -165,7 +166,11 @@ export default function VMList({ hostId }) {
               placeholder="Search name, hostname, IP…"
               prefix={<SearchOutlined />}
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => {
+                const v = e.target.value;
+                setSearch(v);
+                if (!v) { setPage(1); load({ page: 1, search: '' }); }
+              }}
               onPressEnter={onSearch}
               style={{ width: 260 }}
               allowClear

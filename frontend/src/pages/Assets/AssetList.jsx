@@ -349,7 +349,11 @@ export default function AssetList({
         <Col xs={24} md={8}>
           <Input prefix={<SearchOutlined />} placeholder="Search VM, hostname, IP, user, dept"
             value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            onChange={(e) => {
+              const search = e.target.value;
+              setFilters({ ...filters, search });
+              if (!search) { setPage(1); load({ page: 1, search: '' }); }
+            }}
             onPressEnter={onSearch} allowClear />
         </Col>
         <Col xs={12} md={4}>

@@ -434,7 +434,11 @@ export default function PhysicalEsxiList() {
             prefix={<SearchOutlined />}
             placeholder="Search by name, IP, department…"
             value={filters.search}
-            onChange={e => setFilters({ ...filters, search: e.target.value })}
+            onChange={e => {
+              const search = e.target.value;
+              setFilters({ ...filters, search });
+              if (!search) { setPage(1); load({ page: 1, search: '' }); }
+            }}
             onPressEnter={onSearch}
             allowClear
           />
