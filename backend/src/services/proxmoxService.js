@@ -272,7 +272,7 @@ function parseNodeStatus(status) {
 // Main discovery — Proxmox VE (ticket or token)
 // ---------------------------------------------------------------------------
 
-async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
+async function discoverVE(hostname, port, getter, verifySSL) {
   const nodes = await getter('/api2/json/nodes');
   if (!Array.isArray(nodes)) throw new Error('Could not retrieve nodes from Proxmox');
 
@@ -280,59 +280,23 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
   const inventory = [];
   const nodesOut = [];
 
-  // Proxmox proxies /nodes/{node}/... requests for OTHER cluster members
-  // through this entry-point host, which requires that other node to
-  // validate a ticket it never issued — fragile if that node has any
-  // cluster-sync/clock-skew issue, even while it's otherwise healthy and
-  // directly reachable. Prefer connecting to each node directly (same
-  // credentials, its own hostname) and only fall back to the proxied path
-  // through the entry point if a direct connection isn't possible.
-  // A standalone host is never proxying to a peer — its "node name" (e.g.
-  // "QA-32-1") commonly differs from the configured connection address
-  // (its IP), but there's nothing to route around here, so a direct
-  // reconnect attempt would just be an unnecessary DNS lookup on a name
-  // that may not resolve, silently starving the run of any VM data.
-  const singleNode = nodes.length === 1;
-  const nodeGetterCache = new Map();
-  async function getterForNode(node) {
-    if (!creds || node === hostname || singleNode) return getter;
-    if (nodeGetterCache.has(node)) return nodeGetterCache.get(node) || getter;
-    try {
-      const direct = await makeGetter(node, port, creds.username, creds.realm, creds.password, verifySSL, creds.tokenId, creds.tokenSecret);
-      await direct('/api2/json/nodes'); // confirm it actually works before committing to it
-      // The upfront check only proves the node is reachable and the ticket
-      // was accepted for THIS call — it doesn't guarantee every later
-      // endpoint on this node will succeed too. Wrap so a failure on any
-      // later call (e.g. a 401 on /lxc) falls back to the proxied
-      // entry-point path instead of crashing the whole discovery run.
-      const wrapped = async (path) => {
-        try {
-          return await direct(path);
-        } catch (err) {
-          console.warn(`[proxmox] direct connection to ${node} failed for ${path} (${err.message}); falling back to proxied entry point`);
-          nodeGetterCache.set(node, null);
-          return getter(path);
-        }
-      };
-      nodeGetterCache.set(node, wrapped);
-      return wrapped;
-    } catch (err) {
-      console.warn(`[proxmox] direct connection to node ${node} unavailable (${err.message}); using proxied entry point`);
-      nodeGetterCache.set(node, null);
-      return getter;
-    }
-  }
-
+  // Proxmox's entry-point host proxies /nodes/{node}/... requests to
+  // other cluster members transparently — querying every node's qemu/lxc
+  // lists through the single configured connection is reliable in
+  // practice (confirmed against real multi-node clusters), so there's no
+  // need to open a second, separate connection per node. An earlier
+  // attempt to "optimize" this by connecting directly to each node's own
+  // name caused false-empty discovery runs on standalone hosts whose
+  // node name isn't a resolvable network address.
   for (const nodeInfo of nodes) {
     const node = nodeInfo.node;
     if (!node) continue;
-    const nodeGetter = await getterForNode(node);
 
     const [qemuList, lxcList, nodeStatus, nodeNetwork] = await Promise.all([
-      nodeGetter(`/api2/json/nodes/${node}/qemu`).then(r => Array.isArray(r) ? r : []),
-      nodeGetter(`/api2/json/nodes/${node}/lxc`).then(r => Array.isArray(r) ? r : []),
-      nodeGetter(`/api2/json/nodes/${node}/status`).catch(() => null),
-      nodeGetter(`/api2/json/nodes/${node}/network`).catch(() => null),
+      getter(`/api2/json/nodes/${node}/qemu`).then(r => Array.isArray(r) ? r : []),
+      getter(`/api2/json/nodes/${node}/lxc`).then(r => Array.isArray(r) ? r : []),
+      getter(`/api2/json/nodes/${node}/status`).catch(() => null),
+      getter(`/api2/json/nodes/${node}/network`).catch(() => null),
     ]);
     if (qemuList.length === 0 && lxcList.length === 0) {
       console.warn(`[proxmox] node ${node} returned 0 QEMU VMs and 0 LXC containers — check server logs above for a swallowed HTTP error if VMs are expected`);
@@ -347,9 +311,9 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
           const vmid = vm.vmid;
           const base  = `/api2/json/nodes/${node}/qemu/${vmid}`;
           const [config, snaps, agentNet] = await Promise.all([
-            nodeGetter(`${base}/config`),
-            nodeGetter(`${base}/snapshot`),
-            vm.status === 'running' ? nodeGetter(`${base}/agent/network-get-interfaces`).catch(() => null) : null,
+            getter(`${base}/config`),
+            getter(`${base}/snapshot`),
+            vm.status === 'running' ? getter(`${base}/agent/network-get-interfaces`).catch(() => null) : null,
           ]);
           const { snapshot_count, snapshot_oldest } = processSnapshots(snaps);
           return {
@@ -388,8 +352,8 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
           const vmid = ct.vmid;
           const base  = `/api2/json/nodes/${node}/lxc/${vmid}`;
           const [config, snaps] = await Promise.all([
-            nodeGetter(`${base}/config`),
-            nodeGetter(`${base}/snapshot`),
+            getter(`${base}/config`),
+            getter(`${base}/snapshot`),
           ]);
           const { snapshot_count, snapshot_oldest } = processSnapshots(snaps);
           return {
@@ -507,7 +471,7 @@ async function discover(host, port, username, realm, password, verifySSL, hostTy
   const getter = await makeGetter(host, port, username, realm, password, verifySSL, tokenId, tokenSecret);
 
   if (hostType === 'pdm') return discoverPDM(host, port, getter);
-  return discoverVE(host, port, getter, verifySSL, { username, realm, password, tokenId, tokenSecret });
+  return discoverVE(host, port, getter, verifySSL);
 }
 
 module.exports = { discover, ProxmoxAuthError, ProxmoxConnectionError };
