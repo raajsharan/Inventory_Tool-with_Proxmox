@@ -1,5 +1,18 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Multer throws these for things like an oversized upload — genuine user
+// error, not a server fault, so they shouldn't be masked as a 500 in prod.
+function translateMulterError(err) {
+  switch (err.code) {
+    case 'LIMIT_FILE_SIZE':
+      return { status: 400, message: 'File is too large — check the upload page for the size limit' };
+    case 'LIMIT_UNEXPECTED_FILE':
+      return { status: 400, message: `Unexpected file field "${err.field}"` };
+    default:
+      return { status: 400, message: err.message || 'File upload failed' };
+  }
+}
+
 // Translate common PostgreSQL errors into actionable 4xx responses instead
 // of an opaque "Internal Server Error".
 function translatePgError(err) {
@@ -31,15 +44,17 @@ function translatePgError(err) {
 
 // eslint-disable-next-line no-unused-vars
 module.exports = (err, req, res, _next) => {
-  const pg = err.code ? translatePgError(err) : null;
-  const status = pg?.status || err.status || 500;
+  const isMulter = err.name === 'MulterError';
+  const pg = !isMulter && err.code ? translatePgError(err) : null;
+  const multer = isMulter ? translateMulterError(err) : null;
+  const status = multer?.status || pg?.status || err.status || 500;
   // eslint-disable-next-line no-console
   if (status >= 500) console.error('[error]', err);
 
   // 502/503 are thrown explicitly by services (ME EC unreachable, schema missing) — pass message through.
   // All other 5xx hide the raw message in production to avoid leaking internals.
   const isKnown5xx = status === 502 || status === 503;
-  const message = pg?.message
+  const message = multer?.message || pg?.message
     || (status < 500 || isKnown5xx || isDev ? (err.message || 'Internal Server Error') : 'Internal Server Error');
   const details = pg?.details ?? err.details;
 

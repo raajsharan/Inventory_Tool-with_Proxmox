@@ -301,7 +301,12 @@ async function uploadMacFile(req, res, next) {
       return res.status(400).json({ error: 'Only .csv and .xlsx files are supported' });
     }
 
-    const { rows, meta } = await macLookupSvc.parseFile(req.file.buffer, req.file.originalname);
+    let rows, meta;
+    try {
+      ({ rows, meta } = await macLookupSvc.parseFile(req.file.buffer, req.file.originalname));
+    } catch (parseErr) {
+      return res.status(400).json({ error: `Could not read "${req.file.originalname}" — file may be corrupted or not a valid ${ext.endsWith('.csv') ? 'CSV' : 'Excel'} file (${parseErr.message})` });
+    }
     if (!rows.length) {
       return res.status(422).json({
         error: 'No valid MAC rows found. Check column headers (MAC Address, IP Address).',
