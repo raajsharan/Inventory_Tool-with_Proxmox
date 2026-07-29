@@ -56,6 +56,7 @@ function httpsReq({ hostname, port, path, method = 'GET', headers = {}, body, bo
     req.on('error', err =>
       reject(new ProxmoxConnectionError(`Cannot reach ${hostname}:${port} — ${err.message}`))
     );
+    req.setTimeout(10000, () => req.destroy(new ProxmoxConnectionError(`Timed out reaching ${hostname}:${port}`)));
     if (bodyBuf) req.write(bodyBuf);
     req.end();
   });
@@ -81,7 +82,10 @@ async function getWithTicket(hostname, port, path, ticket, verifySSL) {
     verifySSL,
   });
   if (status === 401 || status === 403) throw new ProxmoxAuthError(`Unauthorized at ${path}`);
-  if (status >= 400) return null;
+  if (status >= 400) {
+    console.warn(`[proxmox] GET ${path} on ${hostname}:${port} returned HTTP ${status}`);
+    return null;
+  }
   return parseData(body);
 }
 
@@ -92,7 +96,10 @@ async function getWithToken(hostname, port, path, tokenId, tokenSecret, verifySS
     verifySSL,
   });
   if (status === 401 || status === 403) throw new ProxmoxAuthError(`Unauthorized at ${path}`);
-  if (status >= 400) return null;
+  if (status >= 400) {
+    console.warn(`[proxmox] GET ${path} on ${hostname}:${port} returned HTTP ${status}`);
+    return null;
+  }
   return parseData(body);
 }
 
@@ -280,9 +287,15 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
   // directly reachable. Prefer connecting to each node directly (same
   // credentials, its own hostname) and only fall back to the proxied path
   // through the entry point if a direct connection isn't possible.
+  // A standalone host is never proxying to a peer — its "node name" (e.g.
+  // "QA-32-1") commonly differs from the configured connection address
+  // (its IP), but there's nothing to route around here, so a direct
+  // reconnect attempt would just be an unnecessary DNS lookup on a name
+  // that may not resolve, silently starving the run of any VM data.
+  const singleNode = nodes.length === 1;
   const nodeGetterCache = new Map();
   async function getterForNode(node) {
-    if (!creds || node === hostname) return getter;
+    if (!creds || node === hostname || singleNode) return getter;
     if (nodeGetterCache.has(node)) return nodeGetterCache.get(node) || getter;
     try {
       const direct = await makeGetter(node, port, creds.username, creds.realm, creds.password, verifySSL, creds.tokenId, creds.tokenSecret);
@@ -303,7 +316,8 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
       };
       nodeGetterCache.set(node, wrapped);
       return wrapped;
-    } catch {
+    } catch (err) {
+      console.warn(`[proxmox] direct connection to node ${node} unavailable (${err.message}); using proxied entry point`);
       nodeGetterCache.set(node, null);
       return getter;
     }
@@ -320,6 +334,9 @@ async function discoverVE(hostname, port, getter, verifySSL, creds = null) {
       nodeGetter(`/api2/json/nodes/${node}/status`).catch(() => null),
       nodeGetter(`/api2/json/nodes/${node}/network`).catch(() => null),
     ]);
+    if (qemuList.length === 0 && lxcList.length === 0) {
+      console.warn(`[proxmox] node ${node} returned 0 QEMU VMs and 0 LXC containers — check server logs above for a swallowed HTTP error if VMs are expected`);
+    }
     let nodeSnapshotCount = 0;
 
     // QEMU VMs
