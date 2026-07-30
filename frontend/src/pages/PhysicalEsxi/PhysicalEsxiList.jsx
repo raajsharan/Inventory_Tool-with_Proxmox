@@ -13,6 +13,7 @@ import {
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
+import { copyToClipboard } from '../../utils/clipboard';
 
 const PAGE_KEY = 'physical_esxi_servers';
 
@@ -197,7 +198,7 @@ export default function PhysicalEsxiList() {
         const { data: d } = await api.get(`/physical-esxi/${id}/${PW_KINDS[kind].endpoint}`);
         pwd = d.password || '';
       }
-      await navigator.clipboard.writeText(pwd);
+      await copyToClipboard(pwd);
       message.success('Password copied to clipboard');
     } catch (e) { message.error(e.response?.data?.error || 'Cannot copy password'); }
   }

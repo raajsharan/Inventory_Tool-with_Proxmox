@@ -9,6 +9,7 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 const { Text } = Typography;
 
@@ -130,7 +131,7 @@ export function MaskedField({ hostId, fieldName, canReveal, onRevealLog }) {
 
   const copy = () => {
     if (!value) return;
-    navigator.clipboard.writeText(value).then(() => {
+    copyToClipboard(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
@@ -166,7 +167,7 @@ export function TruncatedUUID({ value }) {
   if (!value) return <Text type="secondary">—</Text>;
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    navigator.clipboard.writeText(value).then(() => {
+    copyToClipboard(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });

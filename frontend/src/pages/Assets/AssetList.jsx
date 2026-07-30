@@ -11,6 +11,7 @@ import {
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
+import { copyToClipboard } from '../../utils/clipboard';
 
 export default function AssetList({
   apiPrefix = '/assets',
@@ -195,7 +196,7 @@ export default function AssetList({
         const { data } = await api.get(`${apiPrefix}/${id}/password`);
         pwd = data.password || '';
       }
-      await navigator.clipboard.writeText(pwd);
+      await copyToClipboard(pwd);
       message.success('Password copied to clipboard');
     } catch (e) {
       message.error(e.response?.data?.error || 'Cannot copy password');

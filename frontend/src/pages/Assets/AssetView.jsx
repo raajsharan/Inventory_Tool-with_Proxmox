@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
+import { copyToClipboard } from '../../utils/clipboard';
 
 const NA = <Typography.Text type="secondary">—</Typography.Text>;
 
@@ -69,9 +70,13 @@ function CopyableIp({ ip }) {
       <Tooltip title="Copy">
         <Button
           size="small" type="text" icon={<CopyOutlined />}
-          onClick={() => {
-            navigator.clipboard?.writeText(ip);
-            message.success(`Copied ${ip}`);
+          onClick={async () => {
+            try {
+              await copyToClipboard(ip);
+              message.success(`Copied ${ip}`);
+            } catch {
+              message.error('Cannot copy to clipboard');
+            }
           }}
         />
       </Tooltip>
@@ -206,7 +211,7 @@ export default function AssetView({
         const { data } = await api.get(`${apiPrefix}/${id}/password`);
         pwd = data.password || '';
       }
-      await navigator.clipboard.writeText(pwd);
+      await copyToClipboard(pwd);
       message.success('Password copied to clipboard');
     } catch (e) {
       message.error(e.response?.data?.error || 'Cannot copy password');
