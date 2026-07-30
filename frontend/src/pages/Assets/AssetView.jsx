@@ -198,6 +198,21 @@ export default function AssetView({
     } finally { setPwdLoading(false); }
   }
 
+  async function copyPassword() {
+    if (!record?.hasPassword) return;
+    try {
+      let pwd = pwdShown;
+      if (pwd === null) {
+        const { data } = await api.get(`${apiPrefix}/${id}/password`);
+        pwd = data.password || '';
+      }
+      await navigator.clipboard.writeText(pwd);
+      message.success('Password copied to clipboard');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Cannot copy password');
+    }
+  }
+
   async function onSetPassword({ newPassword }) {
     setSetpwLoading(true);
     try {
@@ -297,6 +312,12 @@ export default function AssetView({
             icon={pwdShown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
             loading={pwdLoading}
             onClick={togglePassword}
+          />
+        </Tooltip>
+        <Tooltip title="Copy password">
+          <Button size="small" type="text"
+            icon={<CopyOutlined style={{ color: '#aaa' }} />}
+            onClick={copyPassword}
           />
         </Tooltip>
         {canWrite && (

@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined,
-  LockOutlined, UnlockOutlined,
+  LockOutlined, UnlockOutlined, CopyOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -187,6 +187,21 @@ export default function AssetList({
     }
   }
 
+  async function copyPassword(id, hasPassword) {
+    if (!hasPassword) return;
+    try {
+      let pwd = revealed[id];
+      if (pwd === undefined) {
+        const { data } = await api.get(`${apiPrefix}/${id}/password`);
+        pwd = data.password || '';
+      }
+      await navigator.clipboard.writeText(pwd);
+      message.success('Password copied to clipboard');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Cannot copy password');
+    }
+  }
+
   const ddOptions = (cat) => (dropdowns[cat] || []).map(d => ({ label: d.value, value: d.value }));
 
   const yesNo = (v) => v == null ? '' : (v ? <Tag color="green">Yes</Tag> : <Tag>No</Tag>);
@@ -288,6 +303,11 @@ export default function AssetList({
                 icon={shown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
                 loading={!!revealing[r.id]}
                 onClick={() => togglePassword(r.id, r.hasPassword)} />
+            </Tooltip>
+            <Tooltip title="Copy password">
+              <Button size="small" type="text"
+                icon={<CopyOutlined style={{ color: '#aaa' }} />}
+                onClick={() => copyPassword(r.id, r.hasPassword)} />
             </Tooltip>
             {canWrite && (
               <Tooltip title="Change password">

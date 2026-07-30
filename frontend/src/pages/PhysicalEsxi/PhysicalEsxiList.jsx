@@ -7,7 +7,7 @@ import {
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined,
-  EyeOutlined, EyeInvisibleOutlined, LockOutlined, UnlockOutlined,
+  EyeOutlined, EyeInvisibleOutlined, LockOutlined, UnlockOutlined, CopyOutlined,
   CheckCircleFilled, CloseCircleFilled, SyncOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
@@ -188,6 +188,20 @@ export default function PhysicalEsxiList() {
     finally { setRevealing(p => { const n = { ...p }; delete n[key]; return n; }); }
   }
 
+  async function copyPassword(id, hasPassword, kind = 'asset') {
+    if (!hasPassword) return;
+    const key = `${kind}:${id}`;
+    try {
+      let pwd = revealed[key];
+      if (pwd === undefined) {
+        const { data: d } = await api.get(`/physical-esxi/${id}/${PW_KINDS[kind].endpoint}`);
+        pwd = d.password || '';
+      }
+      await navigator.clipboard.writeText(pwd);
+      message.success('Password copied to clipboard');
+    } catch (e) { message.error(e.response?.data?.error || 'Cannot copy password'); }
+  }
+
   async function onSetPassword({ newPassword }) {
     if (!setpwTarget) return;
     setSetpwLoading(true);
@@ -238,6 +252,10 @@ export default function PhysicalEsxiList() {
         <Tooltip title={shown ? 'Hide' : 'Reveal password'}>
           <Button size="small" type="text" icon={shown ? <EyeInvisibleOutlined /> : <EyeOutlined />}
             loading={!!revealing[key]} onClick={() => togglePassword(r.id, hasPw, kind)} />
+        </Tooltip>
+        <Tooltip title="Copy password">
+          <Button size="small" type="text" icon={<CopyOutlined style={{ color: '#aaa' }} />}
+            onClick={() => copyPassword(r.id, hasPw, kind)} />
         </Tooltip>
         {canWrite && (
           <Tooltip title="Change password">
