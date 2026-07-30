@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
 const swaggerUi = require('swagger-ui-express');
@@ -13,6 +14,9 @@ const routes = require('./src/routes');
 const app = express();
 
 app.use(helmet());
+// Large JSON payloads (asset lists, discovery/dashboard aggregations) and the
+// static frontend bundle all benefit from gzip — cheap win, no correctness risk.
+app.use(compression());
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4000').split(',').map(s => s.trim());
 app.use(cors({
   origin: (origin, cb) => {

@@ -361,14 +361,26 @@ async function getDrift() {
      ORDER BY host_id, run_at DESC`
   );
 
-  const results = [];
-  for (const run of runRows) {
-    if (!run.previous_run_id) continue;
+  const diffable = runRows.filter(r => r.previous_run_id);
+  if (!diffable.length) return [];
 
-    const [{ rows: curr }, { rows: prev }] = await Promise.all([
-      db.query('SELECT * FROM proxmox_discovered_vms WHERE run_id = $1', [run.current_run_id]),
-      db.query('SELECT * FROM proxmox_discovered_vms WHERE run_id = $1', [run.previous_run_id]),
-    ]);
+  // One query for every VM row needed across all hosts, instead of two
+  // per host in a loop — avoids an N+1 query pattern that scaled linearly
+  // with host count.
+  const runIds = [...new Set(diffable.flatMap(r => [r.current_run_id, r.previous_run_id]))];
+  const { rows: allVms } = await db.query(
+    'SELECT * FROM proxmox_discovered_vms WHERE run_id = ANY($1::int[])', [runIds]
+  );
+  const vmsByRun = new Map();
+  for (const vm of allVms) {
+    if (!vmsByRun.has(vm.run_id)) vmsByRun.set(vm.run_id, []);
+    vmsByRun.get(vm.run_id).push(vm);
+  }
+
+  const results = [];
+  for (const run of diffable) {
+    const curr = vmsByRun.get(run.current_run_id)  || [];
+    const prev = vmsByRun.get(run.previous_run_id) || [];
 
     const key       = v => `${v.node}/${v.vmid}`;
     const currByKey = Object.fromEntries(curr.map(v => [key(v), v]));

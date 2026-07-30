@@ -593,6 +593,26 @@ const STATEMENTS = [
 
   // ── Change Field Types → Dropdown Master auto-linking
   `ALTER TABLE builtin_field_overrides ADD COLUMN IF NOT EXISTS dropdown_category VARCHAR(120)`,
+
+  // ── Global search / GlobalSearch.jsx does ILIKE '%q%' (leading wildcard)
+  // against vm_name/os_hostname/ip_address across all four asset tables —
+  // a plain btree index (already present) can't be used for that pattern,
+  // so every keystroke was a sequential scan. GIN trigram indexes make
+  // ILIKE '%...%' sargable and get faster as row counts grow, which a
+  // btree index never would.
+  `CREATE EXTENSION IF NOT EXISTS pg_trgm`,
+  `CREATE INDEX IF NOT EXISTS idx_assets_vm_name_trgm      ON assets USING GIN (vm_name gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_assets_hostname_trgm     ON assets USING GIN (os_hostname gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_assets_ip_trgm           ON assets USING GIN (ip_address gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_beijing_vm_name_trgm     ON beijing_assets USING GIN (vm_name gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_beijing_hostname_trgm    ON beijing_assets USING GIN (os_hostname gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_beijing_ip_trgm          ON beijing_assets USING GIN (ip_address gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_ext_vm_name_trgm         ON ext_assets USING GIN (vm_name gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_ext_hostname_trgm        ON ext_assets USING GIN (os_hostname gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_ext_ip_trgm              ON ext_assets USING GIN (ip_address gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_phx_vm_name_trgm         ON physical_esxi_servers USING GIN (vm_name gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_phx_hostname_trgm        ON physical_esxi_servers USING GIN (os_hostname gin_trgm_ops)`,
+  `CREATE INDEX IF NOT EXISTS idx_phx_ip_trgm              ON physical_esxi_servers USING GIN (ip_address gin_trgm_ops)`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get
