@@ -46,7 +46,7 @@ async function runDiscovery(hostId) {
   } catch (err) {
     console.error(`[proxmox-scheduler] discovery failed for ${host.host}: ${err.message}`);
     await db.failRun(runId, err.message);
-    await db.setHostRunning(hostId, false);
+    await db.setLastDiscoveryFailed(hostId, err.message);
   } finally {
     running.delete(hostId);
   }

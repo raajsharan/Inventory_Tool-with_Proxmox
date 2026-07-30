@@ -44,6 +44,18 @@ const STATEMENTS = [
   // ── Proxmox discovery: MAC addresses (proxmox_schema.sql predates this column)
   `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS macs TEXT[]`,
 
+  // ── VMware / Proxmox discovery: current failure state on the host row.
+  // Same gap as Hyper-V below — last_discovery_at/last_vm_count are only
+  // ever set on SUCCESS, so a host that fails every run (bad password,
+  // unreachable, etc.) looks identical to one that's never run. These
+  // columns back the dashboard alert bell.
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS last_status VARCHAR(20)`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_status VARCHAR(20)`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
+
   // ── Proxmox discovery: physical/cluster node inventory (proxmox_schema.sql predates this table)
   `CREATE TABLE IF NOT EXISTS proxmox_discovered_nodes (
       id              SERIAL PRIMARY KEY,

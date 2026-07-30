@@ -155,6 +155,7 @@ async function runDiscoverySync(req, res) {
     res.json({ ok: true, vmCount: vms.length, nodeCount: nodes.length });
   } catch (err) {
     await db.failRun(runId, err.message);
+    await db.setLastDiscoveryFailed(hostRecord.id, err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 }

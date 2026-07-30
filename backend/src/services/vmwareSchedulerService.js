@@ -51,7 +51,7 @@ async function runDiscovery(host) {
     // eslint-disable-next-line no-console
     console.error(`[vmware-scheduler] ${host} failed:`, err.message);
     if (runId) await dbSvc.failRun(runId, err.message);
-    await dbSvc.setHostRunning(record.id, false);
+    await dbSvc.setLastDiscoveryFailed(record.id, err.message);
   } finally {
     running.delete(host);
   }

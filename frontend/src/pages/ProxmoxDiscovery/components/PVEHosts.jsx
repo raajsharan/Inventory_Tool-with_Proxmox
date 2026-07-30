@@ -15,6 +15,13 @@ const { Option } = Select;
 
 function statusTag(h) {
   if (h.is_running) return <Tag color="processing">Running</Tag>;
+  if (h.last_status === 'error') {
+    return (
+      <Tooltip title={h.last_error || 'Discovery failed'}>
+        <Tag color="error" style={{ cursor: 'help' }}>Failed</Tag>
+      </Tooltip>
+    );
+  }
   if (h.last_discovery_at) return <Tag color="success">Idle</Tag>;
   return <Tag color="default">Never run</Tag>;
 }

@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
 import api from '../../api/client';
 import GlobalSearch from '../GlobalSearch.jsx';
+import AlertBell from '../AlertBell.jsx';
 import { NAV_STORAGE_KEY, loadNavOrder } from '../../pages/Admin/NavOrder.jsx';
 
 const { Sider, Header, Content, Footer } = Layout;
@@ -266,6 +267,7 @@ export default function AppLayout() {
                 onClick={toggleMode}
               />
             </Tooltip>
+            <AlertBell />
             <Typography.Text type="secondary">{user?.role?.replace('_',' ')}</Typography.Text>
             <Dropdown
               menu={{

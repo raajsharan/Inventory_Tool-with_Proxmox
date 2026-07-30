@@ -41,5 +41,6 @@ router.use('/migration',                authenticate, requirePageAccess('migrati
 router.use('/endpoint-central',         authenticate, requirePageAccess('endpoint_central'),   require('./endpointCentralRoutes'));
 router.use('/teams-notification',       require('./teamsNotificationRoutes'));
 router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
+router.use('/alerts',                   require('./alertsRoutes'));
 
 module.exports = router;

@@ -14,6 +14,13 @@ const { Text } = Typography;
 
 function statusTag(host) {
   if (host.is_running) return <Tag color="processing">Running</Tag>;
+  if (host.last_status === 'error') {
+    return (
+      <Tooltip title={host.last_error || 'Discovery failed'}>
+        <Tag color="error" style={{ cursor: 'help' }}>Failed</Tag>
+      </Tooltip>
+    );
+  }
   if (host.last_discovery_at) return <Tag color="success">Idle</Tag>;
   return <Tag color="default">Never Run</Tag>;
 }

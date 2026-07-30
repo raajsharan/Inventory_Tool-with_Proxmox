@@ -171,7 +171,7 @@ async function runDiscoverySync(req, res, next) {
       await dbSvc.setLastDiscovery(record.id, vms.length);
       res.json({ message: 'Discovery complete', vmCount: vms.length, host });
     } catch (err) {
-      await dbSvc.setHostRunning(record.id, false);
+      await dbSvc.setLastDiscoveryFailed(record.id, err.message);
       if (runId) await dbSvc.failRun(runId, err.message);
       if (err instanceof vmSvc.VMwareAuthError) {
         return res.status(401).json({ error: err.message });

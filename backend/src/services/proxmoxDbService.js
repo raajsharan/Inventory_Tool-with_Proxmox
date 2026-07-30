@@ -15,7 +15,7 @@ async function listHosts() {
   const { rows } = await db.query(
     `SELECT id, host, host_type, username, realm, token_id, port, verify_ssl,
             interval_minutes, scheduler_enabled, last_discovery_at, last_vm_count,
-            is_running, created_at, updated_at
+            is_running, last_status, last_error, last_attempt_at, created_at, updated_at
      FROM proxmox_hosts ORDER BY host`
   );
   return rows;
@@ -119,8 +119,20 @@ async function setHostRunning(id, running) {
 
 async function setLastDiscovery(id, vmCount) {
   await db.query(
-    'UPDATE proxmox_hosts SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE WHERE id = $1',
+    `UPDATE proxmox_hosts
+        SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE,
+            last_status = 'success', last_error = NULL, last_attempt_at = NOW()
+      WHERE id = $1`,
     [id, vmCount]
+  );
+}
+
+async function setLastDiscoveryFailed(id, errorMessage) {
+  await db.query(
+    `UPDATE proxmox_hosts
+        SET is_running = FALSE, last_status = 'error', last_error = $2, last_attempt_at = NOW()
+      WHERE id = $1`,
+    [id, errorMessage]
   );
 }
 
@@ -454,7 +466,7 @@ async function getSnapshotVMs() {
 
 module.exports = {
   listHosts, getHostById, getHostByName, upsertHost, updateHostById, deleteHost,
-  setHostRunning, setLastDiscovery, getDecryptedPassword, getDecryptedTokenSecret,
+  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword, getDecryptedTokenSecret,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
   saveNodes, getLatestNodes,
