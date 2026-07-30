@@ -51,6 +51,12 @@ function httpsReq({ hostname, port, path, method, headers, body, verifySSL }) {
           ...headers,
         },
         agent,
+        // At socket-creation time so a hung DNS lookup/TCP handshake (e.g. a
+        // firewall silently dropping packets) still trips it — without this
+        // there was no timeout at all, so a hung host request/test-connection
+        // would hang until an upstream reverse proxy gave up first, surfacing
+        // as an opaque 504 with no useful error message.
+        timeout: 10000,
       },
       (res) => {
         const chunks = [];
@@ -63,6 +69,7 @@ function httpsReq({ hostname, port, path, method, headers, body, verifySSL }) {
       }
     );
     req.on('error', (err) => reject(new VMwareConnectionError(`Cannot reach ${hostname}:${port} — ${err.message}`)));
+    req.on('timeout', () => req.destroy(new VMwareConnectionError(`Timed out reaching ${hostname}:${port} after 10s`)));
     if (bodyBuf) req.write(bodyBuf);
     req.end();
   });

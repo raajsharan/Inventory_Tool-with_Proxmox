@@ -42,6 +42,13 @@ function httpsReq({ hostname, port, path, method = 'GET', headers = {}, body, bo
     const req = https.request(
       {
         hostname, port, path, method, agent,
+        // Passed here (socket-creation time) rather than via req.setTimeout()
+        // after the fact — that only reliably applies once a socket is
+        // already connected, so a hung DNS lookup or TCP handshake (e.g. a
+        // firewall silently dropping packets) would never trip it, leaving
+        // the request to hang until an upstream reverse proxy times out
+        // instead (surfacing as an opaque 504 with no useful message).
+        timeout: 10000,
         headers: {
           ...(bodyBuf ? { 'Content-Type': contentType, 'Content-Length': bodyBuf.length } : {}),
           ...headers,
@@ -56,7 +63,7 @@ function httpsReq({ hostname, port, path, method = 'GET', headers = {}, body, bo
     req.on('error', err =>
       reject(new ProxmoxConnectionError(`Cannot reach ${hostname}:${port} — ${err.message}`))
     );
-    req.setTimeout(10000, () => req.destroy(new ProxmoxConnectionError(`Timed out reaching ${hostname}:${port}`)));
+    req.on('timeout', () => req.destroy(new ProxmoxConnectionError(`Timed out reaching ${hostname}:${port} after 10s`)));
     if (bodyBuf) req.write(bodyBuf);
     req.end();
   });
