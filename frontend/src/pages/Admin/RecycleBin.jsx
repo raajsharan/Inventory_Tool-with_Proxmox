@@ -48,7 +48,13 @@ export default function RecycleBin() {
       message.success(`Restored "${row.name || row.id}"`);
       load();
     } catch (e) {
-      message.error(e.response?.data?.error || 'Restore failed');
+      // A 409 here carries the actual reason in `details` (e.g. the IP/asset
+      // tag was reused by another active record since this one was deleted)
+      // — the top-level "error" is just a generic label, show the specific
+      // reason instead of leaving the user to guess why it failed.
+      const details = e.response?.data?.details;
+      const detailMsg = details && Object.values(details)[0];
+      message.error(detailMsg || e.response?.data?.error || 'Restore failed');
     }
   }
 
