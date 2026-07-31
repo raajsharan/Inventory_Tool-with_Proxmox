@@ -109,6 +109,9 @@ export default function GlobalSearch() {
                       <span>
                         {it.vm_name || it.os_hostname || '(unnamed)'}
                         <Tag color={meta.color} style={{ marginLeft: 8, fontSize: 10 }}>{meta.label}</Tag>
+                        {it.decommissioned && (
+                          <Tag color="red" style={{ fontSize: 10 }}>Decommissioned</Tag>
+                        )}
                       </span>
                     }
                     description={
