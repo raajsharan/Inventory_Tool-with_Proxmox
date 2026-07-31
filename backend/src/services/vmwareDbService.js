@@ -6,6 +6,7 @@
 
 const db       = require('../config/db');
 const crypto   = require('../utils/crypto');
+const wsHub    = require('./wsHub');
 
 // ---------------------------------------------------------------------------
 // Hosts (credentials)
@@ -78,6 +79,9 @@ async function setLastDiscovery(id, vmCount) {
       WHERE id = $1`,
     [id, vmCount]
   );
+  // A recovery clears this host's alert-bell entry — tell connected clients
+  // to refetch, same as on a failure.
+  wsHub.broadcastAlertsChanged();
 }
 
 async function setLastDiscoveryFailed(id, errorMessage) {
@@ -87,6 +91,7 @@ async function setLastDiscoveryFailed(id, errorMessage) {
       WHERE id = $1`,
     [id, errorMessage]
   );
+  wsHub.broadcastAlertsChanged();
 }
 
 // Best-effort hardware telemetry — called alongside a successful discovery

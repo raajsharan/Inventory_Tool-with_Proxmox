@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -10,6 +11,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./src/config/swagger');
 const errorHandler = require('./src/middleware/errorHandler');
 const routes = require('./src/routes');
+const wsHub = require('./src/services/wsHub');
 
 const app = express();
 
@@ -86,7 +88,9 @@ const PORT = process.env.PORT || 4000;
     // eslint-disable-next-line no-console
     console.error('[hyperv-scheduler] failed to start:', e);
   }
-  app.listen(PORT, () => {
+  const server = http.createServer(app);
+  wsHub.init(server);
+  server.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`[inventory-api] listening on :${PORT} (${process.env.NODE_ENV || 'development'})`);
   });

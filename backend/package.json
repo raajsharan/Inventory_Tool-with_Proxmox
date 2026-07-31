@@ -31,7 +31,8 @@
     "sanitize-html": "2.17.5",
     "ssh2": "^1.17.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

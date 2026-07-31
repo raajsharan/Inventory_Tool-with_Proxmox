@@ -6,6 +6,7 @@
 
 const db     = require('../config/db');
 const crypto = require('../utils/crypto');
+const wsHub  = require('./wsHub');
 
 // ---------------------------------------------------------------------------
 // Hosts
@@ -125,6 +126,7 @@ async function setLastDiscovery(id, vmCount) {
       WHERE id = $1`,
     [id, vmCount]
   );
+  wsHub.broadcastAlertsChanged();
 }
 
 async function setLastDiscoveryFailed(id, errorMessage) {
@@ -134,6 +136,7 @@ async function setLastDiscoveryFailed(id, errorMessage) {
       WHERE id = $1`,
     [id, errorMessage]
   );
+  wsHub.broadcastAlertsChanged();
 }
 
 function getDecryptedPassword(host) {

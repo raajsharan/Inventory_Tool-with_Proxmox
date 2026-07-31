@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Empty, List, Popover, Space, Tag, Tooltip, Typography } from 'antd';
+import { App, Badge, Button, Empty, List, Popover, Space, Tag, Tooltip, Typography } from 'antd';
 import {
   BellOutlined, KeyOutlined, DisconnectOutlined, ReloadOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
@@ -15,27 +15,77 @@ const INTEGRATION_META = {
   hyperv:  { color: 'blue',     hostsPath: '/hyperv-discovery' },
 };
 
-// Bell icon + badge in the app header. Polls the alerts endpoint so the
-// count stays current without a full page reload; clicking opens a popover
-// listing every host currently in a failed discovery state.
+// Bell icon + badge in the app header. A WebSocket pushes an "alerts:changed"
+// signal the moment any discovery run fails or recovers, so the badge and a
+// pop-up notification appear immediately for every logged-in user with the
+// app open — no waiting on the next poll. The 60s poll stays as a fallback
+// in case the socket is down (proxy misconfigured, connection drop, etc).
 export default function AlertBell() {
   const nav = useNavigate();
+  const { notification } = App.useApp();
   const [alerts,  setAlerts]  = useState([]);
   const [loading, setLoading] = useState(false);
   const [open,    setOpen]    = useState(false);
+  const alertsRef    = useRef([]);
+  const firstLoadRef = useRef(true);
+  const wsRef         = useRef(null);
+  const reconnectRef  = useRef(null);
 
   const load = useCallback(() => {
     setLoading(true);
     api.get('/alerts')
-      .then(r => setAlerts(r.data.alerts || []))
+      .then(r => {
+        const next = r.data.alerts || [];
+        // Only pop a notification for entries that weren't there last time —
+        // otherwise every page load would re-announce every existing alert.
+        if (!firstLoadRef.current) {
+          const prevKeys = new Set(alertsRef.current.map(a => `${a.integration}:${a.hostId}`));
+          for (const a of next) {
+            if (prevKeys.has(`${a.integration}:${a.hostId}`)) continue;
+            notification.error({
+              message: `${a.label} discovery failed — ${a.host}`,
+              description: a.errorMessage,
+              placement: 'topRight',
+              duration: 8,
+            });
+          }
+        }
+        firstLoadRef.current = false;
+        alertsRef.current = next;
+        setAlerts(next);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [notification]);
 
   useEffect(() => {
     load();
     const id = setInterval(load, 60000);
     return () => clearInterval(id);
+  }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    function connect() {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/alerts?token=${encodeURIComponent(token)}`);
+      wsRef.current = ws;
+      ws.onmessage = (evt) => {
+        try {
+          if (JSON.parse(evt.data)?.type === 'alerts:changed') load();
+        } catch { /* ignore malformed frame */ }
+      };
+      ws.onclose = () => { if (!cancelled) reconnectRef.current = setTimeout(connect, 5000); };
+      ws.onerror = () => ws.close();
+    }
+    connect();
+    return () => {
+      cancelled = true;
+      clearTimeout(reconnectRef.current);
+      wsRef.current?.close();
+    };
   }, [load]);
 
   function goToHost(alert) {
