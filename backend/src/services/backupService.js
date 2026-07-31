@@ -4,6 +4,17 @@ const fsp = require('fs/promises');
 const path = require('path');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const { encrypt, decryptSafe } = require('../utils/crypto');
+
+// Columns storing AES-256-GCM ciphertext, keyed by the plaintext column name
+// the CSV should show instead. The ciphertext is useless outside this app
+// (it can only be decrypted with this deployment's ENCRYPTION_KEY) — a CSV
+// backup is meant to be a usable, restorable snapshot of the data, so it
+// carries the real password rather than an opaque blob nobody asked for.
+const PASSWORD_COLUMNS = {
+  asset_password_encrypted: 'asset_password',
+  idrac_password_encrypted: 'idrac_password',
+};
 
 const INVENTORY_TABLES = ['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'];
 
@@ -201,10 +212,36 @@ function csvEscape(v) {
   return s;
 }
 
+function decryptPasswordColumns(row) {
+  const out = { ...row };
+  for (const [encCol, plainCol] of Object.entries(PASSWORD_COLUMNS)) {
+    if (!(encCol in out)) continue;
+    out[plainCol] = decryptSafe(out[encCol]);
+    delete out[encCol];
+  }
+  return out;
+}
+
+// Reverse of decryptPasswordColumns, for CSV restore: a CSV produced by this
+// export carries plaintext under asset_password/idrac_password, but the
+// table only has the *_encrypted columns to insert into. An older CSV
+// (from before this behavior existed) may still carry the raw ciphertext
+// column directly — left untouched, since it's already in the right shape.
+function encryptPasswordColumnsForRestore(row) {
+  const out = { ...row };
+  for (const [encCol, plainCol] of Object.entries(PASSWORD_COLUMNS)) {
+    if (!(plainCol in out)) continue;
+    out[encCol] = encrypt(out[plainCol]);
+    delete out[plainCol];
+  }
+  return out;
+}
+
 async function dumpTableToCsv(table, dir) {
   const safe = INVENTORY_TABLES.includes(table) ? table : null;
   if (!safe) throw new ApiError(400, `CSV export not allowed for table: ${table}`);
-  const { rows } = await db.query(`SELECT * FROM ${safe} ORDER BY created_at`);
+  const { rows: rawRows } = await db.query(`SELECT * FROM ${safe} ORDER BY created_at`);
+  const rows = rawRows.map(decryptPasswordColumns);
   const file = path.join(dir, `${safe}_${nowStamp()}.csv`);
   if (!rows.length) {
     await fsp.writeFile(file, '');
@@ -339,7 +376,7 @@ async function restoreTableFromCsv({ table, buffer, mode, userId }) {
   const rows = lines.slice(1).map(parseCsvLine).map(cols => {
     const obj = {};
     headers.forEach((h, i) => { obj[h] = coerceCsvValue(cols[i] ?? ''); });
-    return obj;
+    return encryptPasswordColumnsForRestore(obj);
   });
 
   const startedAt = new Date();
