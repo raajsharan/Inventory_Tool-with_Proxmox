@@ -115,6 +115,14 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_proxmox_nodes_host_id ON proxmox_discovered_nodes(host_id)`,
   `CREATE INDEX IF NOT EXISTS idx_proxmox_nodes_node    ON proxmox_discovered_nodes(node)`,
 
+  // ── Proxmox discovery: node CPU/RAM/disk usage (capacity-only columns
+  // above predate this) — powers the same Hosts & Credentials hardware
+  // display added for VMware.
+  `ALTER TABLE proxmox_discovered_nodes ADD COLUMN IF NOT EXISTS cpu_usage_pct  NUMERIC(5,1)`,
+  `ALTER TABLE proxmox_discovered_nodes ADD COLUMN IF NOT EXISTS memory_used_mb INT`,
+  `ALTER TABLE proxmox_discovered_nodes ADD COLUMN IF NOT EXISTS disk_total_gb  NUMERIC(10,1)`,
+  `ALTER TABLE proxmox_discovered_nodes ADD COLUMN IF NOT EXISTS disk_used_gb   NUMERIC(10,1)`,
+
   // ── newer inventory columns some deployments predate (schema.sql ALTERs)
   ...['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'].flatMap(t => [
     `ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb`,
@@ -587,6 +595,21 @@ const STATEMENTS = [
   `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_status VARCHAR(20)`,
   `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
   `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
+
+  // ── Hyper-V discovery: host hardware telemetry (CPU/RAM/disk/uptime) via
+  // CIM/WMI, collected alongside each discovery run — same Hosts &
+  // Credentials hardware display added for VMware/Proxmox. A hyperv_hosts
+  // row is always exactly one physical server, so no per-node breakdown
+  // table is needed here (unlike VMware's vCenter-manages-many case).
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS hardware_model  VARCHAR(255)`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS cpu_cores       INT`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS cpu_usage_pct   NUMERIC(5,1)`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS memory_total_mb INT`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS memory_used_mb  INT`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS disk_total_gb   NUMERIC(10,1)`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS disk_used_gb    NUMERIC(10,1)`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS uptime_seconds  BIGINT`,
+
   `CREATE TABLE IF NOT EXISTS hyperv_discovery_runs (
       id            SERIAL PRIMARY KEY,
       host_id       INT NOT NULL REFERENCES hyperv_hosts(id) ON DELETE CASCADE,

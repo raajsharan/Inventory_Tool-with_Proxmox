@@ -5,10 +5,13 @@ import {
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
-  PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ClusterOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import {
+  DOT_CSS, HealthDot, deriveHealthColor, cpuChip, ramChip, diskChip, formatUptime,
+} from '../../../components/HardwareStatChips.jsx';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -31,6 +34,7 @@ export default function PVEHosts({ onDiscoveryStarted }) {
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
   const [hosts,      setHosts]      = useState([]);
+  const [nodesByHost, setNodesByHost] = useState({}); // host_id -> node[]
   const [loading,    setLoading]    = useState(false);
   const [modalOpen,  setModalOpen]  = useState(false);
   const [editing,    setEditing]    = useState(null);
@@ -42,6 +46,14 @@ export default function PVEHosts({ onDiscoveryStarted }) {
   const load = () => {
     setLoading(true);
     api.get('/proxmox/hosts').then(r => setHosts(r.data)).finally(() => setLoading(false));
+    api.get('/proxmox/nodes').then(r => {
+      const map = {};
+      for (const n of r.data.items || []) {
+        if (!map[n.host_id]) map[n.host_id] = [];
+        map[n.host_id].push(n);
+      }
+      setNodesByHost(map);
+    }).catch(() => setNodesByHost({}));
   };
 
   useEffect(() => { load(); }, []);
@@ -115,8 +127,18 @@ export default function PVEHosts({ onDiscoveryStarted }) {
     }
   }
 
+  // A proxmox_hosts row can be a single PVE node or a PDM managing several —
+  // only show hardware inline on the main row when there's exactly one node
+  // to report on; otherwise leave it blank and expand for the per-node
+  // breakdown (same convention as VMware's Hosts & Credentials tab).
+  const soleNodeFor = (h) => {
+    const nodes = nodesByHost[h.id] || [];
+    return nodes.length === 1 ? nodes[0] : null;
+  };
+
   const columns = [
-    { title: 'Host',          dataIndex: 'host',              key: 'host',     ellipsis: true },
+    { title: 'Host',          dataIndex: 'host',              key: 'host',     ellipsis: true,
+      render: (v, h) => <span><HealthDot color={deriveHealthColor(h)} />{v}</span> },
     {
       title: 'Type', dataIndex: 'host_type', key: 'host_type', width: 80,
       render: t => <Tag color={t === 'pdm' ? 'geekblue' : 'purple'}>{(t || 've').toUpperCase()}</Tag>,
@@ -128,6 +150,13 @@ export default function PVEHosts({ onDiscoveryStarted }) {
     { title: 'Last Run',      dataIndex: 'last_discovery_at', key: 'last_at',  ellipsis: true,
       render: v => v ? new Date(v).toLocaleString() : '—' },
     { title: 'VMs Found',     dataIndex: 'last_vm_count',     key: 'vm_count', width: 100, render: v => v ?? '—' },
+    { title: 'Model', key: 'model', width: 150,
+      render: (_, h) => soleNodeFor(h)?.cpu_model || <Text type="secondary">—</Text> },
+    { title: 'CPU',  key: 'cpu',  width: 140, render: (_, h) => { const n = soleNodeFor(h); return n ? cpuChip(n) : <Text type="secondary">—</Text>; } },
+    { title: 'RAM',  key: 'ram',  width: 150, render: (_, h) => { const n = soleNodeFor(h); return n ? ramChip(n) : <Text type="secondary">—</Text>; } },
+    { title: 'Disk', key: 'disk', width: 150, render: (_, h) => { const n = soleNodeFor(h); return n ? diskChip(n) : <Text type="secondary">—</Text>; } },
+    { title: 'Uptime', key: 'uptime', width: 110,
+      render: (_, h) => { const n = soleNodeFor(h); return n ? formatUptime(n.uptime_seconds) : <Text type="secondary">—</Text>; } },
     { title: 'Scheduler',     dataIndex: 'scheduler_enabled', key: 'sched',    width: 100,
       render: (v, h) => v ? <Tag color="blue">Every {h.interval_minutes}m</Tag> : <Tag>Off</Tag> },
     isAdmin && {
@@ -148,6 +177,7 @@ export default function PVEHosts({ onDiscoveryStarted }) {
 
   return (
     <div style={{ padding: 16 }}>
+      <style>{DOT_CSS}</style>
       {isAdmin && (
         <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} style={{ marginBottom: 12 }}>
           Add Host
@@ -161,6 +191,40 @@ export default function PVEHosts({ onDiscoveryStarted }) {
         dataSource={hosts}
         columns={columns}
         pagination={false}
+        scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
+        expandable={{
+          rowExpandable: (h) => (nodesByHost[h.id] || []).length > 1,
+          expandedRowRender: (h) => (
+            <Table
+              size="small"
+              rowKey="node"
+              dataSource={nodesByHost[h.id] || []}
+              pagination={false}
+              scroll={{ x: 'max-content' }}
+              sticky={{ offsetScroll: 0 }}
+              columns={[
+                {
+                  title: <Space size={6}><ClusterOutlined />Node</Space>,
+                  dataIndex: 'node',
+                  render: (v, n) => (
+                    <span>
+                      <HealthDot color={n.status === 'online' ? '#52c41a' : '#8c8c8c'} />
+                      <Text strong>{v}</Text>
+                    </span>
+                  ),
+                },
+                { title: 'IP', dataIndex: 'ip_address', width: 130, render: v => v || <Text type="secondary">—</Text> },
+                { title: 'VMs', dataIndex: 'vm_count', width: 90, align: 'center' },
+                { title: 'Model', dataIndex: 'cpu_model', width: 150, render: v => v || <Text type="secondary">—</Text> },
+                { title: 'CPU',  key: 'cpu',  width: 140, render: (_, n) => cpuChip(n) },
+                { title: 'RAM',  key: 'ram',  width: 150, render: (_, n) => ramChip(n) },
+                { title: 'Disk', key: 'disk', width: 150, render: (_, n) => diskChip(n) },
+                { title: 'Uptime', key: 'uptime', width: 110, render: (_, n) => formatUptime(n.uptime_seconds) },
+              ]}
+            />
+          ),
+        }}
       />
 
       <Modal

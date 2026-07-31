@@ -9,6 +9,9 @@ import {
 } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import {
+  DOT_CSS, HealthDot, deriveHealthColor, cpuChip, ramChip, diskChip, formatUptime,
+} from '../../../components/HardwareStatChips.jsx';
 
 const { Text } = Typography;
 
@@ -115,7 +118,8 @@ export default function HVHosts({ onDiscoveryStarted }) {
   }
 
   const columns = [
-    { title: 'Host',     dataIndex: 'host',              key: 'host',    ellipsis: true },
+    { title: 'Host',     dataIndex: 'host',              key: 'host',    ellipsis: true,
+      render: (v, h) => <span><HealthDot color={deriveHealthColor(h)} />{v}</span> },
     { title: 'Username', dataIndex: 'username',          key: 'user',    ellipsis: true },
     { title: 'Port',     dataIndex: 'port',              key: 'port',    width: 70 },
     { title: 'SSL',      dataIndex: 'use_ssl',           key: 'ssl',     width: 60,
@@ -129,6 +133,12 @@ export default function HVHosts({ onDiscoveryStarted }) {
         return t ? new Date(t).toLocaleString() : '—';
       } },
     { title: 'VMs Found', dataIndex: 'last_vm_count',   key: 'vm_count', width: 100, render: v => v ?? '—' },
+    { title: 'Model', dataIndex: 'hardware_model', key: 'hardware_model', width: 150,
+      render: v => v || <Text type="secondary">—</Text> },
+    { title: 'CPU',  key: 'cpu',  width: 140, render: (_, h) => cpuChip(h) },
+    { title: 'RAM',  key: 'ram',  width: 150, render: (_, h) => ramChip(h) },
+    { title: 'Disk', key: 'disk', width: 150, render: (_, h) => diskChip(h) },
+    { title: 'Uptime', key: 'uptime', width: 110, render: (_, h) => formatUptime(h.uptime_seconds) },
     { title: 'Scheduler', dataIndex: 'scheduler_enabled', key: 'sched', width: 110,
       render: (v, h) => v ? <Tag color="blue">Every {h.interval_minutes}m</Tag> : <Tag>Off</Tag> },
     isAdmin && {
@@ -149,6 +159,7 @@ export default function HVHosts({ onDiscoveryStarted }) {
 
   return (
     <div style={{ padding: 16 }}>
+      <style>{DOT_CSS}</style>
       {isAdmin && (
         <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} style={{ marginBottom: 12 }}>
           Add Host
@@ -162,6 +173,8 @@ export default function HVHosts({ onDiscoveryStarted }) {
         dataSource={hosts}
         columns={columns}
         pagination={false}
+        scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
       />
 
       <Modal

@@ -257,21 +257,23 @@ async function saveNodes(runId, hostId, sourceHost, nodes) {
   let i = 1;
   for (const n of nodes) {
     values.push(
-      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
+      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
     );
     params.push(
       runId, hostId, sourceHost,
       n.node, n.status, n.ip_address, n.mac_address,
-      n.os_type, n.os_version, n.cpu_model, n.cpu_cores, n.cpu_sockets,
-      n.memory_mb, n.uptime_seconds, n.vm_count, n.snapshot_count
+      n.os_type, n.os_version, n.cpu_model, n.cpu_cores, n.cpu_sockets, n.cpu_usage_pct,
+      n.memory_mb, n.memory_used_mb, n.disk_total_gb, n.disk_used_gb,
+      n.uptime_seconds, n.vm_count, n.snapshot_count
     );
   }
   await db.query(
     `INSERT INTO proxmox_discovered_nodes
        (run_id, host_id, source_host,
         node, status, ip_address, mac_address,
-        os_type, os_version, cpu_model, cpu_cores, cpu_sockets,
-        memory_mb, uptime_seconds, vm_count, snapshot_count)
+        os_type, os_version, cpu_model, cpu_cores, cpu_sockets, cpu_usage_pct,
+        memory_mb, memory_used_mb, disk_total_gb, disk_used_gb,
+        uptime_seconds, vm_count, snapshot_count)
      VALUES ${values.join(',')}`,
     params
   );
@@ -280,7 +282,9 @@ async function saveNodes(runId, hostId, sourceHost, nodes) {
 async function getLatestNodes(hostId) {
   const params = [];
   let where = '';
-  if (hostId) { params.push(hostId); where = 'AND v.host_id = $1'; }
+  // Inside the CTE this filters proxmox_discovery_runs directly (no "v"
+  // alias in scope there — that belongs to the outer query).
+  if (hostId) { params.push(hostId); where = 'AND host_id = $1'; }
   const { rows } = await db.query(
     `WITH latest_runs AS (
        SELECT DISTINCT ON (host_id) id AS run_id, host_id

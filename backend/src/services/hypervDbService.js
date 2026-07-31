@@ -16,7 +16,10 @@ async function listHosts() {
   const { rows } = await db.query(
     `SELECT id, host, display_name, username, port, use_ssl, verify_ssl,
             interval_minutes, scheduler_enabled, last_discovery_at, last_vm_count,
-            is_running, last_status, last_error, last_attempt_at, created_at, updated_at
+            is_running, last_status, last_error, last_attempt_at,
+            hardware_model, cpu_cores, cpu_usage_pct,
+            memory_total_mb, memory_used_mb, disk_total_gb, disk_used_gb, uptime_seconds,
+            created_at, updated_at
      FROM hyperv_hosts ORDER BY host`
   );
   return rows;
@@ -110,6 +113,24 @@ async function setLastDiscoveryFailed(id, errorMessage) {
 
 function getDecryptedPassword(host) {
   return host.password_encrypted ? crypto.decrypt(host.password_encrypted) : null;
+}
+
+// Best-effort hardware telemetry — called alongside a successful discovery
+// run, never blocking it on failure.
+async function setHostStats(id, stats) {
+  if (!stats) return;
+  await db.query(
+    `UPDATE hyperv_hosts
+        SET hardware_model  = $2, cpu_cores = $3, cpu_usage_pct = $4,
+            memory_total_mb = $5, memory_used_mb = $6,
+            disk_total_gb   = $7, disk_used_gb = $8, uptime_seconds = $9
+      WHERE id = $1`,
+    [
+      id, stats.hardware_model, stats.cpu_cores, stats.cpu_usage_pct,
+      stats.memory_total_mb, stats.memory_used_mb,
+      stats.disk_total_gb, stats.disk_used_gb, stats.uptime_seconds,
+    ]
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +363,7 @@ async function getSnapshotVMs() {
 
 module.exports = {
   listHosts, getHostById, upsertHost, updateHostById, deleteHost,
-  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword,
+  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, setHostStats, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
   getDashboardStats, getDrift, getStaleVMs, getSnapshotVMs,

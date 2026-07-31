@@ -114,6 +114,62 @@ function parseVMs(raw) {
   }
 }
 
+// ── Host hardware telemetry (CPU/RAM/disk/uptime) via CIM/WMI ────────────────
+// Unlike VMware/Proxmox, a hyperv_hosts row is always exactly one physical
+// server (no vCenter/PDM-style manager-of-many concept here), so this is a
+// straight 1:1 — no per-node breakdown needed.
+
+const HOST_STATS_SCRIPT = `
+$ErrorActionPreference = 'SilentlyContinue'
+$cs    = Get-CimInstance Win32_ComputerSystem
+$os    = Get-CimInstance Win32_OperatingSystem
+$cpu   = @(Get-CimInstance Win32_Processor)
+$disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3")
+
+$cpuCores = ($cpu | Measure-Object -Property NumberOfCores -Sum).Sum
+$cpuLoad  = if ($cpu.Count -gt 0) { ($cpu | Measure-Object -Property LoadPercentage -Average).Average } else { $null }
+$memTotalMB = if ($os.TotalVisibleMemorySize) { [math]::Round($os.TotalVisibleMemorySize / 1024) } else { $null }
+$memFreeMB  = if ($os.FreePhysicalMemory)     { [math]::Round($os.FreePhysicalMemory / 1024) }     else { $null }
+$memUsedMB  = if ($memTotalMB -ne $null -and $memFreeMB -ne $null) { $memTotalMB - $memFreeMB } else { $null }
+$diskTotalBytes = ($disks | Measure-Object -Property Size -Sum).Sum
+$diskFreeBytes  = ($disks | Measure-Object -Property FreeSpace -Sum).Sum
+$diskTotalGB = if ($diskTotalBytes) { [math]::Round($diskTotalBytes / 1GB, 1) } else { $null }
+$diskUsedGB  = if ($diskTotalBytes) { [math]::Round(($diskTotalBytes - $diskFreeBytes) / 1GB, 1) } else { $null }
+$uptimeSec   = if ($os.LastBootUpTime) { [math]::Round(((Get-Date) - $os.LastBootUpTime).TotalSeconds) } else { $null }
+
+[PSCustomObject]@{
+  Model         = $cs.Model
+  CpuCores      = $cpuCores
+  CpuUsagePct   = if ($cpuLoad -ne $null) { [math]::Round($cpuLoad, 1) } else { $null }
+  MemoryTotalMB = $memTotalMB
+  MemoryUsedMB  = $memUsedMB
+  DiskTotalGB   = $diskTotalGB
+  DiskUsedGB    = $diskUsedGB
+  UptimeSeconds = $uptimeSec
+}
+`;
+
+function parseHostStats(raw) {
+  const text = raw.trim();
+  if (!text) return null;
+  try {
+    const v = JSON.parse(text);
+    if (!v || Array.isArray(v)) return null;
+    return {
+      hardware_model:  v.Model || null,
+      cpu_cores:       v.CpuCores ?? null,
+      cpu_usage_pct:   v.CpuUsagePct ?? null,
+      memory_total_mb: v.MemoryTotalMB ?? null,
+      memory_used_mb:  v.MemoryUsedMB ?? null,
+      disk_total_gb:   v.DiskTotalGB ?? null,
+      disk_used_gb:    v.DiskUsedGB ?? null,
+      uptime_seconds:  v.UptimeSeconds ?? null,
+    };
+  } catch (e) {
+    throw new Error(`Failed to parse host stats JSON from PowerShell: ${e.message}\nOutput: ${text.slice(0, 500)}`);
+  }
+}
+
 // ── PowerShell wrapper — connects to the remote host and runs a scriptblock ──
 
 function psSingleQuote(str) {
@@ -229,4 +285,9 @@ async function discoverVMs(cfg) {
   return parseVMs(raw);
 }
 
-module.exports = { testConnection, discoverVMs };
+async function getHostStats(cfg) {
+  const raw = await runPwsh(cfg, HOST_STATS_SCRIPT);
+  return parseHostStats(raw);
+}
+
+module.exports = { testConnection, discoverVMs, getHostStats };

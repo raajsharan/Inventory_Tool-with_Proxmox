@@ -43,6 +43,15 @@ async function runDiscovery(hostId) {
     await db.saveVMs(runId, hostId, host.host, vms);
     await db.finishRun(runId, vms.length);
     await db.setLastDiscovery(hostId, vms.length);
+
+    // Hardware telemetry is a nice-to-have for the Hosts & Credentials
+    // table — never let it fail the discovery run itself.
+    try {
+      const stats = await svc.getHostStats(cfg);
+      await db.setHostStats(hostId, stats);
+    } catch (statsErr) {
+      console.warn(`[hyperv-scheduler] host stats collection failed for ${host.host}:`, statsErr.message);
+    }
   } catch (err) {
     console.error(`[hyperv-scheduler] discovery failed for ${host.host}: ${err.message}`);
     await db.failRun(runId, err.message);

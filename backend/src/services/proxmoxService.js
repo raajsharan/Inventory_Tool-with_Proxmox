@@ -264,11 +264,19 @@ function parseNodeNetwork(ifaces) {
 function parseNodeStatus(status) {
   if (!status) return {};
   const cpu = status.cpuinfo || {};
+  const mem  = status.memory || {};
+  const disk = status.rootfs || {};
   return {
     cpu_model:      cpu.model || null,
     cpu_cores:      cpu.cores   ? Number(cpu.cores)   : null,
     cpu_sockets:    cpu.sockets ? Number(cpu.sockets) : null,
-    memory_mb:      status.memory?.total ? Math.round(status.memory.total / 1048576) : null,
+    // status.cpu is a 0-1 fraction of current usage across all cores —
+    // unrelated to cpuinfo (capacity); Proxmox reports both separately.
+    cpu_usage_pct:  status.cpu != null ? Math.round(Number(status.cpu) * 1000) / 10 : null,
+    memory_mb:      mem.total ? Math.round(mem.total / 1048576) : null,
+    memory_used_mb: mem.used  ? Math.round(mem.used  / 1048576) : null,
+    disk_total_gb:  disk.total ? Math.round(disk.total / 1073741824 * 10) / 10 : null,
+    disk_used_gb:   disk.used  ? Math.round(disk.used  / 1073741824 * 10) / 10 : null,
     uptime_seconds: status.uptime || 0,
     os_version:     status.pveversion || null,
     kernel_version: status.kversion || null,
@@ -404,7 +412,11 @@ async function discoverVE(hostname, port, getter, verifySSL) {
       cpu_model:      statusInfo.cpu_model || null,
       cpu_cores:      statusInfo.cpu_cores || null,
       cpu_sockets:    statusInfo.cpu_sockets || null,
+      cpu_usage_pct:  statusInfo.cpu_usage_pct ?? null,
       memory_mb:      statusInfo.memory_mb || (nodeInfo.maxmem ? Math.round(nodeInfo.maxmem / 1048576) : null),
+      memory_used_mb: statusInfo.memory_used_mb ?? null,
+      disk_total_gb:  statusInfo.disk_total_gb ?? null,
+      disk_used_gb:   statusInfo.disk_used_gb ?? null,
       uptime_seconds: statusInfo.uptime_seconds || nodeInfo.uptime || 0,
       vm_count:       qemuList.length + lxcList.length,
       snapshot_count: nodeSnapshotCount,
