@@ -16,6 +16,8 @@ async function listHosts() {
     `SELECT id, host, username, port, verify_ssl, interval_minutes,
             scheduler_enabled, last_discovery_at, last_vm_count, is_running,
             last_status, last_error, last_attempt_at,
+            hardware_model, cpu_cores, cpu_usage_pct,
+            memory_total_mb, memory_used_mb, disk_total_gb, disk_used_gb, uptime_seconds,
             created_at, updated_at
      FROM vmware_hosts ORDER BY host`
   );
@@ -84,6 +86,24 @@ async function setLastDiscoveryFailed(id, errorMessage) {
         SET is_running = FALSE, last_status = 'error', last_error = $2, last_attempt_at = NOW()
       WHERE id = $1`,
     [id, errorMessage]
+  );
+}
+
+// Best-effort hardware telemetry from vmwareService.getHostStats() — called
+// alongside a successful discovery run, never blocking it on failure.
+async function setHostStats(id, stats) {
+  if (!stats) return;
+  await db.query(
+    `UPDATE vmware_hosts
+        SET hardware_model  = $2, cpu_cores = $3, cpu_usage_pct = $4,
+            memory_total_mb = $5, memory_used_mb = $6,
+            disk_total_gb   = $7, disk_used_gb = $8, uptime_seconds = $9
+      WHERE id = $1`,
+    [
+      id, stats.hardware_model, stats.cpu_cores, stats.cpu_usage_pct,
+      stats.memory_total_mb, stats.memory_used_mb,
+      stats.disk_total_gb, stats.disk_used_gb, stats.uptime_seconds,
+    ]
   );
 }
 
@@ -453,7 +473,7 @@ async function getReconciliation() {
 
 module.exports = {
   listHosts, getHostById, getHostByName, upsertHost, deleteHost,
-  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword,
+  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, setHostStats, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs, getReconciliation,
   getDashboardStats, getDrift, getESXiTopology, getStaleVMs, getSnapshotVMs,

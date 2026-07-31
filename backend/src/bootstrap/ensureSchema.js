@@ -56,6 +56,18 @@ const STATEMENTS = [
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
 
+  // ── VMware discovery: ESXi host hardware telemetry (CPU/RAM/disk/uptime),
+  // fetched via vim25 SOAP alongside each discovery run — powers the extra
+  // columns on the Hosts & Credentials tab.
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS hardware_model    VARCHAR(255)`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS cpu_cores         INT`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS cpu_usage_pct     NUMERIC(5,1)`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS memory_total_mb   INT`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS memory_used_mb    INT`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS disk_total_gb     NUMERIC(10,1)`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS disk_used_gb      NUMERIC(10,1)`,
+  `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS uptime_seconds    BIGINT`,
+
   // ── Proxmox discovery: physical/cluster node inventory (proxmox_schema.sql predates this table)
   `CREATE TABLE IF NOT EXISTS proxmox_discovered_nodes (
       id              SERIAL PRIMARY KEY,

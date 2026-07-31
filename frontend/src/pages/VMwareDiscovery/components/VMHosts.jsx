@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Switch, Space,
-  Tag, App, Tooltip, Popconfirm, Card, Typography,
+  Tag, App, Tooltip, Popconfirm, Card, Typography, Progress,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
@@ -23,6 +23,31 @@ function statusTag(host) {
   }
   if (host.last_discovery_at) return <Tag color="success">Idle</Tag>;
   return <Tag color="default">Never Run</Tag>;
+}
+
+function progressColor(pct) {
+  if (pct == null) return undefined;
+  if (pct >= 90) return '#ff4d4f';
+  if (pct >= 75) return '#faad14';
+  return '#52c41a';
+}
+
+function usageBar(usedLabel, totalLabel, pct) {
+  if (totalLabel == null) return <Text type="secondary">—</Text>;
+  return (
+    <div style={{ minWidth: 130 }}>
+      <Text style={{ fontSize: 12 }}>{usedLabel} / {totalLabel}</Text>
+      <Progress percent={pct ?? 0} size="small" strokeColor={progressColor(pct)} showInfo={false} />
+    </div>
+  );
+}
+
+function formatUptime(seconds) {
+  const s = Number(seconds);
+  if (!s) return '—';
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  return d > 0 ? `${d}d ${h}h` : `${h}h`;
 }
 
 export default function VMHosts({ onDiscoveryStarted }) {
@@ -142,6 +167,43 @@ export default function VMHosts({ onDiscoveryStarted }) {
       render: v => v ?? '—',
     },
     {
+      title: 'Model', dataIndex: 'hardware_model', key: 'hardware_model', width: 150,
+      render: v => v || <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'CPU', key: 'cpu', width: 150,
+      render: (_, r) => r.cpu_cores == null
+        ? <Text type="secondary">—</Text>
+        : (
+          <div style={{ minWidth: 110 }}>
+            <Text style={{ fontSize: 12 }}>{r.cpu_cores} cores</Text>
+            <Progress percent={Number(r.cpu_usage_pct) || 0} size="small"
+              strokeColor={progressColor(Number(r.cpu_usage_pct))} showInfo
+              format={p => `${p}%`} />
+          </div>
+        ),
+    },
+    {
+      title: 'RAM', key: 'ram', width: 160,
+      render: (_, r) => usageBar(
+        r.memory_used_mb != null ? `${(r.memory_used_mb / 1024).toFixed(1)} GB` : null,
+        r.memory_total_mb != null ? `${(r.memory_total_mb / 1024).toFixed(1)} GB` : null,
+        r.memory_total_mb ? Math.round((r.memory_used_mb / r.memory_total_mb) * 1000) / 10 : null,
+      ),
+    },
+    {
+      title: 'Disk', key: 'disk', width: 160,
+      render: (_, r) => usageBar(
+        r.disk_used_gb != null ? `${Number(r.disk_used_gb).toFixed(1)} GB` : null,
+        r.disk_total_gb != null ? `${Number(r.disk_total_gb).toFixed(1)} GB` : null,
+        r.disk_total_gb ? Math.round((Number(r.disk_used_gb) / Number(r.disk_total_gb)) * 1000) / 10 : null,
+      ),
+    },
+    {
+      title: 'ESXi Uptime', dataIndex: 'uptime_seconds', key: 'uptime_seconds', width: 100,
+      render: v => formatUptime(v),
+    },
+    {
       title: 'Scheduler', key: 'sched',
       render: (_, r) => r.scheduler_enabled
         ? <Tag color="blue">Every {r.interval_minutes}m</Tag>
@@ -194,6 +256,7 @@ export default function VMHosts({ onDiscoveryStarted }) {
         dataSource={hosts}
         columns={columns}
         pagination={false}
+        scroll={{ x: 'max-content' }}
         expandable={{
           rowExpandable: () => true,
           expandedRowRender: (r) => {

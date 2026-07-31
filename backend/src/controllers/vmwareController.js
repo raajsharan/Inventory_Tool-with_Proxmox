@@ -169,6 +169,15 @@ async function runDiscoverySync(req, res, next) {
       await dbSvc.saveVMs(runId, record.id, host, vms);
       await dbSvc.finishRun(runId, vms.length);
       await dbSvc.setLastDiscovery(record.id, vms.length);
+
+      try {
+        const stats = await vmSvc.getHostStats(host, Number(port), username, decryptedPw, Boolean(verifySSL));
+        await dbSvc.setHostStats(record.id, stats);
+      } catch (statsErr) {
+        // eslint-disable-next-line no-console
+        console.warn(`[vmware] host stats collection failed for ${host}:`, statsErr.message);
+      }
+
       res.json({ message: 'Discovery complete', vmCount: vms.length, host });
     } catch (err) {
       await dbSvc.setLastDiscoveryFailed(record.id, err.message);

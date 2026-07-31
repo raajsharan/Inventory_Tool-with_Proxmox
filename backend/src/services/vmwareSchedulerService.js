@@ -45,6 +45,16 @@ async function runDiscovery(host) {
     await dbSvc.finishRun(runId, vms.length);
     await dbSvc.setLastDiscovery(record.id, vms.length);
 
+    // Hardware telemetry (CPU/RAM/disk/uptime) is a nice-to-have for the
+    // Hosts & Credentials table — never let it fail the discovery run itself.
+    try {
+      const stats = await vmSvc.getHostStats(host, record.port, record.username, password, record.verify_ssl);
+      await dbSvc.setHostStats(record.id, stats);
+    } catch (statsErr) {
+      // eslint-disable-next-line no-console
+      console.warn(`[vmware-scheduler] host stats collection failed for ${host}:`, statsErr.message);
+    }
+
     // eslint-disable-next-line no-console
     console.log(`[vmware-scheduler] ${host} complete — ${vms.length} VMs`);
   } catch (err) {
