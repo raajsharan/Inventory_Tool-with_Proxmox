@@ -68,6 +68,27 @@ const STATEMENTS = [
   `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS disk_used_gb      NUMERIC(10,1)`,
   `ALTER TABLE vmware_hosts ADD COLUMN IF NOT EXISTS uptime_seconds    BIGINT`,
 
+  // A vmware_hosts row can be a vCenter managing many physical ESXi hosts
+  // with different hardware — the columns above only make sense for a
+  // standalone-ESXi row (exactly one host). This table holds one row per
+  // ESXi host actually under management, for the per-host breakdown in the
+  // "Hosts & Credentials" expandable row.
+  `CREATE TABLE IF NOT EXISTS vmware_esxi_host_stats (
+      host_id         UUID NOT NULL REFERENCES vmware_hosts(id) ON DELETE CASCADE,
+      esxi_name       VARCHAR(255) NOT NULL,
+      esxi_ip         VARCHAR(255),
+      hardware_model  VARCHAR(255),
+      cpu_cores       INT,
+      cpu_usage_pct   NUMERIC(5,1),
+      memory_total_mb INT,
+      memory_used_mb  INT,
+      disk_total_gb   NUMERIC(10,1),
+      disk_used_gb    NUMERIC(10,1),
+      uptime_seconds  BIGINT,
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (host_id, esxi_name)
+   )`,
+
   // ── Proxmox discovery: physical/cluster node inventory (proxmox_schema.sql predates this table)
   `CREATE TABLE IF NOT EXISTS proxmox_discovered_nodes (
       id              SERIAL PRIMARY KEY,

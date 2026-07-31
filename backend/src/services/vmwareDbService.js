@@ -89,8 +89,11 @@ async function setLastDiscoveryFailed(id, errorMessage) {
   );
 }
 
-// Best-effort hardware telemetry from vmwareService.getHostStats() — called
-// alongside a successful discovery run, never blocking it on failure.
+// Best-effort hardware telemetry — called alongside a successful discovery
+// run, never blocking it on failure. Only meaningful for a standalone-ESXi
+// row (exactly one ESXi host); a vCenter row managing several hosts with
+// different hardware has nothing single to report here (see
+// setEsxiHostStats for the per-host breakdown instead).
 async function setHostStats(id, stats) {
   if (!stats) return;
   await db.query(
@@ -105,6 +108,58 @@ async function setHostStats(id, stats) {
       stats.disk_total_gb, stats.disk_used_gb, stats.uptime_seconds,
     ]
   );
+}
+
+async function clearHostStats(id) {
+  await db.query(
+    `UPDATE vmware_hosts
+        SET hardware_model = NULL, cpu_cores = NULL, cpu_usage_pct = NULL,
+            memory_total_mb = NULL, memory_used_mb = NULL,
+            disk_total_gb = NULL, disk_used_gb = NULL, uptime_seconds = NULL
+      WHERE id = $1`,
+    [id]
+  );
+}
+
+// Per-ESXi-host hardware breakdown, for a vCenter (or standalone-ESXi) row's
+// expandable table. Replaces the full set each run — a host removed from
+// vCenter (or renamed) shouldn't linger here indefinitely.
+async function setEsxiHostStats(hostId, statsList) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM vmware_esxi_host_stats WHERE host_id = $1', [hostId]);
+    for (const s of statsList || []) {
+      await client.query(
+        `INSERT INTO vmware_esxi_host_stats
+           (host_id, esxi_name, esxi_ip, hardware_model, cpu_cores, cpu_usage_pct,
+            memory_total_mb, memory_used_mb, disk_total_gb, disk_used_gb, uptime_seconds)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          hostId, s.esxi_name, s.esxi_ip, s.hardware_model, s.cpu_cores, s.cpu_usage_pct,
+          s.memory_total_mb, s.memory_used_mb, s.disk_total_gb, s.disk_used_gb, s.uptime_seconds,
+        ]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Keyed by "name|ip" to match how getESXiTopology() keys its own map.
+async function getEsxiHostStatsMap() {
+  const { rows } = await db.query(
+    `SELECT esxi_name, esxi_ip, hardware_model, cpu_cores, cpu_usage_pct,
+            memory_total_mb, memory_used_mb, disk_total_gb, disk_used_gb, uptime_seconds
+       FROM vmware_esxi_host_stats`
+  );
+  const map = new Map();
+  for (const r of rows) map.set(`${r.esxi_name}|${r.esxi_ip}`, r);
+  return map;
 }
 
 function getDecryptedPassword(host) {
@@ -330,7 +385,7 @@ async function getDrift() {
 // ---------------------------------------------------------------------------
 
 async function getESXiTopology() {
-  const vms = await getLatestVMs();
+  const [vms, statsMap] = await Promise.all([getLatestVMs(), getEsxiHostStatsMap()]);
   const topology = {};  // vcenter → { esxiKey → stats }
 
   for (const vm of vms) {
@@ -342,9 +397,18 @@ async function getESXiTopology() {
     const key      = `${esxiName}|${esxiIp}`;
 
     if (!topology[vcenter][key]) {
+      const hw = statsMap.get(key);
       topology[vcenter][key] = {
         esxi_name: esxiName, esxi_ip: esxiIp, vcenter,
         vm_count: 0, powered_on: 0, powered_off: 0, suspended: 0,
+        hardware_model:  hw?.hardware_model  ?? null,
+        cpu_cores:       hw?.cpu_cores       ?? null,
+        cpu_usage_pct:   hw?.cpu_usage_pct   ?? null,
+        memory_total_mb: hw?.memory_total_mb ?? null,
+        memory_used_mb:  hw?.memory_used_mb  ?? null,
+        disk_total_gb:   hw?.disk_total_gb   ?? null,
+        disk_used_gb:    hw?.disk_used_gb    ?? null,
+        uptime_seconds:  hw?.uptime_seconds  ?? null,
       };
     }
     const s = topology[vcenter][key];
@@ -473,7 +537,8 @@ async function getReconciliation() {
 
 module.exports = {
   listHosts, getHostById, getHostByName, upsertHost, deleteHost,
-  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, setHostStats, getDecryptedPassword,
+  setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword,
+  setHostStats, clearHostStats, setEsxiHostStats,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs, getReconciliation,
   getDashboardStats, getDrift, getESXiTopology, getStaleVMs, getSnapshotVMs,

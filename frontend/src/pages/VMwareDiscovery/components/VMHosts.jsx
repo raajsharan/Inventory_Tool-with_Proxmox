@@ -274,6 +274,7 @@ export default function VMHosts({ onDiscoveryStarted }) {
                 rowKey={(h) => `${h.esxi_name}|${h.esxi_ip}`}
                 dataSource={esxi}
                 pagination={false}
+                scroll={{ x: 'max-content' }}
                 columns={[
                   {
                     title: <Space size={6}><ClusterOutlined />ESXi Host</Space>,
@@ -287,6 +288,39 @@ export default function VMHosts({ onDiscoveryStarted }) {
                     render: v => <Tag color={v > 0 ? 'orange' : 'default'}>{v}</Tag> },
                   { title: 'Suspended',  dataIndex: 'suspended',   width: 100, align: 'center',
                     render: v => v > 0 ? <Tag color="gold">{v}</Tag> : <Text type="secondary">0</Text> },
+                  { title: 'Model', dataIndex: 'hardware_model', width: 150,
+                    render: v => v || <Text type="secondary">—</Text> },
+                  {
+                    title: 'CPU', key: 'cpu', width: 150,
+                    render: (_, r) => r.cpu_cores == null
+                      ? <Text type="secondary">—</Text>
+                      : (
+                        <div style={{ minWidth: 110 }}>
+                          <Text style={{ fontSize: 12 }}>{r.cpu_cores} cores</Text>
+                          <Progress percent={Number(r.cpu_usage_pct) || 0} size="small"
+                            strokeColor={progressColor(Number(r.cpu_usage_pct))} showInfo
+                            format={p => `${p}%`} />
+                        </div>
+                      ),
+                  },
+                  {
+                    title: 'RAM', key: 'ram', width: 160,
+                    render: (_, r) => usageBar(
+                      r.memory_used_mb != null ? `${(r.memory_used_mb / 1024).toFixed(1)} GB` : null,
+                      r.memory_total_mb != null ? `${(r.memory_total_mb / 1024).toFixed(1)} GB` : null,
+                      r.memory_total_mb ? Math.round((r.memory_used_mb / r.memory_total_mb) * 1000) / 10 : null,
+                    ),
+                  },
+                  {
+                    title: 'Disk', key: 'disk', width: 160,
+                    render: (_, r) => usageBar(
+                      r.disk_used_gb != null ? `${Number(r.disk_used_gb).toFixed(1)} GB` : null,
+                      r.disk_total_gb != null ? `${Number(r.disk_total_gb).toFixed(1)} GB` : null,
+                      r.disk_total_gb ? Math.round((Number(r.disk_used_gb) / Number(r.disk_total_gb)) * 1000) / 10 : null,
+                    ),
+                  },
+                  { title: 'Uptime', dataIndex: 'uptime_seconds', width: 100,
+                    render: v => formatUptime(v) },
                 ]}
               />
             );

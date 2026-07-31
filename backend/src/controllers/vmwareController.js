@@ -171,8 +171,10 @@ async function runDiscoverySync(req, res, next) {
       await dbSvc.setLastDiscovery(record.id, vms.length);
 
       try {
-        const stats = await vmSvc.getHostStats(host, Number(port), username, decryptedPw, Boolean(verifySSL));
-        await dbSvc.setHostStats(record.id, stats);
+        const allStats = await vmSvc.getAllHostStats(host, Number(port), username, decryptedPw, Boolean(verifySSL));
+        await dbSvc.setEsxiHostStats(record.id, allStats);
+        if (allStats.length === 1) await dbSvc.setHostStats(record.id, allStats[0]);
+        else await dbSvc.clearHostStats(record.id);
       } catch (statsErr) {
         // eslint-disable-next-line no-console
         console.warn(`[vmware] host stats collection failed for ${host}:`, statsErr.message);

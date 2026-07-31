@@ -603,59 +603,80 @@ async function discoverViaSoap(hostname, port, username, password, verifySSL) {
 // ---------------------------------------------------------------------------
 // ESXi host hardware telemetry (CPU/RAM/disk/uptime) — vim25 SOAP only, since
 // neither generation of the REST Automation API exposes host quickStats or
-// datastore capacity. Works the same way against a standalone ESXi host or
-// a vCenter (in the vCenter case this reports on the first HostSystem in
-// inventory, same simplification discoverViaSoap already makes for esxiName).
+// datastore capacity. Returns ONE entry per HostSystem in inventory — a
+// vCenter commonly manages many physical ESXi hosts with different hardware,
+// so reporting only the first one (an earlier version of this) would show
+// one arbitrary host's specs as if they applied to the whole vCenter entry.
 // Best-effort: a stats-collection failure should never fail the whole
 // discovery run, so callers should catch and ignore errors from this.
 // ---------------------------------------------------------------------------
-async function getHostStats(hostname, port, username, password, verifySSL) {
+function computeHostStats(h, datastoresByRef) {
+  const dsRefs = [...(h.datastore || '').matchAll(/<ManagedObjectReference[^>]*>([^<]+)<\/ManagedObjectReference>/g)]
+    .map(m => m[1]);
+  let diskTotalBytes = 0;
+  let diskFreeBytes = 0;
+  for (const ref of dsRefs) {
+    const d = datastoresByRef.get(ref);
+    if (!d) continue;
+    diskTotalBytes += Number(d['summary.capacity']) || 0;
+    diskFreeBytes  += Number(d['summary.freeSpace']) || 0;
+  }
+
+  const cpuCores      = Number(h['summary.hardware.numCpuCores']) || 0;
+  // summary.hardware.cpuMhz is the speed of a SINGLE core, not total
+  // capacity — total host CPU capacity is cpuMhz * numCpuCores.
+  const cpuTotalMhz   = Number(h['summary.hardware.cpuMhz']) * cpuCores || 0;
+  const cpuUsageMhz   = Number(h['summary.quickStats.overallCpuUsage']) || 0;
+  const memTotalBytes = Number(h['summary.hardware.memorySize']) || 0;
+  const memUsedMb     = Number(h['summary.quickStats.overallMemoryUsage']) || 0;
+  const bootTime      = h['summary.runtime.bootTime'] ? new Date(h['summary.runtime.bootTime']) : null;
+  const memTotalMb    = memTotalBytes ? Math.round(memTotalBytes / 1048576) : 0;
+  const diskUsedBytes = diskTotalBytes - diskFreeBytes;
+
+  return {
+    hardware_model:  h['summary.hardware.model'] ? xmlUnescape(h['summary.hardware.model']) : null,
+    cpu_cores:       cpuCores || null,
+    cpu_usage_pct:   cpuTotalMhz ? Math.round((cpuUsageMhz / cpuTotalMhz) * 1000) / 10 : null,
+    memory_total_mb: memTotalMb || null,
+    memory_used_mb:  memUsedMb || null,
+    disk_total_gb:   diskTotalBytes ? Math.round(diskTotalBytes / 1073741824 * 10) / 10 : null,
+    disk_used_gb:    diskTotalBytes ? Math.round(diskUsedBytes / 1073741824 * 10) / 10 : null,
+    uptime_seconds:  bootTime && !isNaN(bootTime) ? Math.max(0, Math.floor((Date.now() - bootTime.getTime()) / 1000)) : null,
+  };
+}
+
+async function getAllHostStats(hostname, port, username, password, verifySSL) {
   const { cookie, refs } = await soapLogin(hostname, port, username, password, verifySSL);
   try {
     const hostObjs = await soapRetrieveAll(hostname, port, verifySSL, cookie, refs, 'HostSystem', [
-      'summary.hardware.model', 'summary.hardware.numCpuCores', 'summary.hardware.cpuMhz',
+      'name', 'summary.hardware.model', 'summary.hardware.numCpuCores', 'summary.hardware.cpuMhz',
       'summary.quickStats.overallCpuUsage', 'summary.hardware.memorySize',
       'summary.quickStats.overallMemoryUsage', 'summary.runtime.bootTime', 'datastore',
     ]);
-    const h = hostObjs[0];
-    if (!h) return null;
+    if (!hostObjs.length) return [];
 
-    const dsRefs = [...(h.datastore || '').matchAll(/<ManagedObjectReference[^>]*>([^<]+)<\/ManagedObjectReference>/g)]
-      .map(m => m[1]);
-    let diskTotalBytes = 0;
-    let diskFreeBytes = 0;
-    if (dsRefs.length) {
+    // Fetch every datastore ONCE and share across hosts, rather than
+    // per-host — hosts in the same cluster commonly share datastores.
+    const anyDatastoreRefs = hostObjs.some(h => h.datastore);
+    const datastoresByRef = new Map();
+    if (anyDatastoreRefs) {
       const dsObjs = await soapRetrieveAll(hostname, port, verifySSL, cookie, refs, 'Datastore', [
         'summary.capacity', 'summary.freeSpace',
       ]);
-      for (const d of dsObjs) {
-        if (!dsRefs.includes(d.__obj)) continue;
-        diskTotalBytes += Number(d['summary.capacity']) || 0;
-        diskFreeBytes  += Number(d['summary.freeSpace']) || 0;
-      }
+      for (const d of dsObjs) if (d.__obj) datastoresByRef.set(d.__obj, d);
     }
 
-    const cpuCores      = Number(h['summary.hardware.numCpuCores']) || 0;
-    // summary.hardware.cpuMhz is the speed of a SINGLE core, not total
-    // capacity — total host CPU capacity is cpuMhz * numCpuCores.
-    const cpuTotalMhz  = Number(h['summary.hardware.cpuMhz']) * cpuCores || 0;
-    const cpuUsageMhz   = Number(h['summary.quickStats.overallCpuUsage']) || 0;
-    const memTotalBytes = Number(h['summary.hardware.memorySize']) || 0;
-    const memUsedMb     = Number(h['summary.quickStats.overallMemoryUsage']) || 0;
-    const bootTime      = h['summary.runtime.bootTime'] ? new Date(h['summary.runtime.bootTime']) : null;
-    const memTotalMb    = memTotalBytes ? Math.round(memTotalBytes / 1048576) : 0;
-    const diskUsedBytes = diskTotalBytes - diskFreeBytes;
-
-    return {
-      hardware_model:  h['summary.hardware.model'] ? xmlUnescape(h['summary.hardware.model']) : null,
-      cpu_cores:       cpuCores || null,
-      cpu_usage_pct:   cpuTotalMhz ? Math.round((cpuUsageMhz / cpuTotalMhz) * 1000) / 10 : null,
-      memory_total_mb: memTotalMb || null,
-      memory_used_mb:  memUsedMb || null,
-      disk_total_gb:   diskTotalBytes ? Math.round(diskTotalBytes / 1073741824 * 10) / 10 : null,
-      disk_used_gb:    diskTotalBytes ? Math.round(diskUsedBytes / 1073741824 * 10) / 10 : null,
-      uptime_seconds:  bootTime && !isNaN(bootTime) ? Math.max(0, Math.floor((Date.now() - bootTime.getTime()) / 1000)) : null,
-    };
+    const results = [];
+    for (const h of hostObjs) {
+      const name = h.name ? xmlUnescape(h.name) : null;
+      if (!name) continue;
+      results.push({
+        esxi_name: name,
+        esxi_ip:   await resolveHostIp(name),
+        ...computeHostStats(h, datastoresByRef),
+      });
+    }
+    return results;
   } finally {
     try {
       await soapRequest(hostname, port, verifySSL,
@@ -683,4 +704,4 @@ async function discover(host, port, username, password, verifySSL) {
   }
 }
 
-module.exports = { discover, getHostStats, VMwareAuthError, VMwareConnectionError };
+module.exports = { discover, getAllHostStats, VMwareAuthError, VMwareConnectionError };
