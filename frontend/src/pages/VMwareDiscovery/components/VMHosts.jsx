@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Switch, Space,
-  Tag, App, Tooltip, Popconfirm, Card, Typography, Progress,
+  Tag, App, Tooltip, Popconfirm, Card, Typography,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
   PlayCircleOutlined, ApiOutlined, CheckCircleOutlined, ClusterOutlined,
+  ThunderboltOutlined, DatabaseOutlined, HddOutlined, FieldTimeOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 
 const { Text } = Typography;
+
+// Small pulsing LED, like a rack-mount status light — green/amber/red by
+// health, plain grey when there's nothing to report yet.
+const DOT_CSS = `
+@keyframes vmhost-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.vmhost-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 6px; animation: vmhost-pulse 1.8s ease-in-out infinite; }
+`;
 
 function statusTag(host) {
   if (host.is_running) return <Tag color="processing">Running</Tag>;
@@ -26,28 +35,102 @@ function statusTag(host) {
 }
 
 function progressColor(pct) {
-  if (pct == null) return undefined;
+  if (pct == null) return '#8c8c8c';
   if (pct >= 90) return '#ff4d4f';
   if (pct >= 75) return '#faad14';
   return '#52c41a';
 }
 
-function usageBar(usedLabel, totalLabel, pct) {
-  if (totalLabel == null) return <Text type="secondary">—</Text>;
+function HealthDot({ host }) {
+  const color = host.last_status === 'error' ? '#ff4d4f'
+    : host.last_discovery_at ? '#52c41a'
+    : '#8c8c8c';
+  return <span className="vmhost-dot" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />;
+}
+
+// Rack-style segmented usage indicator — a row of small blocks that light up
+// (with a matching glow) instead of a single continuous bar.
+function SegmentedBar({ pct, segments = 6 }) {
+  const clamped = pct == null ? 0 : Math.min(100, Math.max(0, pct));
+  const filled = Math.round((clamped / 100) * segments);
+  const color = progressColor(pct);
   return (
-    <div style={{ minWidth: 130 }}>
-      <Text style={{ fontSize: 12 }}>{usedLabel} / {totalLabel}</Text>
-      <Progress percent={pct ?? 0} size="small" strokeColor={progressColor(pct)} showInfo={false} />
+    <div style={{ display: 'flex', gap: 2 }}>
+      {Array.from({ length: segments }).map((_, i) => (
+        <div key={i} style={{
+          width: 12, height: 6, borderRadius: 1,
+          background: i < filled ? color : 'rgba(140,140,140,0.25)',
+          boxShadow: i < filled ? `0 0 4px ${color}` : 'none',
+        }} />
+      ))}
     </div>
+  );
+}
+
+// Self-contained dark "chip" per stat — reads consistently in light or dark
+// mode since it carries its own background, rather than inheriting the page.
+function StatChip({ icon, iconColor, label, value, pct }) {
+  return (
+    <div style={{
+      display: 'inline-flex', flexDirection: 'column', gap: 3,
+      background: 'linear-gradient(180deg, #101b2d, #0b1420)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 8, padding: '5px 10px', minWidth: 118,
+    }}>
+      <Space size={5} align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
+        <Space size={5}>
+          <span style={{ color: iconColor, fontSize: 13, display: 'flex' }}>{icon}</span>
+          <Text style={{ color: '#d6e4ff', fontSize: 11, fontWeight: 600 }}>{label}</Text>
+        </Space>
+        {pct != null && <Text style={{ color: progressColor(pct), fontSize: 11, fontWeight: 600 }}>{pct}%</Text>}
+      </Space>
+      {value && <Text style={{ color: 'rgba(214,228,255,0.55)', fontSize: 10 }}>{value}</Text>}
+      <SegmentedBar pct={pct} />
+    </div>
+  );
+}
+
+function cpuChip(r) {
+  if (r.cpu_cores == null) return <Text type="secondary">—</Text>;
+  return (
+    <StatChip icon={<ThunderboltOutlined />} iconColor="#faad14"
+      label={`${r.cpu_cores} cores`} pct={Number(r.cpu_usage_pct) || 0} />
+  );
+}
+
+function ramChip(r) {
+  if (r.memory_total_mb == null) return <Text type="secondary">—</Text>;
+  const pct = r.memory_total_mb ? Math.round((r.memory_used_mb / r.memory_total_mb) * 1000) / 10 : 0;
+  return (
+    <StatChip icon={<DatabaseOutlined />} iconColor="#40a9ff" label="RAM"
+      value={`${(r.memory_used_mb / 1024).toFixed(1)} / ${(r.memory_total_mb / 1024).toFixed(1)} GB`}
+      pct={pct} />
+  );
+}
+
+function diskChip(r) {
+  if (r.disk_total_gb == null) return <Text type="secondary">—</Text>;
+  const total = Number(r.disk_total_gb);
+  const used  = Number(r.disk_used_gb);
+  const pct = total ? Math.round((used / total) * 1000) / 10 : 0;
+  return (
+    <StatChip icon={<HddOutlined />} iconColor="#9254de" label="Disk"
+      value={`${used.toFixed(1)} / ${total.toFixed(1)} GB`}
+      pct={pct} />
   );
 }
 
 function formatUptime(seconds) {
   const s = Number(seconds);
-  if (!s) return '—';
+  if (!s) return <Text type="secondary">—</Text>;
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
-  return d > 0 ? `${d}d ${h}h` : `${h}h`;
+  return (
+    <Space size={4}>
+      <FieldTimeOutlined style={{ color: '#52c41a' }} />
+      <Text style={{ fontSize: 12 }}>{d > 0 ? `${d}d ${h}h` : `${h}h`}</Text>
+    </Space>
+  );
 }
 
 export default function VMHosts({ onDiscoveryStarted }) {
@@ -151,7 +234,8 @@ export default function VMHosts({ onDiscoveryStarted }) {
   }
 
   const columns = [
-    { title: 'Host', dataIndex: 'host', key: 'host' },
+    { title: 'Host', dataIndex: 'host', key: 'host',
+      render: (v, r) => <span><HealthDot host={r} />{v}</span> },
     { title: 'Username', dataIndex: 'username', key: 'username' },
     { title: 'Port', dataIndex: 'port', key: 'port', width: 70 },
     {
@@ -170,37 +254,11 @@ export default function VMHosts({ onDiscoveryStarted }) {
       title: 'Model', dataIndex: 'hardware_model', key: 'hardware_model', width: 150,
       render: v => v || <Text type="secondary">—</Text>,
     },
+    { title: 'CPU',  key: 'cpu',  width: 140, render: (_, r) => cpuChip(r) },
+    { title: 'RAM',  key: 'ram',  width: 150, render: (_, r) => ramChip(r) },
+    { title: 'Disk', key: 'disk', width: 150, render: (_, r) => diskChip(r) },
     {
-      title: 'CPU', key: 'cpu', width: 150,
-      render: (_, r) => r.cpu_cores == null
-        ? <Text type="secondary">—</Text>
-        : (
-          <div style={{ minWidth: 110 }}>
-            <Text style={{ fontSize: 12 }}>{r.cpu_cores} cores</Text>
-            <Progress percent={Number(r.cpu_usage_pct) || 0} size="small"
-              strokeColor={progressColor(Number(r.cpu_usage_pct))} showInfo
-              format={p => `${p}%`} />
-          </div>
-        ),
-    },
-    {
-      title: 'RAM', key: 'ram', width: 160,
-      render: (_, r) => usageBar(
-        r.memory_used_mb != null ? `${(r.memory_used_mb / 1024).toFixed(1)} GB` : null,
-        r.memory_total_mb != null ? `${(r.memory_total_mb / 1024).toFixed(1)} GB` : null,
-        r.memory_total_mb ? Math.round((r.memory_used_mb / r.memory_total_mb) * 1000) / 10 : null,
-      ),
-    },
-    {
-      title: 'Disk', key: 'disk', width: 160,
-      render: (_, r) => usageBar(
-        r.disk_used_gb != null ? `${Number(r.disk_used_gb).toFixed(1)} GB` : null,
-        r.disk_total_gb != null ? `${Number(r.disk_total_gb).toFixed(1)} GB` : null,
-        r.disk_total_gb ? Math.round((Number(r.disk_used_gb) / Number(r.disk_total_gb)) * 1000) / 10 : null,
-      ),
-    },
-    {
-      title: 'ESXi Uptime', dataIndex: 'uptime_seconds', key: 'uptime_seconds', width: 100,
+      title: 'ESXi Uptime', dataIndex: 'uptime_seconds', key: 'uptime_seconds', width: 110,
       render: v => formatUptime(v),
     },
     {
@@ -249,6 +307,7 @@ export default function VMHosts({ onDiscoveryStarted }) {
       title="vCenter / ESXi Hosts"
       extra={isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Host</Button>}
     >
+      <style>{DOT_CSS}</style>
       <Table
         size="small"
         rowKey="id"
@@ -257,6 +316,7 @@ export default function VMHosts({ onDiscoveryStarted }) {
         columns={columns}
         pagination={false}
         scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
         expandable={{
           rowExpandable: () => true,
           expandedRowRender: (r) => {
@@ -275,11 +335,20 @@ export default function VMHosts({ onDiscoveryStarted }) {
                 dataSource={esxi}
                 pagination={false}
                 scroll={{ x: 'max-content' }}
+                sticky={{ offsetScroll: 0 }}
                 columns={[
                   {
                     title: <Space size={6}><ClusterOutlined />ESXi Host</Space>,
                     dataIndex: 'esxi_name',
-                    render: v => <Text strong>{v}</Text>,
+                    render: (v, h) => (
+                      <span>
+                        <span className="vmhost-dot" style={{
+                          background: h.cpu_cores != null ? '#52c41a' : '#8c8c8c',
+                          boxShadow: `0 0 6px ${h.cpu_cores != null ? '#52c41a' : '#8c8c8c'}`,
+                        }} />
+                        <Text strong>{v}</Text>
+                      </span>
+                    ),
                   },
                   { title: 'VMs',        dataIndex: 'vm_count',    width: 90, align: 'center' },
                   { title: 'Powered On', dataIndex: 'powered_on',  width: 110, align: 'center',
@@ -290,36 +359,10 @@ export default function VMHosts({ onDiscoveryStarted }) {
                     render: v => v > 0 ? <Tag color="gold">{v}</Tag> : <Text type="secondary">0</Text> },
                   { title: 'Model', dataIndex: 'hardware_model', width: 150,
                     render: v => v || <Text type="secondary">—</Text> },
-                  {
-                    title: 'CPU', key: 'cpu', width: 150,
-                    render: (_, r) => r.cpu_cores == null
-                      ? <Text type="secondary">—</Text>
-                      : (
-                        <div style={{ minWidth: 110 }}>
-                          <Text style={{ fontSize: 12 }}>{r.cpu_cores} cores</Text>
-                          <Progress percent={Number(r.cpu_usage_pct) || 0} size="small"
-                            strokeColor={progressColor(Number(r.cpu_usage_pct))} showInfo
-                            format={p => `${p}%`} />
-                        </div>
-                      ),
-                  },
-                  {
-                    title: 'RAM', key: 'ram', width: 160,
-                    render: (_, r) => usageBar(
-                      r.memory_used_mb != null ? `${(r.memory_used_mb / 1024).toFixed(1)} GB` : null,
-                      r.memory_total_mb != null ? `${(r.memory_total_mb / 1024).toFixed(1)} GB` : null,
-                      r.memory_total_mb ? Math.round((r.memory_used_mb / r.memory_total_mb) * 1000) / 10 : null,
-                    ),
-                  },
-                  {
-                    title: 'Disk', key: 'disk', width: 160,
-                    render: (_, r) => usageBar(
-                      r.disk_used_gb != null ? `${Number(r.disk_used_gb).toFixed(1)} GB` : null,
-                      r.disk_total_gb != null ? `${Number(r.disk_total_gb).toFixed(1)} GB` : null,
-                      r.disk_total_gb ? Math.round((Number(r.disk_used_gb) / Number(r.disk_total_gb)) * 1000) / 10 : null,
-                    ),
-                  },
-                  { title: 'Uptime', dataIndex: 'uptime_seconds', width: 100,
+                  { title: 'CPU',  key: 'cpu',  width: 140, render: (_, r) => cpuChip(r) },
+                  { title: 'RAM',  key: 'ram',  width: 150, render: (_, r) => ramChip(r) },
+                  { title: 'Disk', key: 'disk', width: 150, render: (_, r) => diskChip(r) },
+                  { title: 'Uptime', dataIndex: 'uptime_seconds', width: 110,
                     render: v => formatUptime(v) },
                 ]}
               />
