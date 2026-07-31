@@ -1343,10 +1343,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             From active inventory, pending/follow-ups:
           </Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 4 }}>
-            <li>- <strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
-            <li>- Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
-            <li>- <strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
-            <li><strong>- Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
+            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
+            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
+            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
+            <li><strong>Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
           </ul>
         </WeeklyReportRow></Wgt>
 
@@ -1364,9 +1364,9 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             Compliance: <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> out of <strong>{(ec.total ?? 0).toLocaleString()}</strong> = <strong>{pct(ec.withPassword, ec.total)}%</strong>
           </Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 16 }}>
-            <li>- <strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
-            <li>- <strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
-            <li>- <strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
+            <li><strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
+            <li><strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
+            <li><strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
           </ul>
 
           {/* Location-wise endpoint count table — always rendered */}
