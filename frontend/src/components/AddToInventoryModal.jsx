@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Button, Col, Divider, Form, Input, Modal, Row, Select, Space, Tag, Typography,
 } from 'antd';
@@ -11,6 +11,13 @@ import api from '../api/client';
 const { Text } = Typography;
 
 const SERVER_STATUS_OPTS = ['Active', 'Inactive', 'Decommissioned', 'Retired'].map(v => ({ label: v, value: v }));
+
+const TARGET_INVENTORIES = {
+  assets:         { label: 'Asset Inventory',     apiPath: '/assets',         viewPath: '/assets' },
+  beijing_assets: { label: 'Beijing Asset List',  apiPath: '/beijing-assets', viewPath: '/beijing-assets' },
+  ext_assets:     { label: 'Ext. Asset Inventory', apiPath: '/ext-assets',    viewPath: '/ext-assets' },
+};
+const DEFAULT_TARGET = 'ext_assets';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function firstValidIP(ips) {
@@ -82,12 +89,24 @@ export function proxmoxToInventory(vm) {
 // ── modal component ──────────────────────────────────────────────────────────
 export default function AddToInventoryModal({ open, prefill, onClose }) {
   const [form]    = Form.useForm();
+  const [target,  setTarget]  = useState(DEFAULT_TARGET);
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
   const [created, setCreated] = useState(null); // { id, vm_name }
 
+  // ESXi host picker — searches Physical & ESXi Servers so the VM's host
+  // and assigned owner can be pulled straight from that record instead of
+  // retyped by hand.
+  const [esxiOptions,   setEsxiOptions]   = useState([]);
+  const [esxiSearching, setEsxiSearching] = useState(false);
+  const [esxiHostId,    setEsxiHostId]    = useState(undefined);
+  const esxiSearchRef = useRef(null);
+
   useEffect(() => {
     if (open && prefill) {
+      setTarget(DEFAULT_TARGET);
+      setEsxiHostId(undefined);
+      setEsxiOptions([]);
       form.setFieldsValue({
         vm_name:            prefill.vm_name,
         os_hostname:        prefill.os_hostname,
@@ -99,6 +118,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
         hosted_ip:          prefill.hosted_ip,
         server_status:      prefill.server_status,
         additional_remarks: prefill.additional_remarks,
+        assigned_user:      '',
         department:         '',
         location:           '',
       });
@@ -107,12 +127,41 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
     }
   }, [open, prefill, form]);
 
+  function searchEsxiHosts(value) {
+    clearTimeout(esxiSearchRef.current);
+    if (!value || value.trim().length < 2) { setEsxiOptions([]); return; }
+    esxiSearchRef.current = setTimeout(async () => {
+      setEsxiSearching(true);
+      try {
+        const { data } = await api.get('/physical-esxi', { params: { search: value.trim(), pageSize: 20 } });
+        setEsxiOptions((data.items || []).map(r => ({
+          value: r.id,
+          label: `${r.vm_name || '(unnamed)'} · ${r.ip_address || '—'}${r.assigned_user ? ` · ${r.assigned_user}` : ''}`,
+          record: r,
+        })));
+      } catch { setEsxiOptions([]); }
+      finally { setEsxiSearching(false); }
+    }, 280);
+  }
+
+  function onEsxiHostSelect(id, option) {
+    setEsxiHostId(id);
+    const rec = option?.record;
+    if (!rec) return;
+    form.setFieldsValue({
+      hosted_ip:     rec.ip_address || '',
+      assigned_user: rec.assigned_user || '',
+    });
+  }
+
+  const targetMeta = TARGET_INVENTORIES[target];
+
   async function onSubmit(values) {
     setSaving(true);
     setError('');
     try {
-      const { data } = await api.post('/ext-assets', values);
-      setCreated({ id: data.id, vm_name: data.vm_name });
+      const { data } = await api.post(targetMeta.apiPath, values);
+      setCreated({ id: data.id, vm_name: data.vm_name, target });
     } catch (e) {
       const err = e.response?.data;
       const { details } = err || {};
@@ -142,7 +191,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
       title={
         <Space>
           <AppstoreAddOutlined style={{ color: '#1677ff' }} />
-          <span>Add to Ext. Asset Inventory</span>
+          <span>Add to Inventory</span>
           {prefill?._source_label && (
             <Tag color="purple" style={{ fontSize: 11, fontWeight: 400 }}>{prefill._source_label}</Tag>
           )}
@@ -154,7 +203,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
         created ? (
           <Space>
             <Button onClick={handleClose}>Close</Button>
-            <Link to={`/ext-assets/${created.id}`} onClick={handleClose}>
+            <Link to={`${TARGET_INVENTORIES[created.target].viewPath}/${created.id}`} onClick={handleClose}>
               <Button type="primary" icon={<ExportOutlined />}>View Asset</Button>
             </Link>
           </Space>
@@ -163,7 +212,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
             <Button onClick={handleClose}>Cancel</Button>
             <Button type="primary" icon={<AppstoreAddOutlined />} loading={saving}
               onClick={() => form.submit()}>
-              Add to Ext. Inventory
+              Add to {targetMeta.label}
             </Button>
           </Space>
         )
@@ -178,11 +227,11 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
           icon={<CheckCircleOutlined />}
           message={
             <span>
-              <strong>{created.vm_name}</strong> was added to Ext. Asset Inventory.
+              <strong>{created.vm_name}</strong> was added to {TARGET_INVENTORIES[created.target].label}.
             </span>
           }
           description={
-            <Link to={`/ext-assets/${created.id}`} onClick={handleClose}>
+            <Link to={`${TARGET_INVENTORIES[created.target].viewPath}/${created.id}`} onClick={handleClose}>
               Click here to view the asset →
             </Link>
           }
@@ -203,6 +252,30 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
           )}
 
           <Form form={form} layout="vertical" onFinish={onSubmit}>
+            <Form.Item label="Target Inventory" required style={{ marginBottom: 16 }}>
+              <Select
+                value={target}
+                onChange={setTarget}
+                options={Object.entries(TARGET_INVENTORIES).map(([key, m]) => ({ value: key, label: m.label }))}
+              />
+            </Form.Item>
+
+            <Form.Item label="ESXi Host" style={{ marginBottom: 16 }} extra="Pick the physical/ESXi server this VM runs on — fills in Hosted IP and Assigned Owner below.">
+              <Select
+                showSearch
+                allowClear
+                value={esxiHostId}
+                placeholder="Search Physical & ESXi Servers by name or IP…"
+                filterOption={false}
+                loading={esxiSearching}
+                notFoundContent={esxiSearching ? 'Searching…' : null}
+                onSearch={searchEsxiHosts}
+                onChange={(v, opt) => onEsxiHostSelect(v, opt)}
+                onClear={() => setEsxiHostId(undefined)}
+                options={esxiOptions}
+              />
+            </Form.Item>
+
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item name="vm_name" label="VM Name" rules={[{ required: true, message: 'VM Name is required' }]}>
@@ -271,10 +344,18 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
                 </Form.Item>
               </Col>
               <Col span={8}>
+                <Form.Item name="assigned_user" label="Assigned Owner">
+                  <Input placeholder="e.g. jane.doe — auto-filled from ESXi Host above" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
                 <Form.Item name="department" label="Department">
                   <Input placeholder="e.g. IT / Platform" />
                 </Form.Item>
               </Col>
+            </Row>
+
+            <Row gutter={16}>
               <Col span={8}>
                 <Form.Item name="location" label="Location">
                   <Input placeholder="e.g. US-East, HQ" />
