@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { Column, Pie, Line } from '@ant-design/plots';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const VIZ_TYPES = [
   { value: 'table',    label: 'Data Table',     icon: <TableOutlined /> },
@@ -34,6 +35,8 @@ const OPERATORS = [
 
 export default function ReportBuilder() {
   const { message } = App.useApp();
+  const { user, canViewPasswords } = useAuth();
+  const canSeePasswords = ['admin', 'superadmin', 'asset_manager'].includes(user?.role) || !!canViewPasswords;
   const [sources, setSources] = useState([]);
   const [source, setSource] = useState('assets');
   const [viz, setViz] = useState('table');
@@ -53,7 +56,12 @@ export default function ReportBuilder() {
   }, []);
 
   const currentSource = useMemo(() => sources.find(s => s.key === source), [sources, source]);
-  const allFields = currentSource?.fields || [];
+  const allFields = useMemo(() => {
+    const fields = currentSource?.fields || [];
+    // Hide rather than merely disable — selecting it and only then hitting a
+    // 403 on Generate Report would be a confusing dead end.
+    return canSeePasswords ? fields : fields.filter(f => f.key !== 'asset_password');
+  }, [currentSource, canSeePasswords]);
 
   useEffect(() => {
     // Default to first 7 fields selected, like the screenshot.

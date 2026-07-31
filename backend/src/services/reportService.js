@@ -1,5 +1,13 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const { decryptSafe } = require('../utils/crypto');
+
+// asset_password isn't a real column — it's asset_password_encrypted
+// (AES-256-GCM ciphertext). Selecting it aliases to the real column and
+// decrypts after fetch (see run()); gated behind password-view permission
+// in reportController before this ever runs.
+const PASSWORD_FIELD = { key: 'asset_password', label: 'Asset Password', type: 'string' };
+const PASSWORD_SQL_COLUMN = 'asset_password_encrypted';
 
 const ASSET_FIELDS = [
   { key: 'vm_name', label: 'VM Name', type: 'string' },
@@ -22,6 +30,7 @@ const ASSET_FIELDS = [
   { key: 'hosted_ip', label: 'Hosted IP', type: 'string' },
   { key: 'asset_tag', label: 'Asset Tag', type: 'string' },
   { key: 'asset_username', label: 'Asset Username', type: 'string' },
+  PASSWORD_FIELD,
   { key: 'additional_remarks', label: 'Additional Remarks', type: 'string' },
   { key: 'manage_engine_installed', label: 'ManageEngine Installed', type: 'boolean' },
   { key: 'tenable_installed', label: 'Tenable Installed', type: 'boolean' },
@@ -56,6 +65,7 @@ const PHYS_ESXI_FIELDS = [
   { key: 'server_position', label: 'Server Position', type: 'string' },
   { key: 'asset_tag', label: 'Asset Tag', type: 'string' },
   { key: 'asset_username', label: 'Asset Username', type: 'string' },
+  PASSWORD_FIELD,
   { key: 'additional_remarks', label: 'Additional Remarks', type: 'string' },
   { key: 'mac_address', label: 'MAC Address', type: 'string' },
   { key: 'idrac_enabled', label: 'iDRAC Enabled', type: 'boolean' },
@@ -106,6 +116,12 @@ const OPS = {
   notnull: { sql: 'IS NOT NULL', args: 0 },
 };
 
+// asset_password is a virtual field backed by ciphertext (see PASSWORD_FIELD
+// above) — filtering/selecting must go against the real column name.
+function sqlColumnFor(key) {
+  return key === PASSWORD_FIELD.key ? PASSWORD_SQL_COLUMN : key;
+}
+
 function buildAssetWhere(filters, params, fields = ASSET_FIELDS) {
   const where = [];
   for (const f of filters || []) {
@@ -113,18 +129,19 @@ function buildAssetWhere(filters, params, fields = ASSET_FIELDS) {
     if (!op) continue;
     const col = fields.find(a => a.key === f.field);
     if (!col) continue;
+    const sqlCol = sqlColumnFor(col.key);
     if (op.args === 0) {
-      where.push(`${col.key} ${op.sql}`);
+      where.push(`${sqlCol} ${op.sql}`);
     } else {
       const val = op.transform ? op.transform(f.value) : f.value;
       params.push(val);
-      where.push(`${col.key} ${op.sql.replace('$X', '$' + params.length)}`);
+      where.push(`${sqlCol} ${op.sql.replace('$X', '$' + params.length)}`);
     }
   }
   return where.length ? `WHERE ${where.join(' AND ')}` : '';
 }
 
-async function run({ source, columns = [], filters = [], limit = 5000 }) {
+async function run({ source, columns = [], filters = [], limit = 5000, allowPasswords = false }) {
   const all = await sources();
   const src = all.find(s => s.key === source);
   if (!src) throw new ApiError(400, 'Unknown report source');
@@ -133,20 +150,34 @@ async function run({ source, columns = [], filters = [], limit = 5000 }) {
   if (src.kind === 'table') {
     const tableFields = src.fields;
     const selectableCols = new Set(tableFields.map(f => f.key));
-    const cols = (columns.length ? columns : tableFields.map(f => f.key)).filter(c => selectableCols.has(c));
+    let cols = (columns.length ? columns : tableFields.map(f => f.key)).filter(c => selectableCols.has(c));
+    // Defense in depth: the controller already rejects a password column
+    // request with a 403 when the caller lacks password-view permission —
+    // this strips it too rather than trusting that check alone.
+    if (!allowPasswords) cols = cols.filter(c => c !== PASSWORD_FIELD.key);
     if (!cols.length) cols.push('id');
     const params = [];
-    const whereSql = buildAssetWhere(filters, params, tableFields);
+    // Also strip a password-field filter when unauthorized — otherwise a
+    // caller could probe values via row-count without ever selecting the
+    // column itself.
+    const effectiveFilters = allowPasswords
+      ? filters
+      : (filters || []).filter(f => f.field !== PASSWORD_FIELD.key);
+    const whereSql = buildAssetWhere(effectiveFilters, params, tableFields);
     // Baseline exclusion of soft-deleted/decommissioned rows, consistent with
     // every other read path over these tables (see assetService.list(), etc.).
     const liveWhere = 'deleted_at IS NULL AND decommissioned_at IS NULL';
     const combinedWhere = whereSql
       ? whereSql.replace(/^WHERE /, `WHERE ${liveWhere} AND `)
       : `WHERE ${liveWhere}`;
-    const { rows } = await db.query(
-      `SELECT ${cols.join(',')} FROM ${src.table} ${combinedWhere} ORDER BY created_at DESC LIMIT ${cap}`,
+    const sqlCols = cols.map(c => c === PASSWORD_FIELD.key ? `${PASSWORD_SQL_COLUMN} AS ${c}` : c);
+    const { rows: rawRows } = await db.query(
+      `SELECT ${sqlCols.join(',')} FROM ${src.table} ${combinedWhere} ORDER BY created_at DESC LIMIT ${cap}`,
       params
     );
+    const rows = cols.includes(PASSWORD_FIELD.key)
+      ? rawRows.map(r => ({ ...r, [PASSWORD_FIELD.key]: decryptSafe(r[PASSWORD_FIELD.key]) }))
+      : rawRows;
     return { columns: cols.map(c => src.fields.find(f => f.key === c) || { key: c, label: c, type: 'string' }), rows };
   }
 
