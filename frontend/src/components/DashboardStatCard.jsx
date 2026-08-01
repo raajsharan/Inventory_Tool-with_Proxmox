@@ -44,6 +44,25 @@ export function useCountUp(target, duration = 700) {
   return value;
 }
 
+// Auto-fitting stat card row: fills the available width with as many cards
+// as fit at `minWidth` each, wrapping evenly instead of antd's fixed
+// 24-column Row/Col grid — which strands a lone card alone on its own row
+// whenever the card count doesn't divide evenly into the chosen column
+// span (e.g. 7 cards at md={4}/6-per-row leaves 1 stranded with a full
+// empty row of space next to it).
+export function StatGrid({ children, minWidth = 180, gap = 16, style }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}px, 1fr))`,
+      gap,
+      ...style,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 export function StatCard({ icon, color, bg, title, value, index = 0 }) {
   const animated = useCountUp(value);
   return (

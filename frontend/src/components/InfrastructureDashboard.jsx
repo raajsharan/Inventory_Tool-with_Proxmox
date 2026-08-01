@@ -8,7 +8,7 @@ import {
   LaptopOutlined, ContainerOutlined,
 } from '@ant-design/icons';
 import api from '../api/client';
-import { DASH_CSS, StatCard, MiniBar, SplitBar, ExpandableTableCard } from './DashboardStatCard.jsx';
+import { DASH_CSS, StatCard, StatGrid, MiniBar, SplitBar, ExpandableTableCard } from './DashboardStatCard.jsx';
 
 function osIcon(os) {
   const s = (os || '').toLowerCase();
@@ -157,36 +157,22 @@ export default function InfrastructureDashboard() {
       <style>{DASH_CSS}</style>
 
       {/* Combined summary cards */}
-      <Row gutter={[16, 16]}>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={0} title="Total" value={total}
-            icon={<ApartmentOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
-        </Col>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={1} title="Running / On" value={running}
-            icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
-        </Col>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={2} title="Stopped / Off" value={stopped}
-            icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
-        </Col>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={3} title="Paused / Suspended" value={paused}
-            icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
-        </Col>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={4} title="VMware VMs" value={vmTotal}
-            icon={<ApartmentOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
-        </Col>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={5} title="Proxmox (QEMU+LXC)" value={pxTotal}
-            icon={<ClusterOutlined />} color="#722ed1" bg="rgba(114,46,209,0.12)" />
-        </Col>
-        <Col xs={12} sm={8} md={4}>
-          <StatCard index={6} title="Hyper-V VMs" value={hvTotal}
-            icon={<WindowsOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
-        </Col>
-      </Row>
+      <StatGrid>
+        <StatCard index={0} title="Total" value={total}
+          icon={<ApartmentOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
+        <StatCard index={1} title="Running / On" value={running}
+          icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
+        <StatCard index={2} title="Stopped / Off" value={stopped}
+          icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
+        <StatCard index={3} title="Paused / Suspended" value={paused}
+          icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
+        <StatCard index={4} title="VMware VMs" value={vmTotal}
+          icon={<ApartmentOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
+        <StatCard index={5} title="Proxmox (QEMU+LXC)" value={pxTotal}
+          icon={<ClusterOutlined />} color="#722ed1" bg="rgba(114,46,209,0.12)" />
+        <StatCard index={6} title="Hyper-V VMs" value={hvTotal}
+          icon={<WindowsOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
+      </StatGrid>
 
       {/* Merged OS breakdown across all three integrations */}
       {mergedOS.length > 0 && (
@@ -234,24 +220,16 @@ export default function InfrastructureDashboard() {
           <Typography.Text type="secondary">No data — run a VMware discovery first.</Typography.Text>
         ) : (
           <>
-            <Row gutter={[12, 12]} style={{ marginBottom: 14 }}>
-              <Col xs={12} sm={6}>
-                <StatCard index={0} title="Total VMs" value={vmTotal}
-                  icon={<ApartmentOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
-              </Col>
-              <Col xs={12} sm={6}>
-                <StatCard index={1} title="Powered On" value={vmOn}
-                  icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
-              </Col>
-              <Col xs={12} sm={6}>
-                <StatCard index={2} title="Powered Off" value={vmOff}
-                  icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
-              </Col>
-              <Col xs={12} sm={6}>
-                <StatCard index={3} title="Suspended" value={vmSusp}
-                  icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
-              </Col>
-            </Row>
+            <StatGrid minWidth={160} gap={12} style={{ marginBottom: 14 }}>
+              <StatCard index={0} title="Total VMs" value={vmTotal}
+                icon={<ApartmentOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
+              <StatCard index={1} title="Powered On" value={vmOn}
+                icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
+              <StatCard index={2} title="Powered Off" value={vmOff}
+                icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
+              <StatCard index={3} title="Suspended" value={vmSusp}
+                icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
+            </StatGrid>
             <Row gutter={[12, 12]}>
               <Col xs={24} lg={16}>
                 <ExpandableTableCard title="By vCenter / ESXi Host">
@@ -293,32 +271,20 @@ export default function InfrastructureDashboard() {
           <Typography.Text type="secondary">No data — run a Proxmox discovery first.</Typography.Text>
         ) : (
           <>
-            <Row gutter={[12, 12]} style={{ marginBottom: 14 }}>
-              <Col xs={12} sm={4}>
-                <StatCard index={0} title="Total" value={pxTotal}
-                  icon={<ClusterOutlined />} color="#722ed1" bg="rgba(114,46,209,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={1} title="Running" value={pxOn}
-                  icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={2} title="Stopped" value={pxOff}
-                  icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={3} title="Paused" value={pxPaused}
-                  icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={4} title="QEMU VMs" value={pxQemu}
-                  icon={<LaptopOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={5} title="LXC Containers" value={pxLxc}
-                  icon={<ContainerOutlined />} color="#eb2f96" bg="rgba(235,47,150,0.12)" />
-              </Col>
-            </Row>
+            <StatGrid minWidth={150} gap={12} style={{ marginBottom: 14 }}>
+              <StatCard index={0} title="Total" value={pxTotal}
+                icon={<ClusterOutlined />} color="#722ed1" bg="rgba(114,46,209,0.12)" />
+              <StatCard index={1} title="Running" value={pxOn}
+                icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
+              <StatCard index={2} title="Stopped" value={pxOff}
+                icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
+              <StatCard index={3} title="Paused" value={pxPaused}
+                icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
+              <StatCard index={4} title="QEMU VMs" value={pxQemu}
+                icon={<LaptopOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
+              <StatCard index={5} title="LXC Containers" value={pxLxc}
+                icon={<ContainerOutlined />} color="#eb2f96" bg="rgba(235,47,150,0.12)" />
+            </StatGrid>
             <Row gutter={[12, 12]}>
               <Col xs={24} lg={16}>
                 <ExpandableTableCard title="By Node">
@@ -354,28 +320,18 @@ export default function InfrastructureDashboard() {
           <Typography.Text type="secondary">No data — run a Hyper-V discovery first.</Typography.Text>
         ) : (
           <>
-            <Row gutter={[12, 12]} style={{ marginBottom: 14 }}>
-              <Col xs={12} sm={4}>
-                <StatCard index={0} title="Total VMs" value={hvTotal}
-                  icon={<WindowsOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={1} title="Running" value={hvOn}
-                  icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={2} title="Stopped" value={hvOff}
-                  icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={3} title="Paused" value={hvPaused}
-                  icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
-              </Col>
-              <Col xs={12} sm={4}>
-                <StatCard index={4} title="Saved" value={hvSaved}
-                  icon={<PauseCircleOutlined />} color="#1890ff" bg="rgba(24,144,255,0.12)" />
-              </Col>
-            </Row>
+            <StatGrid minWidth={150} gap={12} style={{ marginBottom: 14 }}>
+              <StatCard index={0} title="Total VMs" value={hvTotal}
+                icon={<WindowsOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
+              <StatCard index={1} title="Running" value={hvOn}
+                icon={<PlayCircleOutlined />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
+              <StatCard index={2} title="Stopped" value={hvOff}
+                icon={<StopOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
+              <StatCard index={3} title="Paused" value={hvPaused}
+                icon={<PauseCircleOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
+              <StatCard index={4} title="Saved" value={hvSaved}
+                icon={<PauseCircleOutlined />} color="#1890ff" bg="rgba(24,144,255,0.12)" />
+            </StatGrid>
             <Row gutter={[12, 12]}>
               <Col xs={24} lg={16}>
                 <ExpandableTableCard title="By Host">
