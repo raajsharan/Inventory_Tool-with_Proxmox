@@ -17,6 +17,7 @@ import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
 import { useAppTheme } from '../context/ThemeContext.jsx';
 import InfrastructureDashboard from '../components/InfrastructureDashboard.jsx';
+import { DASH_CSS, useCountUp } from '../components/DashboardStatCard.jsx';
 import {
   resolveTabs, resolveDefaultView, resolveDefaultTab, resolveWidget, customWidgetsFor,
   DASHBOARD_WIDGETS,
@@ -132,6 +133,8 @@ function CustomWidgets({ tab }) {
 }
 
 function StatTile({ icon, value, label, color }) {
+  const numeric = Number.isFinite(value);
+  const animated = useCountUp(numeric ? value : 0);
   return (
     <Card size="small" className="stat-tile" bodyStyle={{ padding: 12 }}>
       <Space size={12} align="center" style={{ width: '100%' }}>
@@ -149,7 +152,7 @@ function StatTile({ icon, value, label, color }) {
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>
-            {Number.isFinite(value) ? value.toLocaleString() : (value ?? '—')}
+            {numeric ? animated.toLocaleString() : (value ?? '—')}
           </div>
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>{label}</Typography.Text>
         </div>
@@ -237,16 +240,22 @@ function ExecutiveOverview({ data, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
 
+  const totalInventory = useCountUp(h.totalInventory ?? 0);
+  const patchingCompliancePct = useCountUp((h.patchingCompliancePct ?? 0) * 10);
+  const operationalReadinessPct = useCountUp((h.operationalReadinessPct ?? 0) * 100);
+  const infrastructureHealthScore = useCountUp(h.infrastructureHealthScore ?? 0);
+
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <Wgt tab="exec" k="kpi_cards"><Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '0ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Total Inventory</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {(h.totalInventory ?? 0).toLocaleString()}
+                  {totalInventory.toLocaleString()}
                 </div>
                 <Typography.Text type="secondary">Assets under management</Typography.Text>
               </div>
@@ -257,12 +266,12 @@ function ExecutiveOverview({ data, compCfg = {} }) {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '60ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Patching Compliance</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {(h.patchingCompliancePct ?? 0).toFixed(1)}%
+                  {(patchingCompliancePct / 10).toFixed(1)}%
                 </div>
                 <Typography.Text type="secondary">Current compliance level</Typography.Text>
               </div>
@@ -273,12 +282,12 @@ function ExecutiveOverview({ data, compCfg = {} }) {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '120ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Operational Readiness</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {(h.operationalReadinessPct ?? 0).toFixed(2)}%
+                  {(operationalReadinessPct / 100).toFixed(2)}%
                 </div>
                 <Typography.Text type="secondary">
                   {h.pendingActions ?? 0} {h.pendingActions === 1 ? 'asset' : 'assets'} pending actions
@@ -291,12 +300,12 @@ function ExecutiveOverview({ data, compCfg = {} }) {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '180ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Infrastructure Health Score</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1, color: '#1677ff' }}>
-                  {h.infrastructureHealthScore ?? 0}
+                  {infrastructureHealthScore}
                 </div>
                 <Typography.Text type="secondary">Weighted from compliance and readiness</Typography.Text>
               </div>

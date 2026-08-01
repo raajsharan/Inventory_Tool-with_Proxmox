@@ -176,7 +176,7 @@ export default function InfrastructureDashboard() {
 
       {/* Merged OS breakdown across all three integrations */}
       {mergedOS.length > 0 && (
-        <ExpandableTableCard title="OS Breakdown — All Integrations" style={{ marginTop: 16 }} index={1}>
+        <ExpandableTableCard title="OS Breakdown — All Integrations" style={{ marginTop: 16 }} index={1} defaultOpen={false}>
           <Table
             size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
             dataSource={mergedOS}
@@ -232,13 +232,13 @@ export default function InfrastructureDashboard() {
             </StatGrid>
             <Row gutter={[12, 12]}>
               <Col xs={24} lg={16}>
-                <ExpandableTableCard title="By vCenter / ESXi Host">
+                <ExpandableTableCard title="By vCenter / ESXi Host" defaultOpen={false}>
                   <Table size="small" rowKey="host" pagination={false} rowClassName="dashcard-row"
                     dataSource={vmware.byHost || []} columns={vmHostCols} />
                 </ExpandableTableCard>
               </Col>
               <Col xs={24} lg={8}>
-                <ExpandableTableCard title="OS Breakdown" index={1}>
+                <ExpandableTableCard title="OS Breakdown" index={1} defaultOpen={false}>
                   <Table size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
                     dataSource={vmware.byOS || []} columns={osColumns(vmware.byOS || [])} />
                 </ExpandableTableCard>
@@ -287,13 +287,13 @@ export default function InfrastructureDashboard() {
             </StatGrid>
             <Row gutter={[12, 12]}>
               <Col xs={24} lg={16}>
-                <ExpandableTableCard title="By Node">
+                <ExpandableTableCard title="By Node" defaultOpen={false}>
                   <Table size="small" rowKey={r => `${r.host}||${r.node}`} pagination={false} rowClassName="dashcard-row"
                     dataSource={proxmox.byNode || []} columns={pxNodeCols} />
                 </ExpandableTableCard>
               </Col>
               <Col xs={24} lg={8}>
-                <ExpandableTableCard title="OS Breakdown" index={1}>
+                <ExpandableTableCard title="OS Breakdown" index={1} defaultOpen={false}>
                   <Table size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
                     dataSource={proxmox.byOS || []} columns={osColumns(proxmox.byOS || [])} />
                 </ExpandableTableCard>
@@ -334,13 +334,13 @@ export default function InfrastructureDashboard() {
             </StatGrid>
             <Row gutter={[12, 12]}>
               <Col xs={24} lg={16}>
-                <ExpandableTableCard title="By Host">
+                <ExpandableTableCard title="By Host" defaultOpen={false}>
                   <Table size="small" rowKey="host" pagination={false} rowClassName="dashcard-row"
                     dataSource={hyperv.byHost || []} columns={hvHostCols} />
                 </ExpandableTableCard>
               </Col>
               <Col xs={24} lg={8}>
-                <ExpandableTableCard title="OS Breakdown" index={1}>
+                <ExpandableTableCard title="OS Breakdown" index={1} defaultOpen={false}>
                   <Table size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
                     dataSource={hyperv.byOS || []} columns={osColumns(hyperv.byOS || [])} />
                 </ExpandableTableCard>
