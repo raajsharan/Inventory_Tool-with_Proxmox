@@ -190,8 +190,7 @@ export default function InfrastructureDashboard() {
 
       {/* Merged OS breakdown across all three integrations */}
       {mergedOS.length > 0 && (
-        <Card size="small" title="OS Breakdown — All Integrations" className="dashcard"
-          style={{ marginTop: 16, animationDelay: '90ms' }}>
+        <ExpandableTableCard title="OS Breakdown — All Integrations" style={{ marginTop: 16 }} index={1}>
           <Table
             size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
             dataSource={mergedOS}
@@ -215,7 +214,7 @@ export default function InfrastructureDashboard() {
               },
             ]}
           />
-        </Card>
+        </ExpandableTableCard>
       )}
 
       {/* VMware vSphere details */}
@@ -261,10 +260,10 @@ export default function InfrastructureDashboard() {
                 </ExpandableTableCard>
               </Col>
               <Col xs={24} lg={8}>
-                <Card size="small" title="OS Breakdown">
+                <ExpandableTableCard title="OS Breakdown" index={1}>
                   <Table size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
                     dataSource={vmware.byOS || []} columns={osColumns(vmware.byOS || [])} />
-                </Card>
+                </ExpandableTableCard>
               </Col>
             </Row>
           </>
@@ -328,10 +327,10 @@ export default function InfrastructureDashboard() {
                 </ExpandableTableCard>
               </Col>
               <Col xs={24} lg={8}>
-                <Card size="small" title="OS Breakdown">
+                <ExpandableTableCard title="OS Breakdown" index={1}>
                   <Table size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
                     dataSource={proxmox.byOS || []} columns={osColumns(proxmox.byOS || [])} />
-                </Card>
+                </ExpandableTableCard>
               </Col>
             </Row>
           </>
@@ -385,10 +384,10 @@ export default function InfrastructureDashboard() {
                 </ExpandableTableCard>
               </Col>
               <Col xs={24} lg={8}>
-                <Card size="small" title="OS Breakdown">
+                <ExpandableTableCard title="OS Breakdown" index={1}>
                   <Table size="small" rowKey="os" pagination={false} rowClassName="dashcard-row"
                     dataSource={hyperv.byOS || []} columns={osColumns(hyperv.byOS || [])} />
-                </Card>
+                </ExpandableTableCard>
               </Col>
             </Row>
           </>

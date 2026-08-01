@@ -93,11 +93,11 @@ export function SplitBar({ segments, total, width = 100 }) {
 // A Card-styled, single-panel Collapse — click the title (or the caret) to
 // expand/collapse the table underneath, caret rotates 90° when open. Uses
 // antd's built-in Collapse animation rather than a custom height transition.
-export function ExpandableTableCard({ title, extra, defaultOpen = true, index = 0, children }) {
+export function ExpandableTableCard({ title, extra, defaultOpen = true, index = 0, style, children }) {
   return (
     <Collapse
       className="dashcard dashcard-collapse"
-      style={{ animationDelay: `${index * 40}ms` }}
+      style={{ animationDelay: `${index * 40}ms`, ...style }}
       defaultActiveKey={defaultOpen ? ['1'] : []}
       expandIcon={({ isActive }) => <CaretRightOutlined rotate={isActive ? 90 : 0} />}
       items={[{
