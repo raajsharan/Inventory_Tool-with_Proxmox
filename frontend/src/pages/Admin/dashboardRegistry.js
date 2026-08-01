@@ -37,6 +37,7 @@ export const DASHBOARD_WIDGETS = {
     { key: 'ext_compliance', defaultTitle: 'Ext. Endpoint Compliance' },
   ],
   asset: [
+    { key: 'kpi_cards',       defaultTitle: 'Headline KPI cards', renamable: false },
     { key: 'os_chart',        defaultTitle: 'Assets by OS Type' },
     { key: 'status_chart',    defaultTitle: 'Assets by Server Status' },
     { key: 'location_chart',  defaultTitle: 'Assets by Location' },

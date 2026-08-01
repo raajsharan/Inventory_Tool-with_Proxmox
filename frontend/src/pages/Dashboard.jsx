@@ -524,12 +524,89 @@ function StatusBox({ value, label, tone }) {
 }
 
 function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, chartTheme }) {
+  const h  = data.headline || {};
   const as = data.assetInventoryActiveStatus || {};
   const ps = data.assetInventoryPatchingStatus || {};
   const vmLoc = data.vmCountByLocation || [];
   const activePct  = as.total ? (as.active / as.total) * 100 : 0;
   const patchedPct = ps.total ? ((ps.auto_patching + ps.manual_patching) / ps.total) * 100 : 0;
   const labelColor = isDark ? '#f0f0f0' : '#262626';
+
+  const totalInventory = useCountUp(h.totalInventory ?? 0);
+  const patchingCompliancePct = useCountUp((h.patchingCompliancePct ?? 0) * 10);
+  const operationalReadinessPct = useCountUp((h.operationalReadinessPct ?? 0) * 100);
+  const infrastructureHealthScore = useCountUp(h.infrastructureHealthScore ?? 0);
+
+  const kpiCards = (
+    <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      <Col xs={24} sm={12} lg={6}>
+        <Card className="dashcard" style={{ animationDelay: '0ms' }}>
+          <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+            <div>
+              <Typography.Text type="secondary">Total Inventory</Typography.Text>
+              <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
+                {totalInventory.toLocaleString()}
+              </div>
+              <Typography.Text type="secondary">Assets under management</Typography.Text>
+            </div>
+            <div style={{ background: '#0f172a', color: 'white', padding: 10, borderRadius: 10 }}>
+              <BlockOutlined style={{ fontSize: 22 }} />
+            </div>
+          </Space>
+        </Card>
+      </Col>
+      <Col xs={24} sm={12} lg={6}>
+        <Card className="dashcard" style={{ animationDelay: '40ms' }}>
+          <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+            <div>
+              <Typography.Text type="secondary">Patching Compliance</Typography.Text>
+              <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
+                {(patchingCompliancePct / 10).toFixed(1)}%
+              </div>
+              <Typography.Text type="secondary">Current compliance level</Typography.Text>
+            </div>
+            <div style={{ background: '#0f172a', color: 'white', padding: 10, borderRadius: 10 }}>
+              <SafetyCertificateOutlined style={{ fontSize: 22 }} />
+            </div>
+          </Space>
+        </Card>
+      </Col>
+      <Col xs={24} sm={12} lg={6}>
+        <Card className="dashcard" style={{ animationDelay: '80ms' }}>
+          <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+            <div>
+              <Typography.Text type="secondary">Operational Readiness</Typography.Text>
+              <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
+                {(operationalReadinessPct / 100).toFixed(2)}%
+              </div>
+              <Typography.Text type="secondary">
+                {h.pendingActions ?? 0} {h.pendingActions === 1 ? 'asset' : 'assets'} pending actions
+              </Typography.Text>
+            </div>
+            <div style={{ background: '#0f172a', color: 'white', padding: 10, borderRadius: 10 }}>
+              <ThunderboltOutlined style={{ fontSize: 22 }} />
+            </div>
+          </Space>
+        </Card>
+      </Col>
+      <Col xs={24} sm={12} lg={6}>
+        <Card className="dashcard" style={{ animationDelay: '120ms' }}>
+          <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+            <div>
+              <Typography.Text type="secondary">Infrastructure Health Score</Typography.Text>
+              <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1, color: '#1677ff' }}>
+                {infrastructureHealthScore}
+              </div>
+              <Typography.Text type="secondary">Weighted from compliance and readiness</Typography.Text>
+            </div>
+            <div style={{ color: '#94a3b8', padding: 10 }}>
+              <FundOutlined style={{ fontSize: 26 }} />
+            </div>
+          </Space>
+        </Card>
+      </Col>
+    </Row>
+  );
 
   const activeStatusCard = (
     <Card className="dashcard" style={{ marginBottom: 16, animationDelay: '160ms' }}
@@ -651,6 +728,8 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
   return (
     <div>
       <style>{DASH_CSS}</style>
+
+      <Wgt tab="asset" k="kpi_cards">{kpiCards}</Wgt>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}><Wgt tab="asset" k="os_chart">
