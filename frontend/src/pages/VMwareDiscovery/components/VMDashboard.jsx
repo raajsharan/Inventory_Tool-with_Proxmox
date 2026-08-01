@@ -1,92 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Row, Col, Card, Table, Tag, Spin, Empty, Typography } from 'antd';
 import {
   PlayCircleOutlined, StopOutlined, PauseCircleOutlined,
   ApartmentOutlined, AppstoreOutlined, WindowsOutlined, LinuxOutlined, DesktopOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
+import { DASH_CSS, StatCard, MiniBar, SplitBar } from '../../../components/DashboardStatCard.jsx';
 
 const { Text } = Typography;
-
-const DASH_CSS = `
-@keyframes vmdash-fadein { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.vmdash-card { animation: vmdash-fadein 0.45s cubic-bezier(0.22,1,0.36,1) both;
-  transition: transform 0.2s ease, box-shadow 0.2s ease; }
-.vmdash-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.09); }
-.vmdash-row { transition: background 0.15s ease; }
-.vmdash-minibar-fill { transition: width 0.6s cubic-bezier(0.22,1,0.36,1); }
-`;
-
-// Counts up from 0 to the target value with an ease-out curve — small bit of
-// life on load instead of numbers just appearing.
-function useCountUp(target, duration = 700) {
-  const [value, setValue] = useState(0);
-  const raf = useRef(null);
-  useEffect(() => {
-    const start = performance.now();
-    const from = 0;
-    const to = Number(target) || 0;
-    function step(ts) {
-      const progress = Math.min((ts - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(from + (to - from) * eased));
-      if (progress < 1) raf.current = requestAnimationFrame(step);
-    }
-    raf.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf.current);
-  }, [target, duration]);
-  return value;
-}
-
-function StatCard({ icon, color, bg, title, value, index }) {
-  const animated = useCountUp(value);
-  return (
-    <Card size="small" className="vmdash-card" style={{ animationDelay: `${index * 70}ms` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 10, background: bg, flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ color, fontSize: 18, display: 'flex' }}>{icon}</span>
-        </div>
-        <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>{title}</Text>
-          <div style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1.3 }}>
-            {animated.toLocaleString()}
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// Small colored square proportional to `count`/`max` — a lightweight visual
-// cue in the OS Breakdown table alongside the raw number.
-function MiniBar({ count, max, color }) {
-  const pct = max ? Math.max(4, Math.round((count / max) * 100)) : 0;
-  return (
-    <div style={{ width: 80, height: 6, borderRadius: 3, background: 'rgba(140,140,140,0.18)' }}>
-      <div className="vmdash-minibar-fill" style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: color }} />
-    </div>
-  );
-}
-
-// A single-row stacked bar showing powered-on/off/suspended proportion for
-// a host, so the "By vCenter / ESXi Host" table reads at a glance without
-// having to compare three separate numbers per row.
-function HostSplitBar({ on, off, susp, total }) {
-  if (!total) return null;
-  const seg = (n, color) => (
-    n > 0 ? <div key={color} style={{ width: `${(n / total) * 100}%`, background: color }} /> : null
-  );
-  return (
-    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', width: 100 }}>
-      {seg(on, '#52c41a')}
-      {seg(off, '#bfbfbf')}
-      {seg(susp, '#faad14')}
-    </div>
-  );
-}
 
 function osIcon(os) {
   const s = (os || '').toLowerCase();
@@ -118,7 +39,13 @@ export default function VMDashboard() {
       sorter: (a, b) => b.total - a.total },
     {
       title: 'Split', key: 'split', width: 110,
-      render: (_, r) => <HostSplitBar on={r.poweredOn} off={r.poweredOff} susp={r.suspended} total={r.total} />,
+      render: (_, r) => (
+        <SplitBar total={r.total} segments={[
+          { value: r.poweredOn,  color: '#52c41a' },
+          { value: r.poweredOff, color: '#bfbfbf' },
+          { value: r.suspended,  color: '#faad14' },
+        ]} />
+      ),
     },
     { title: 'Powered On',     dataIndex: 'poweredOn',  key: 'poweredOn',  width: 110,
       render: n => <Tag icon={<PlayCircleOutlined />} color="success">{n}</Tag> },
@@ -185,26 +112,26 @@ export default function VMDashboard() {
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={16}>
-          <Card size="small" title="By vCenter / ESXi Host" className="vmdash-card" style={{ animationDelay: '120ms' }}>
+          <Card size="small" title="By vCenter / ESXi Host" className="dashcard" style={{ animationDelay: '120ms' }}>
             <Table
               size="small"
               rowKey="host"
               dataSource={byHost}
               columns={hostCols}
               pagination={false}
-              rowClassName="vmdash-row"
+              rowClassName="dashcard-row"
             />
           </Card>
         </Col>
         <Col xs={24} lg={8}>
-          <Card size="small" title="OS Breakdown" className="vmdash-card" style={{ animationDelay: '160ms' }}>
+          <Card size="small" title="OS Breakdown" className="dashcard" style={{ animationDelay: '160ms' }}>
             <Table
               size="small"
               rowKey="os"
               dataSource={byOS}
               columns={osCols}
               pagination={false}
-              rowClassName="vmdash-row"
+              rowClassName="dashcard-row"
             />
           </Card>
         </Col>
