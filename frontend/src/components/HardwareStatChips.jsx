@@ -17,6 +17,26 @@ export const DOT_CSS = `
 @keyframes hoststat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .hoststat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   margin-right: 6px; animation: hoststat-pulse 1.8s ease-in-out infinite; }
+
+/* Bar fill grows in with an ease-out curve (snappier start, soft landing)
+   instead of a flat linear transition, and carries a diagonal shimmer sweep
+   for a bit of life at a glance. */
+@keyframes hoststat-shimmer { 0% { transform: translateX(-150%); } 100% { transform: translateX(150%); } }
+@keyframes hoststat-glow    { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+.hoststat-bar-track { position: relative; overflow: hidden; }
+.hoststat-bar-fill {
+  height: 100%; border-radius: 3px;
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.4s ease;
+  position: relative; overflow: hidden;
+}
+.hoststat-bar-fill::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.55) 48%, transparent 65%);
+  animation: hoststat-shimmer 2.6s ease-in-out infinite;
+}
+/* Critical (>=90%) bars get an extra pulsing glow so they draw the eye
+   without needing to read the number first. */
+.hoststat-bar-fill.critical { animation: hoststat-glow 1.4s ease-in-out infinite; }
 `;
 
 export function progressColor(pct) {
@@ -51,15 +71,19 @@ function formatCapacity(gb) {
 function CompactBar({ icon, iconColor, label, pct, tooltip }) {
   const color = progressColor(pct);
   const width = pct == null ? 0 : Math.min(100, Math.max(0, pct));
+  const critical = pct != null && pct >= 90;
   return (
     <Tooltip title={tooltip}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 100, cursor: 'help' }}>
         <span style={{ color: iconColor, fontSize: 13, display: 'flex', flexShrink: 0 }}>{icon}</span>
         <Text style={{ fontSize: 11, color: '#8c8c8c', width: 28, flexShrink: 0 }}>{label}</Text>
-        <div style={{ flex: 1, minWidth: 36, height: 6, borderRadius: 3, background: 'rgba(140,140,140,0.25)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${width}%`, background: color, transition: 'width .3s' }} />
+        <div className="hoststat-bar-track" style={{ flex: 1, minWidth: 36, height: 6, borderRadius: 3, background: 'rgba(140,140,140,0.25)' }}>
+          <div
+            className={`hoststat-bar-fill${critical ? ' critical' : ''}`}
+            style={{ width: `${width}%`, backgroundColor: color }}
+          />
         </div>
-        <Text style={{ fontSize: 11, fontWeight: 600, color, width: 32, textAlign: 'right', flexShrink: 0 }}>
+        <Text style={{ fontSize: 11, fontWeight: 600, color, width: 32, textAlign: 'right', flexShrink: 0, transition: 'color 0.4s ease' }}>
           {pct != null ? `${pct}%` : '—'}
         </Text>
       </div>
