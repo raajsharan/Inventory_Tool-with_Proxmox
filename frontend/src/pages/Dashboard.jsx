@@ -481,7 +481,8 @@ function ExecutiveOverview({ data, compCfg = {} }) {
 function DonutRing({ percent, color = '#22c55e', label, sub }) {
   const r = 38, c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, percent || 0));
-  const offset = c - (pct / 100) * c;
+  const animatedPct = useCountUp(pct * 10) / 10;
+  const offset = c - (animatedPct / 100) * c;
   return (
     <div style={{ width: 110, textAlign: 'center', flexShrink: 0 }}>
       <svg width="110" height="110" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
@@ -490,7 +491,7 @@ function DonutRing({ percent, color = '#22c55e', label, sub }) {
           strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
           style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
       </svg>
-      <div style={{ marginTop: -82, fontSize: 22, fontWeight: 700 }}>{pct.toFixed(0)}%</div>
+      <div style={{ marginTop: -82, fontSize: 22, fontWeight: 700 }}>{animatedPct.toFixed(0)}%</div>
       <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 60 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{sub}</div>}
     </div>
@@ -508,13 +509,14 @@ function StatusBox({ value, label, tone }) {
     purple:  { bg: 'rgba(168,85,247,0.10)',  fg: '#7e22ce' },
     red:     { bg: 'rgba(239,68,68,0.10)',   fg: '#b91c1c' },
   }[tone || 'gray'];
+  const animated = useCountUp(value ?? 0);
   return (
-    <div style={{
+    <div className="dashcard" style={{
       background: toneStyle.bg, color: toneStyle.fg,
       padding: '12px 16px', borderRadius: 8,
     }}>
       <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>
-        {(value ?? 0).toLocaleString()}
+        {animated.toLocaleString()}
       </div>
       <div style={{ fontSize: 13 }}>{label}</div>
     </div>
@@ -530,7 +532,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
   const labelColor = isDark ? '#f0f0f0' : '#262626';
 
   const activeStatusCard = (
-    <Card style={{ marginBottom: 16 }}
+    <Card className="dashcard" style={{ marginBottom: 16, animationDelay: '160ms' }}
       title={
         <Space>
           <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
@@ -565,7 +567,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
   );
 
   const patchingStatusCard = (
-    <Card style={{ marginBottom: 16 }}
+    <Card className="dashcard" style={{ marginBottom: 16, animationDelay: '200ms' }}
       title={
         <Space>
           <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
@@ -602,7 +604,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
   );
 
   const vmLocationCard = (
-    <Card style={{ marginBottom: 16 }}
+    <Card className="dashcard" style={{ marginBottom: 16, animationDelay: '240ms' }}
       title={
         <Space>
           <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
@@ -648,10 +650,11 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}><Wgt tab="asset" k="os_chart">
-          <Card title={<WTitle tab="asset" k="os_chart" d="Assets by OS Type" />}>
+          <Card className="dashcard" style={{ animationDelay: '0ms' }} title={<WTitle tab="asset" k="os_chart" d="Assets by OS Type" />}>
             <Pie data={data.charts?.byOsType || []} angleField="value" colorField="key" radius={0.85}
               theme={chartTheme}
               label={{ text: 'value', position: 'outside', style: labelStyle }}
@@ -660,7 +663,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           </Card>
         </Wgt></Col>
         <Col xs={24} lg={12}><Wgt tab="asset" k="status_chart">
-          <Card title={<WTitle tab="asset" k="status_chart" d="Assets by Server Status" />}>
+          <Card className="dashcard" style={{ animationDelay: '40ms' }} title={<WTitle tab="asset" k="status_chart" d="Assets by Server Status" />}>
             <Column data={data.charts?.byServerStatus || []} xField="key" yField="value" height={260}
               theme={chartTheme}
               axis={{ x: axisStyle, y: axisStyle }}
@@ -668,7 +671,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           </Card>
         </Wgt></Col>
         <Col xs={24} lg={12}><Wgt tab="asset" k="location_chart">
-          <Card title={<WTitle tab="asset" k="location_chart" d="Assets by Location" />}>
+          <Card className="dashcard" style={{ animationDelay: '80ms' }} title={<WTitle tab="asset" k="location_chart" d="Assets by Location" />}>
             <Column data={data.charts?.byLocation || []} xField="key" yField="value" height={260}
               theme={chartTheme}
               axis={{ x: axisStyle, y: axisStyle }}
@@ -676,7 +679,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           </Card>
         </Wgt></Col>
         <Col xs={24} lg={12}><Wgt tab="asset" k="eol_chart">
-          <Card title={<WTitle tab="asset" k="eol_chart" d="EOL Status" />}>
+          <Card className="dashcard" style={{ animationDelay: '120ms' }} title={<WTitle tab="asset" k="eol_chart" d="EOL Status" />}>
             <Pie data={data.charts?.byEolStatus || []} angleField="value" colorField="key" radius={0.85}
               theme={chartTheme}
               label={{ text: 'value', position: 'outside', style: labelStyle }}
@@ -690,12 +693,13 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
       <Wgt tab="asset" k="patching_status">{patchingStatusCard}</Wgt>
       <Wgt tab="asset" k="vm_by_location">{vmLocationCard}</Wgt>
 
-      <Wgt tab="asset" k="recent_assets"><Card title={<WTitle tab="asset" k="recent_assets" d="Recent Assets" />} style={{ marginTop: 16 }}>
+      <Wgt tab="asset" k="recent_assets"><Card className="dashcard" style={{ marginTop: 16, animationDelay: '280ms' }} title={<WTitle tab="asset" k="recent_assets" d="Recent Assets" />}>
         <Table
           rowKey="id"
           size="small"
           dataSource={data.recentAssets || []}
           pagination={false}
+          rowClassName="dashcard-row"
           columns={[
             { title: 'VM Name', dataIndex: 'vm_name' },
             { title: 'IP', dataIndex: 'ip_address' },
