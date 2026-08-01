@@ -1,10 +1,14 @@
-import { Space, Typography } from 'antd';
+import { Tooltip, Typography } from 'antd';
 import { ThunderboltOutlined, DatabaseOutlined, HddOutlined, FieldTimeOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
-// Shared rack-style CPU/RAM/Disk/uptime display for every discovery
-// integration's "Hosts & Credentials" tab (VMware, Proxmox, Hyper-V).
+// Shared compact CPU/RAM/Disk/uptime display for every discovery
+// integration's "Hosts & Credentials" tab (VMware, Proxmox, Hyper-V): a slim
+// inline bar with just the percentage showing, full detail (used/total,
+// core count) on hover — keeps the column narrow and never truncates large
+// values (multi-TB disks, etc.) the way a fixed-width chip with inline text
+// used to.
 
 // Small pulsing LED, like a rack-mount status light — green/amber/red by
 // health, plain grey when there's nothing to report yet. Inject this once
@@ -34,65 +38,52 @@ export function deriveHealthColor(host) {
     : '#8c8c8c';
 }
 
-// Rack-style segmented usage indicator — a row of small blocks that light up
-// (with a matching glow) instead of a single continuous bar.
-export function SegmentedBar({ pct, segments = 6 }) {
-  const clamped = pct == null ? 0 : Math.min(100, Math.max(0, pct));
-  const filled = Math.round((clamped / 100) * segments);
-  const color = progressColor(pct);
-  return (
-    <div style={{ display: 'flex', gap: 2 }}>
-      {Array.from({ length: segments }).map((_, i) => (
-        <div key={i} style={{
-          width: 12, height: 6, borderRadius: 1,
-          background: i < filled ? color : 'rgba(140,140,140,0.25)',
-          boxShadow: i < filled ? `0 0 4px ${color}` : 'none',
-        }} />
-      ))}
-    </div>
-  );
+// Picks GB vs TB so a multi-terabyte disk shows "10.9 TB" instead of a long
+// run of digits ("11109.4 GB") that gets clipped in a narrow column.
+function formatCapacity(gb) {
+  if (gb >= 1024) return `${(gb / 1024).toFixed(2)} TB`;
+  return `${gb.toFixed(1)} GB`;
 }
 
-// Self-contained dark "chip" per stat — reads consistently in light or dark
-// mode since it carries its own background, rather than inheriting the page.
-export function StatChip({ icon, iconColor, label, value, pct }) {
+// Slim inline bar + percentage; hover for the full used/total or core-count
+// detail. `pct === null` renders a flat, colorless bar (no data yet) rather
+// than implying 0% usage.
+function CompactBar({ icon, iconColor, label, pct, tooltip }) {
+  const color = progressColor(pct);
+  const width = pct == null ? 0 : Math.min(100, Math.max(0, pct));
   return (
-    <div style={{
-      display: 'inline-flex', flexDirection: 'column', gap: 3,
-      background: 'linear-gradient(180deg, #101b2d, #0b1420)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 8, padding: '5px 10px', minWidth: 118,
-    }}>
-      <Space size={5} align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
-        <Space size={5}>
-          <span style={{ color: iconColor, fontSize: 13, display: 'flex' }}>{icon}</span>
-          <Text style={{ color: '#d6e4ff', fontSize: 11, fontWeight: 600 }}>{label}</Text>
-        </Space>
-        {pct != null && <Text style={{ color: progressColor(pct), fontSize: 11, fontWeight: 600 }}>{pct}%</Text>}
-      </Space>
-      {value && <Text style={{ color: 'rgba(214,228,255,0.55)', fontSize: 10 }}>{value}</Text>}
-      <SegmentedBar pct={pct} />
-    </div>
+    <Tooltip title={tooltip}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 100, cursor: 'help' }}>
+        <span style={{ color: iconColor, fontSize: 13, display: 'flex', flexShrink: 0 }}>{icon}</span>
+        <Text style={{ fontSize: 11, color: '#8c8c8c', width: 28, flexShrink: 0 }}>{label}</Text>
+        <div style={{ flex: 1, minWidth: 36, height: 6, borderRadius: 3, background: 'rgba(140,140,140,0.25)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${width}%`, background: color, transition: 'width .3s' }} />
+        </div>
+        <Text style={{ fontSize: 11, fontWeight: 600, color, width: 32, textAlign: 'right', flexShrink: 0 }}>
+          {pct != null ? `${pct}%` : '—'}
+        </Text>
+      </div>
+    </Tooltip>
   );
 }
 
 export function cpuChip(r) {
   if (r.cpu_cores == null) return <Text type="secondary">—</Text>;
+  const pct = Number(r.cpu_usage_pct) || 0;
   return (
-    <StatChip icon={<ThunderboltOutlined />} iconColor="#faad14"
-      label={`${r.cpu_cores} cores`} pct={Number(r.cpu_usage_pct) || 0} />
+    <CompactBar icon={<ThunderboltOutlined />} iconColor="#faad14" label="CPU" pct={pct}
+      tooltip={`${r.cpu_cores} cores · ${pct}% utilized`} />
   );
 }
 
 export function ramChip(r) {
   if (r.memory_mb == null && r.memory_total_mb == null) return <Text type="secondary">—</Text>;
-  const total = Number(r.memory_total_mb ?? r.memory_mb);
-  const used  = Number(r.memory_used_mb);
-  const pct = total ? Math.round((used / total) * 1000) / 10 : 0;
+  const totalMb = Number(r.memory_total_mb ?? r.memory_mb);
+  const usedMb  = Number(r.memory_used_mb);
+  const pct = totalMb ? Math.round((usedMb / totalMb) * 1000) / 10 : 0;
   return (
-    <StatChip icon={<DatabaseOutlined />} iconColor="#40a9ff" label="RAM"
-      value={`${(used / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} GB`}
-      pct={pct} />
+    <CompactBar icon={<DatabaseOutlined />} iconColor="#40a9ff" label="RAM" pct={pct}
+      tooltip={`${formatCapacity(usedMb / 1024)} / ${formatCapacity(totalMb / 1024)}`} />
   );
 }
 
@@ -102,9 +93,8 @@ export function diskChip(r) {
   const used  = Number(r.disk_used_gb);
   const pct = total ? Math.round((used / total) * 1000) / 10 : 0;
   return (
-    <StatChip icon={<HddOutlined />} iconColor="#9254de" label="Disk"
-      value={`${used.toFixed(1)} / ${total.toFixed(1)} GB`}
-      pct={pct} />
+    <CompactBar icon={<HddOutlined />} iconColor="#9254de" label="Disk" pct={pct}
+      tooltip={`${formatCapacity(used)} / ${formatCapacity(total)}`} />
   );
 }
 
@@ -114,9 +104,11 @@ export function formatUptime(seconds) {
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   return (
-    <Space size={4}>
-      <FieldTimeOutlined style={{ color: '#52c41a' }} />
-      <Text style={{ fontSize: 12 }}>{d > 0 ? `${d}d ${h}h` : `${h}h`}</Text>
-    </Space>
+    <Tooltip title={`${d} day${d !== 1 ? 's' : ''}, ${h} hour${h !== 1 ? 's' : ''}`}>
+      <span style={{ cursor: 'help' }}>
+        <FieldTimeOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+        <Text style={{ fontSize: 12 }}>{d > 0 ? `${d}d ${h}h` : `${h}h`}</Text>
+      </span>
+    </Tooltip>
   );
 }
