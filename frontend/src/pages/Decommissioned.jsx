@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  App, Button, Card, Col, DatePicker, Input, Modal, Row, Select, Space,
-  Statistic, Table, Tabs, Tag, Tooltip, Typography,
+  App, Button, Card, DatePicker, Input, Modal, Select, Space,
+  Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
   DownloadOutlined, PoweroffOutlined, ReloadOutlined, RollbackOutlined, SearchOutlined,
+  DatabaseOutlined, HistoryOutlined,
 } from '@ant-design/icons';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import { DASH_CSS, StatCard, StatGrid } from '../components/DashboardStatCard.jsx';
 
 const { Text } = Typography;
 
@@ -123,6 +125,7 @@ export default function Decommissioned() {
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <Space align="start">
           <PoweroffOutlined style={{ fontSize: 24, color: '#cf1322', marginTop: 3 }} />
@@ -134,17 +137,23 @@ export default function Decommissioned() {
           </div>
         </Space>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Refresh</Button>
-          <Button icon={<DownloadOutlined />} onClick={onExport}>Export report</Button>
+          <Tooltip title="Reload current and historical decommission records">
+            <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Refresh</Button>
+          </Tooltip>
+          <Tooltip title="Download the decommission log as an Excel report">
+            <Button icon={<DownloadOutlined />} onClick={onExport}>Export report</Button>
+          </Tooltip>
         </Space>
       </div>
 
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={12} md={6}><Card size="small"><Statistic title="Currently decommissioned" value={current.length} loading={loading} /></Card></Col>
-        <Col xs={12} md={6}><Card size="small"><Statistic title="Total decommission events" value={log.length} loading={loading} /></Card></Col>
-      </Row>
+      <StatGrid minWidth={220} style={{ marginBottom: 16 }}>
+        <StatCard index={0} title="Currently decommissioned" value={current.length}
+          icon={<PoweroffOutlined />} color="#cf1322" bg="rgba(207,19,34,0.10)" />
+        <StatCard index={1} title="Total decommission events" value={log.length}
+          icon={<HistoryOutlined />} color="#8c8c8c" bg="rgba(140,140,140,0.14)" />
+      </StatGrid>
 
-      <Card size="small">
+      <Card size="small" className="dashcard" style={{ animationDelay: '80ms' }}>
         <Tabs
           items={[
             {

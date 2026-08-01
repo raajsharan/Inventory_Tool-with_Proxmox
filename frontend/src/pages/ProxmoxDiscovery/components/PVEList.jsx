@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Select, Space, Button, Tag, Tooltip } from 'antd';
+import { Table, Input, Select, Space, Button, Tag, Tooltip, Card } from 'antd';
 import {
   SearchOutlined, DownloadOutlined, ContainerOutlined, LaptopOutlined,
   AppstoreAddOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
 import AddToInventoryModal, { proxmoxToInventory } from '../../../components/AddToInventoryModal.jsx';
+import { DASH_CSS } from '../../../components/DashboardStatCard.jsx';
 
 const { Option } = Select;
 
@@ -135,56 +136,62 @@ export default function PVEList() {
   return (
     <>
       <div style={{ padding: 16 }}>
-        <Space wrap style={{ marginBottom: 12 }}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder="Search name, node or IP…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            style={{ width: 240 }}
-            allowClear
-          />
-          <Select
-            placeholder="Status"
-            value={status || undefined}
-            onChange={v => { setStatus(v || ''); setPage(1); }}
-            allowClear
-            style={{ width: 130 }}
-          >
-            <Option value="running">Running</Option>
-            <Option value="stopped">Stopped</Option>
-            <Option value="paused">Paused</Option>
-          </Select>
-          <Select
-            placeholder="Type"
-            value={vmType || undefined}
-            onChange={v => { setVmType(v || ''); setPage(1); }}
-            allowClear
-            style={{ width: 140 }}
-          >
-            <Option value="qemu">QEMU VM</Option>
-            <Option value="lxc">LXC Container</Option>
-          </Select>
-          <Button icon={<DownloadOutlined />} onClick={exportCSV}>Export CSV</Button>
-        </Space>
+        <style>{DASH_CSS}</style>
+        <Card size="small" className="dashcard">
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder="Search name, node or IP…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              style={{ width: 240 }}
+              allowClear
+            />
+            <Select
+              placeholder="Status"
+              value={status || undefined}
+              onChange={v => { setStatus(v || ''); setPage(1); }}
+              allowClear
+              style={{ width: 130 }}
+            >
+              <Option value="running">Running</Option>
+              <Option value="stopped">Stopped</Option>
+              <Option value="paused">Paused</Option>
+            </Select>
+            <Select
+              placeholder="Type"
+              value={vmType || undefined}
+              onChange={v => { setVmType(v || ''); setPage(1); }}
+              allowClear
+              style={{ width: 140 }}
+            >
+              <Option value="qemu">QEMU VM</Option>
+              <Option value="lxc">LXC Container</Option>
+            </Select>
+            <Tooltip title="Download the current Proxmox inventory as CSV">
+              <Button icon={<DownloadOutlined />} onClick={exportCSV}>Export CSV</Button>
+            </Tooltip>
+          </Space>
 
-        <Table
-          size="small"
-          loading={loading}
-          rowKey="id"
-          dataSource={items}
-          columns={columns}
-          scroll={{ x: 1900 }}
-          pagination={{
-            current:   page,
-            pageSize,
-            total,
-            showTotal:      t => `${t} total`,
-            showSizeChanger: true,
-            pageSizeOptions: [20, 50, 100, 200],
-            onChange:       (p, ps) => { setPage(p); setPageSize(ps); },
-          }}
-        />
+          <Table
+            size="small"
+            loading={loading}
+            rowKey="id"
+            dataSource={items}
+            columns={columns}
+            scroll={{ x: 1900 }}
+            rowClassName="dashcard-row"
+            pagination={{
+              current:   page,
+              pageSize,
+              total,
+              showTotal:      t => `${t} total`,
+              showSizeChanger: true,
+              pageSizeOptions: [20, 50, 100, 200],
+              onChange:       (p, ps) => { setPage(p); setPageSize(ps); },
+            }}
+          />
+        </Card>
       </div>
 
       <AddToInventoryModal

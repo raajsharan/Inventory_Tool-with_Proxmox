@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Card, Select, Button, Space, Typography, Row, Col, Checkbox,
-  Tag, Spin, Alert, Divider, theme, Tabs, message, Table, Skeleton, Input,
+  Tag, Spin, Alert, Divider, theme, Tabs, message, Table, Skeleton, Input, Tooltip,
 } from 'antd';
 import {
   SaveOutlined, ReloadOutlined, RiseOutlined, AppstoreOutlined,
@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -1462,10 +1463,14 @@ export default function ComplianceConfig() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 80px' }}>
+      <style>{DASH_CSS}</style>
 
-      <div style={{ marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>Dashboard Compliance Config</Title>
-        <Text type="secondary">
+      <div className="dashcard" style={{ marginBottom: 24 }}>
+        <Space>
+          <SafetyCertificateOutlined style={{ color: '#1677ff', fontSize: 20 }} />
+          <Title level={4} style={{ margin: 0 }}>Dashboard Compliance Config</Title>
+        </Space>
+        <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
           Each tab matches a dashboard tab. The preview above each section shows the current dashboard card — save changes to update non-live previews.
         </Text>
       </div>
@@ -1485,9 +1490,11 @@ export default function ComplianceConfig() {
           <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} size="large">
             Save Changes
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={load} disabled={saving}>
-            Reset to Saved
-          </Button>
+          <Tooltip title="Discard unsaved changes and reload the saved config">
+            <Button icon={<ReloadOutlined />} onClick={load} disabled={saving}>
+              Reset to Saved
+            </Button>
+          </Tooltip>
           {updatedAt && (
             <Text type="secondary" style={{ fontSize: 12 }}>
               Last saved: {new Date(updatedAt).toLocaleString()}

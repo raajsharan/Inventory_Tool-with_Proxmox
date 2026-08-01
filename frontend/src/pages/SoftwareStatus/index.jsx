@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { DASH_CSS, StatCard } from '../../components/DashboardStatCard.jsx';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const WIN_METHOD_OPTIONS = [
@@ -479,6 +480,7 @@ export default function SoftwareStatus() {
   // ── render ───────────────────────────────────────────────────────────────────
   return (
     <div>
+      <style>{DASH_CSS}</style>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
         <Space align="start">
@@ -492,27 +494,28 @@ export default function SoftwareStatus() {
         </Space>
         {isAdmin && (
           <Link to="/admin/install-config">
-            <Button icon={<SettingOutlined />}>Install Configuration</Button>
+            <Tooltip title="Configure the credentials and method used to install the agent"><Button icon={<SettingOutlined />}>Install Configuration</Button></Tooltip>
           </Link>
         )}
       </div>
 
       {/* Summary cards */}
       <Row gutter={16} style={{ marginBottom: 20 }}>
-        {[
-          { title: 'Total Active VMs', value: overall.total },
-          { title: 'ME Installed',     value: overall.installed,     style: { color: '#52c41a' }, prefix: <CheckCircleFilled />, suffix: overall.total ? `/ ${overall.total}` : '' },
-          { title: 'Not Installed',    value: overall.not_installed, style: { color: overall.not_installed > 0 ? '#ff4d4f' : '#8c8c8c' }, prefix: <CloseCircleFilled /> },
-        ].map(s => (
-          <Col xs={12} sm={6} key={s.title}>
-            <Card size="small" bodyStyle={{ padding: '12px 16px' }}>
-              <Statistic title={s.title} value={s.value} valueStyle={{ fontSize: 26, ...(s.style || {}) }}
-                prefix={s.prefix} suffix={s.suffix} />
-            </Card>
-          </Col>
-        ))}
         <Col xs={12} sm={6}>
-          <Card size="small" bodyStyle={{ padding: '12px 16px' }}>
+          <StatCard index={0} title="Total Active VMs" value={overall.total}
+            icon={<SafetyCertificateOutlined />} color="#1677ff" bg="rgba(22,119,255,0.12)" />
+        </Col>
+        <Col xs={12} sm={6}>
+          <StatCard index={1} title="ME Installed" value={overall.installed}
+            icon={<CheckCircleFilled />} color="#52c41a" bg="rgba(82,196,26,0.12)" />
+        </Col>
+        <Col xs={12} sm={6}>
+          <StatCard index={2} title="Not Installed" value={overall.not_installed}
+            icon={<CloseCircleFilled />} color={overall.not_installed > 0 ? '#ff4d4f' : '#8c8c8c'}
+            bg={overall.not_installed > 0 ? 'rgba(255,77,79,0.12)' : 'rgba(140,140,140,0.14)'} />
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card size="small" className="dashcard" style={{ animationDelay: '120ms' }} bodyStyle={{ padding: '12px 16px' }}>
             <Statistic title="Overall Compliance" value={overall.compliance_pct} suffix="%"
               valueStyle={{ fontSize: 26, color: complianceColor(overall.compliance_pct) }} />
             <Progress percent={overall.compliance_pct} strokeColor={complianceColor(overall.compliance_pct)}

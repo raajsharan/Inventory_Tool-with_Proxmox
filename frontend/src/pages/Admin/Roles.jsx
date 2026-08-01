@@ -7,6 +7,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined, TeamOutlined, KeyOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const SYSTEM_ROLE_NAMES = ['superadmin', 'admin', 'asset_manager', 'viewer'];
 
@@ -110,6 +111,7 @@ export default function RolesPage() {
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
       {/* Header */}
       <Space align="start" style={{ marginBottom: 20 }}>
         <KeyOutlined style={{ fontSize: 24, color: '#1677ff', marginTop: 3 }} />
@@ -135,13 +137,14 @@ export default function RolesPage() {
         style={{ marginBottom: 16 }}
       />
       <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
-        {(systemRoles.length ? systemRoles : SYSTEM_ROLE_NAMES.map(n => ({ name: n, label: n, description: '' }))).map((r) => {
+        {(systemRoles.length ? systemRoles : SYSTEM_ROLE_NAMES.map(n => ({ name: n, label: n, description: '' }))).map((r, ri) => {
           const meta = SYSTEM_ROLE_META[r.name] || { color: 'default', capabilities: [] };
           return (
             <Col xs={24} sm={12} xl={6} key={r.name}>
               <Card
                 size="small"
-                style={{ height: '100%', border: '1px solid #f0f0f0' }}
+                className="dashcard"
+                style={{ height: '100%', border: '1px solid #f0f0f0', animationDelay: `${ri * 50}ms` }}
                 bodyStyle={{ padding: '16px' }}
                 actions={[
                   <Tooltip title="Edit label / description" key="edit">
@@ -196,11 +199,12 @@ export default function RolesPage() {
         </Card>
       ) : (
         <Row gutter={[16, 16]}>
-          {customRoles.map((r) => (
+          {customRoles.map((r, ri) => (
             <Col xs={24} sm={12} xl={8} key={r.id}>
               <Card
                 size="small"
-                style={{ border: '1px solid #e6f4ff' }}
+                className="dashcard"
+                style={{ border: '1px solid #e6f4ff', animationDelay: `${ri * 50}ms` }}
                 bodyStyle={{ padding: '16px' }}
                 actions={[
                   <Tooltip title="Edit label / description" key="edit">

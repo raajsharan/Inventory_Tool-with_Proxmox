@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Input, List, Modal, Tag, Typography, Empty } from 'antd';
+import { Button, Input, List, Modal, Tag, Typography, Empty, Tooltip } from 'antd';
 import { SearchOutlined, DatabaseOutlined } from '@ant-design/icons';
 import api from '../api/client';
+import { DASH_CSS } from './DashboardStatCard.jsx';
 
 const SOURCE_META = {
   assets:                 { label: 'MSL Assets',        base: '/assets',        color: 'blue' },
@@ -63,10 +64,13 @@ export default function GlobalSearch() {
 
   return (
     <>
-      <Button size="small" icon={<SearchOutlined />} onClick={() => setOpen(true)}>
-        Search
-        <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>Ctrl+K</Typography.Text>
-      </Button>
+      <style>{DASH_CSS}</style>
+      <Tooltip title="Search any VM by name, hostname, or IP across every inventory">
+        <Button size="small" icon={<SearchOutlined />} onClick={() => setOpen(true)}>
+          Search
+          <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>Ctrl+K</Typography.Text>
+        </Button>
+      </Tooltip>
 
       <Modal
         open={open}
@@ -95,16 +99,21 @@ export default function GlobalSearch() {
           <List
             loading={loading}
             dataSource={items}
-            renderItem={(it) => {
+            renderItem={(it, i) => {
               const meta = SOURCE_META[it.source] || SOURCE_META.assets;
               return (
                 <List.Item
                   onClick={() => goTo(it)}
-                  style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 8 }}
-                  className="global-search-row"
+                  style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 8, animationDelay: `${Math.min(i, 10) * 30}ms` }}
+                  className="global-search-row dashcard"
                 >
                   <List.Item.Meta
-                    avatar={<DatabaseOutlined style={{ fontSize: 18, color: '#5B6B8C', marginTop: 4 }} />}
+                    avatar={
+                      <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(91,107,140,0.12)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+                        <DatabaseOutlined style={{ fontSize: 16, color: '#5B6B8C' }} />
+                      </div>
+                    }
                     title={
                       <span>
                         {it.vm_name || it.os_hostname || '(unnamed)'}

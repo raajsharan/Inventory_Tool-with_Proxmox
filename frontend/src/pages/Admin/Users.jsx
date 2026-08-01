@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Card, Table, Button, Modal, Form, Input, Select, Switch, Space, Tag, App, Popconfirm, Typography } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Modal, Form, Input, Select, Switch, Space, Tag, App, Popconfirm, Tooltip, Typography } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const SYSTEM_ROLE_COLORS = {
   superadmin: 'purple', admin: 'red', asset_manager: 'blue', viewer: 'default',
@@ -71,12 +72,15 @@ export default function Users() {
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>User Management</Typography.Title>}
+      className="dashcard"
+      title={<Space><TeamOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>User Management</Typography.Title></Space>}
       extra={<Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Add User</Button>}
     >
+      <style>{DASH_CSS}</style>
       <Table
         rowKey="id"
         dataSource={data}
+        rowClassName="dashcard-row"
         columns={[
           { title: 'Email', dataIndex: 'email' },
           { title: 'Name', dataIndex: 'full_name' },
@@ -92,9 +96,13 @@ export default function Users() {
           {
             title: 'Actions', width: 130, render: (_, r) => (
               <Space>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                <Tooltip title="Edit user">
+                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                </Tooltip>
                 <Popconfirm title="Delete user?" onConfirm={() => onDelete(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
+                  <Tooltip title="Delete user">
+                    <Button size="small" danger icon={<DeleteOutlined />} />
+                  </Tooltip>
                 </Popconfirm>
               </Space>
             ),

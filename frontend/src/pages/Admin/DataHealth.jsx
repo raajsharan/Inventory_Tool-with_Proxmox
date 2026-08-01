@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Alert, App, Button, Card, Col, Row, Space, Statistic, Table, Tabs, Tag, Typography,
+  Alert, App, Button, Card, Space, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
-  HeartOutlined, ReloadOutlined, WarningOutlined,
+  HeartOutlined, ReloadOutlined, WarningOutlined, KeyOutlined, UserOutlined,
+  EnvironmentOutlined, ApartmentOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS, StatCard, StatGrid } from '../../components/DashboardStatCard.jsx';
 
 const { Text } = Typography;
 
@@ -84,6 +86,7 @@ export default function DataHealth() {
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <Space align="start" style={{ marginBottom: 20 }}>
         <HeartOutlined style={{ fontSize: 24, color: '#1677ff', marginTop: 3 }} />
         <div>
@@ -94,24 +97,22 @@ export default function DataHealth() {
         </div>
       </Space>
 
-      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
-        {[
-          { title: 'Duplicate IPs',    value: s.duplicate_ips,   danger: s.duplicate_ips > 0 },
-          { title: 'Duplicate names',  value: s.duplicate_names, danger: s.duplicate_names > 0 },
-          { title: 'Missing password', value: s.no_password },
-          { title: 'Missing username', value: s.no_username },
-          { title: 'Missing location', value: s.no_location },
-          { title: 'Missing hosted IP', value: s.no_hosted_ip },
-        ].map(c => (
-          <Col xs={12} md={8} xl={4} key={c.title}>
-            <Card size="small">
-              <Statistic title={c.title} value={c.value ?? '—'} loading={loading}
-                valueStyle={c.danger ? { color: '#cf1322' } : undefined}
-                prefix={c.danger ? <WarningOutlined /> : null} />
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      <StatGrid minWidth={170} style={{ marginBottom: 20 }}>
+        <StatCard index={0} title="Duplicate IPs" value={s.duplicate_ips ?? 0}
+          icon={<WarningOutlined />} color={s.duplicate_ips > 0 ? '#cf1322' : '#8c8c8c'}
+          bg={s.duplicate_ips > 0 ? 'rgba(207,19,34,0.10)' : 'rgba(140,140,140,0.14)'} />
+        <StatCard index={1} title="Duplicate names" value={s.duplicate_names ?? 0}
+          icon={<WarningOutlined />} color={s.duplicate_names > 0 ? '#cf1322' : '#8c8c8c'}
+          bg={s.duplicate_names > 0 ? 'rgba(207,19,34,0.10)' : 'rgba(140,140,140,0.14)'} />
+        <StatCard index={2} title="Missing password" value={s.no_password ?? 0}
+          icon={<KeyOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
+        <StatCard index={3} title="Missing username" value={s.no_username ?? 0}
+          icon={<UserOutlined />} color="#faad14" bg="rgba(250,173,20,0.12)" />
+        <StatCard index={4} title="Missing location" value={s.no_location ?? 0}
+          icon={<EnvironmentOutlined />} color="#722ed1" bg="rgba(114,46,209,0.12)" />
+        <StatCard index={5} title="Missing hosted IP" value={s.no_hosted_ip ?? 0}
+          icon={<ApartmentOutlined />} color="#13c2c2" bg="rgba(19,194,194,0.12)" />
+      </StatGrid>
 
       {s.duplicate_ips > 0 && (
         <Alert type="warning" showIcon style={{ marginBottom: 16 }}
@@ -120,7 +121,9 @@ export default function DataHealth() {
 
       <Card
         size="small"
-        extra={<Button icon={<ReloadOutlined />} size="small" onClick={load} loading={loading}>Refresh</Button>}
+        className="dashcard"
+        style={{ animationDelay: '240ms' }}
+        extra={<Tooltip title="Reload the data health report"><Button icon={<ReloadOutlined />} size="small" onClick={load} loading={loading}>Refresh</Button></Tooltip>}
       >
         <Tabs
           items={[

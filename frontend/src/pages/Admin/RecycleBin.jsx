@@ -10,6 +10,7 @@ import {
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const TYPE_META = {
   assets:                { label: 'Assets',           icon: <DatabaseOutlined />,    color: 'blue' },
@@ -151,6 +152,7 @@ export default function RecycleBin() {
 
   return (
     <Card
+      className="dashcard"
       title={
         <Space>
           <DeleteFilled style={{ color: '#dc2626' }} />
@@ -168,15 +170,18 @@ export default function RecycleBin() {
             onChange={(e) => setSearch(e.target.value)}
             onPressEnter={load}
           />
-          <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
+          <Tooltip title="Reload the recycle bin"><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Tooltip>
           {isSuper && (
-            <Button danger icon={<DeleteFilled />} onClick={() => setEmptyAllOpen(true)} disabled={!items.length}>
-              Empty Bin
-            </Button>
+            <Tooltip title="Permanently delete every item in the recycle bin">
+              <Button danger icon={<DeleteFilled />} onClick={() => setEmptyAllOpen(true)} disabled={!items.length}>
+                Empty Bin
+              </Button>
+            </Tooltip>
           )}
         </Space>
       }
     >
+      <style>{DASH_CSS}</style>
       <Alert
         type="info" showIcon
         icon={<WarningOutlined />}
@@ -194,6 +199,7 @@ export default function RecycleBin() {
         dataSource={filtered}
         columns={columns}
         size="small"
+        rowClassName="dashcard-row"
         scroll={{ x: 'max-content' }}
         pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         locale={{ emptyText: <Empty description="Recycle bin is empty" /> }}

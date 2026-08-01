@@ -3,6 +3,7 @@ import { Table, Input, Select, Space, Button, Tag, Tooltip, Card } from 'antd';
 import { SearchOutlined, ReloadOutlined, DownloadOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import AddToInventoryModal, { vmwareToInventory } from '../../../components/AddToInventoryModal.jsx';
+import { DASH_CSS } from '../../../components/DashboardStatCard.jsx';
 
 const { Option } = Select;
 
@@ -157,8 +158,10 @@ export default function VMList({ hostId }) {
 
   return (
     <>
+      <style>{DASH_CSS}</style>
       <Card
         size="small"
+        className="dashcard"
         title={`${data.total} VMs`}
         extra={
           <Space>
@@ -187,8 +190,12 @@ export default function VMList({ hostId }) {
               <Option value="suspended">Suspended</Option>
             </Select>
             <Button icon={<SearchOutlined />} onClick={onSearch}>Search</Button>
-            <Button icon={<ReloadOutlined />} onClick={load} />
-            <Button icon={<DownloadOutlined />} onClick={onExport}>Export CSV</Button>
+            <Tooltip title="Reload the VM list">
+              <Button icon={<ReloadOutlined />} onClick={load} />
+            </Tooltip>
+            <Tooltip title="Download the current VMware inventory as CSV">
+              <Button icon={<DownloadOutlined />} onClick={onExport}>Export CSV</Button>
+            </Tooltip>
           </Space>
         }
       >
@@ -197,6 +204,7 @@ export default function VMList({ hostId }) {
           rowKey="id"
           loading={loading}
           dataSource={data.items}
+          rowClassName="dashcard-row"
           columns={columns}
           scroll={{ x: 1700 }}
           pagination={{

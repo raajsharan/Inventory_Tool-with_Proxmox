@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Card, Select, Button, Space, Typography, Row, Col, Checkbox, Input, Table, Tag,
-  App, Empty, Divider, Tabs,
+  App, Empty, Divider, Tabs, Tooltip,
 } from 'antd';
 import {
   BarChartOutlined, PieChartOutlined, LineChartOutlined, TableOutlined,
   AppstoreOutlined, FunnelPlotOutlined, PlusOutlined, DeleteOutlined,
-  PlayCircleOutlined, DownloadOutlined,
+  PlayCircleOutlined, DownloadOutlined, DatabaseOutlined, FilterOutlined,
 } from '@ant-design/icons';
 import { Column, Pie, Line } from '@ant-design/plots';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const VIZ_TYPES = [
   { value: 'table',    label: 'Data Table',     icon: <TableOutlined /> },
@@ -136,11 +137,12 @@ export default function ReportBuilder() {
         </Space>
       }
     >
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <style>{DASH_CSS}</style>
+      <Card size="small" className="dashcard" style={{ marginBottom: 16, animationDelay: '0ms' }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} md={12}>
             <Typography.Text strong style={{ display: 'block', marginBottom: 8, letterSpacing: 1, fontSize: 11 }}>
-              DATA SOURCE
+              <DatabaseOutlined style={{ marginRight: 6 }} />DATA SOURCE
             </Typography.Text>
             <Select
               value={source}
@@ -169,7 +171,7 @@ export default function ReportBuilder() {
         </Row>
       </Card>
 
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <Card size="small" className="dashcard" style={{ marginBottom: 16, animationDelay: '60ms' }}>
         <Typography.Text strong style={{ display: 'block', marginBottom: 8, letterSpacing: 1, fontSize: 11 }}>
           VISIBLE COLUMNS ({columns.length} selected)
         </Typography.Text>
@@ -185,7 +187,7 @@ export default function ReportBuilder() {
       </Card>
 
       {(viz === 'bar' || viz === 'pie' || viz === 'doughnut' || viz === 'line') && (
-        <Card size="small" style={{ marginBottom: 16 }}>
+        <Card size="small" className="dashcard" style={{ marginBottom: 16, animationDelay: '100ms' }}>
           <Typography.Text strong style={{ display: 'block', marginBottom: 8, letterSpacing: 1, fontSize: 11 }}>
             CHART AXES
           </Typography.Text>
@@ -216,7 +218,7 @@ export default function ReportBuilder() {
       )}
 
       {viz === 'pivot' && (
-        <Card size="small" style={{ marginBottom: 16 }}>
+        <Card size="small" className="dashcard" style={{ marginBottom: 16, animationDelay: '100ms' }}>
           <Typography.Text strong style={{ display: 'block', marginBottom: 8, letterSpacing: 1, fontSize: 11 }}>
             PIVOT AXES
           </Typography.Text>
@@ -243,9 +245,9 @@ export default function ReportBuilder() {
         </Card>
       )}
 
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <Card size="small" className="dashcard" style={{ marginBottom: 16, animationDelay: '140ms' }}>
         <Space style={{ justifyContent: 'space-between', display: 'flex', width: '100%', marginBottom: 8 }}>
-          <Typography.Text strong style={{ letterSpacing: 1, fontSize: 11 }}>FILTERS</Typography.Text>
+          <Typography.Text strong style={{ letterSpacing: 1, fontSize: 11 }}><FilterOutlined style={{ marginRight: 6 }} />FILTERS</Typography.Text>
           <Button size="small" icon={<PlusOutlined />} onClick={addFilter}>Add Filter</Button>
         </Space>
         {filters.length === 0 && <Typography.Text type="secondary">No filters — all rows will be included.</Typography.Text>}
@@ -265,7 +267,9 @@ export default function ReportBuilder() {
                   disabled={noVal} placeholder={noVal ? '—' : 'Value'} />
               </Col>
               <Col xs={24} md={2}>
-                <Button danger size="small" icon={<DeleteOutlined />} onClick={() => removeFilter(i)} />
+                <Tooltip title="Remove this filter">
+                  <Button danger size="small" icon={<DeleteOutlined />} onClick={() => removeFilter(i)} />
+                </Tooltip>
               </Col>
             </Row>
           );
@@ -277,12 +281,14 @@ export default function ReportBuilder() {
           Generate Report
         </Button>
         {result?.rows?.length > 0 && (
-          <Button icon={<DownloadOutlined />} onClick={exportCsv}>Export CSV</Button>
+          <Tooltip title="Download the current result set as a CSV file">
+            <Button icon={<DownloadOutlined />} onClick={exportCsv}>Export CSV</Button>
+          </Tooltip>
         )}
       </Space>
 
       {result && (
-        <Card title={<Space><FunnelPlotOutlined /><span>Result · {result.rows.length} rows</span></Space>}>
+        <Card className="dashcard" style={{ animationDelay: '180ms' }} title={<Space><FunnelPlotOutlined /><span>Result · {result.rows.length} rows</span></Space>}>
           {!result.rows.length ? (
             <Empty description="No data matches the selected filters" />
           ) : (

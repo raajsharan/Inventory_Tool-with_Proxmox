@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
   Card, Table, Button, Modal, Form, Input, InputNumber, Space, Popconfirm, App, Typography,
-  Switch, Tag, Progress,
+  Switch, Tag, Progress, Tooltip,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, ApartmentOutlined } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 export default function TagRanges() {
   const { message } = App.useApp();
@@ -67,14 +68,16 @@ export default function TagRanges() {
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>Departments &amp; Asset Tag Ranges</Typography.Title>}
+      className="dashcard"
+      title={<Space><ApartmentOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>Departments &amp; Asset Tag Ranges</Typography.Title></Space>}
       extra={
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
+          <Tooltip title="Reload department usage stats"><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Tooltip>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Add Department</Button>
         </Space>
       }
     >
+      <style>{DASH_CSS}</style>
       <Typography.Paragraph type="secondary" style={{ marginTop: -8 }}>
         Departments listed here drive the asset form. Each department's asset tags must fall within its numeric range.
         Asset tags are a single global pool — usage counts combine the Asset and Beijing inventories.
@@ -130,9 +133,9 @@ export default function TagRanges() {
           {
             title: 'Actions', width: 110, render: (_, r) => (
               <Space>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                <Tooltip title="Edit department"><Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /></Tooltip>
                 <Popconfirm title="Delete this department?" onConfirm={() => onDelete(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
+                  <Tooltip title="Delete department"><Button size="small" danger icon={<DeleteOutlined />} /></Tooltip>
                 </Popconfirm>
               </Space>
             ),

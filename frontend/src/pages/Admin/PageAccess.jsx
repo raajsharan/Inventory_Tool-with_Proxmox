@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Card, Table, Switch, Button, Space, Typography, App, Tag, Alert,
+  Card, Table, Switch, Button, Space, Typography, App, Tag, Alert, Tooltip,
 } from 'antd';
-import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 export default function PageAccess() {
   const { message } = App.useApp();
@@ -116,17 +117,19 @@ export default function PageAccess() {
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>Page Access</Typography.Title>}
+      className="dashcard"
+      title={<Space><SafetyOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>Page Access</Typography.Title></Space>}
       extra={
         <Space>
           <Tag color={dirtyCount ? 'orange' : 'default'}>{dirtyCount} pending</Tag>
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} disabled={!dirtyCount}>
+          <Tooltip title="Discard unsaved changes and reload"><Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button></Tooltip>
+          <Tooltip title="Apply the pending access changes"><Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} disabled={!dirtyCount}>
             Save
-          </Button>
+          </Button></Tooltip>
         </Space>
       }
     >
+      <style>{DASH_CSS}</style>
       <Alert
         type="info"
         showIcon
@@ -140,6 +143,7 @@ export default function PageAccess() {
         pagination={false}
         loading={loading}
         size="small"
+        rowClassName={(r) => r.isGroup ? '' : 'dashcard-row'}
       />
     </Card>
   );

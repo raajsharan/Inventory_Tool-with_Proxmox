@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Card, Table, Select, Space, Tag, Typography } from 'antd';
+import { HistoryOutlined } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const ACTIONS = ['LOGIN','CREATE','UPDATE','DELETE','IMPORT','EXPORT'];
 
@@ -17,16 +19,19 @@ export default function AuditLogs() {
   useEffect(() => { load(); }, [page, pageSize, action]); // eslint-disable-line
 
   return (
-    <Card title={<Typography.Title level={4} style={{ margin: 0 }}>Audit Log</Typography.Title>}
+    <Card className="dashcard"
+      title={<Space><HistoryOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>Audit Log</Typography.Title></Space>}
       extra={
         <Space>
           <Select allowClear placeholder="Action" style={{ width: 160 }}
             options={ACTIONS.map(a => ({ label: a, value: a }))} onChange={setAction} />
         </Space>
       }>
+      <style>{DASH_CSS}</style>
       <Table
         rowKey="id"
         dataSource={data.items}
+        rowClassName="dashcard-row"
         pagination={{ current: page, pageSize, total: data.total, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
         columns={[
           { title: 'When', dataIndex: 'created_at', width: 180, render: v => new Date(v).toLocaleString() },

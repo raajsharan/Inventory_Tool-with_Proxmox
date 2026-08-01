@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, Form, Input, Switch, Button, Divider, Alert, Space, Typography, message,
+  Card, Form, Input, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip,
 } from 'antd';
 import {
   SendOutlined, CheckCircleOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const { Title, Text } = Typography;
 
@@ -63,6 +64,7 @@ export default function TeamsNotifications() {
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 0' }}>
+      <style>{DASH_CSS}</style>
       <Space style={{ marginBottom: 20 }}>
         <TeamOutlined style={{ fontSize: 24, color: '#5a4fcf' }} />
         <Title level={4} style={{ margin: 0 }}>Microsoft Teams Notifications</Title>
@@ -81,7 +83,7 @@ export default function TeamsNotifications() {
         }
       />
 
-      <Card>
+      <Card className="dashcard">
         <Form form={form} layout="vertical" onFinish={handleSave}>
 
           <Form.Item
@@ -128,13 +130,15 @@ export default function TeamsNotifications() {
             >
               Save Configuration
             </Button>
-            <Button
-              icon={<SendOutlined />}
-              loading={testing}
-              onClick={handleTest}
-            >
-              Send Test Notification
-            </Button>
+            <Tooltip title="Send a sample message to the configured webhook to verify it works">
+              <Button
+                icon={<SendOutlined />}
+                loading={testing}
+                onClick={handleTest}
+              >
+                Send Test Notification
+              </Button>
+            </Tooltip>
           </Space>
 
           {saved && (

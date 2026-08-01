@@ -6,6 +6,7 @@ import {
   LockOutlined, SafetyCertificateOutlined, SaveOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 // ─── page registry ──────────────────────────────────────────────────────────
 const PAGE_SECTIONS = [
@@ -221,17 +222,19 @@ export default function UserPageControl() {
         </Space>
       ),
       extra: (
-        <Button
-          type="primary"
-          size="small"
-          icon={<SaveOutlined />}
-          loading={ud?.saving}
-          disabled={!ud?.dirty}
-          onClick={(e) => { e.stopPropagation(); handleSave(u.id); }}
-          style={{ background: ud?.dirty ? '#52c41a' : undefined, borderColor: ud?.dirty ? '#52c41a' : undefined }}
-        >
-          Save
-        </Button>
+        <Tooltip title={ud?.dirty ? 'Save access changes for this user' : 'No unsaved changes'}>
+          <Button
+            type="primary"
+            size="small"
+            icon={<SaveOutlined />}
+            loading={ud?.saving}
+            disabled={!ud?.dirty}
+            onClick={(e) => { e.stopPropagation(); handleSave(u.id); }}
+            style={{ background: ud?.dirty ? '#52c41a' : undefined, borderColor: ud?.dirty ? '#52c41a' : undefined }}
+          >
+            Save
+          </Button>
+        </Tooltip>
       ),
       children: (
         <UserPanel
@@ -245,6 +248,7 @@ export default function UserPageControl() {
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <Space align="start" style={{ marginBottom: 20 }}>
         <SafetyCertificateOutlined style={{ fontSize: 24, color: '#1677ff', marginTop: 3 }} />
         <div>
@@ -271,7 +275,7 @@ export default function UserPageControl() {
           defaultActiveKey={users[0]?.id ? [users[0].id] : []}
           items={collapseItems}
           style={{ background: 'transparent', border: 'none' }}
-          className="user-page-control-collapse"
+          className="user-page-control-collapse dashcard"
         />
       )}
     </div>

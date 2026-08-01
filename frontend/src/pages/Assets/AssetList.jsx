@@ -12,6 +12,8 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
 import { copyToClipboard } from '../../utils/clipboard';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
+import { DatabaseOutlined } from '@ant-design/icons';
 
 export default function AssetList({
   apiPrefix = '/assets',
@@ -351,7 +353,8 @@ export default function AssetList({
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>{effectiveTitle}</Typography.Title>}
+      className="dashcard"
+      title={<Space><DatabaseOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>{effectiveTitle}</Typography.Title></Space>}
       extra={
         <Space>
           {!loading && data.total > 0 && (
@@ -359,13 +362,14 @@ export default function AssetList({
               {data.total} asset{data.total !== 1 ? 's' : ''}
             </Typography.Text>
           )}
-          <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
-          <Button icon={<DownloadOutlined />} onClick={onExport}>Export</Button>
-          {canWrite && <Link to={`${basePath}/import`}><Button icon={<UploadOutlined />}>Import</Button></Link>}
+          <Tooltip title="Reload the current view"><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Tooltip>
+          <Tooltip title="Export this view to Excel"><Button icon={<DownloadOutlined />} onClick={onExport}>Export</Button></Tooltip>
+          {canWrite && <Link to={`${basePath}/import`}><Tooltip title="Bulk import from a spreadsheet"><Button icon={<UploadOutlined />}>Import</Button></Tooltip></Link>}
           {canWrite && <Link to={`${basePath}/new`}><Button type="primary" icon={<PlusOutlined />}>Add Asset</Button></Link>}
         </Space>
       }
     >
+      <style>{DASH_CSS}</style>
       <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={8}>
           <Input prefix={<SearchOutlined />} placeholder="Search VM, hostname, IP, user, dept"
@@ -426,6 +430,7 @@ export default function AssetList({
         loading={loading}
         dataSource={data.items}
         size="small"
+        rowClassName="dashcard-row"
         sticky
         rowSelection={canWrite ? {
           selectedRowKeys: selectedIds,

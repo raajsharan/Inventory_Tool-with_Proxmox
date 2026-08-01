@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Select, Space, Tag, Tooltip } from 'antd';
+import { Table, Input, Select, Space, Tag, Tooltip, Card } from 'antd';
 import { SearchOutlined, LaptopOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
+import { DASH_CSS } from '../../../components/DashboardStatCard.jsx';
 
 const { Option } = Select;
 
@@ -56,44 +57,48 @@ export default function HVList() {
 
   return (
     <div style={{ padding: 16 }}>
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Input
-          prefix={<SearchOutlined />}
-          placeholder="Search name or host…"
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }}
-          style={{ width: 240 }}
-          allowClear
-        />
-        <Select
-          placeholder="State"
-          value={state || undefined}
-          onChange={v => { setState(v || ''); setPage(1); }}
-          allowClear
-          style={{ width: 130 }}
-        >
-          <Option value="Running">Running</Option>
-          <Option value="Off">Stopped</Option>
-          <Option value="Paused">Paused</Option>
-          <Option value="Saved">Saved</Option>
-        </Select>
-      </Space>
+      <style>{DASH_CSS}</style>
+      <Card size="small" className="dashcard">
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Input
+            prefix={<SearchOutlined />}
+            placeholder="Search name or host…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            style={{ width: 240 }}
+            allowClear
+          />
+          <Select
+            placeholder="State"
+            value={state || undefined}
+            onChange={v => { setState(v || ''); setPage(1); }}
+            allowClear
+            style={{ width: 130 }}
+          >
+            <Option value="Running">Running</Option>
+            <Option value="Off">Stopped</Option>
+            <Option value="Paused">Paused</Option>
+            <Option value="Saved">Saved</Option>
+          </Select>
+        </Space>
 
-      <Table
-        size="small"
-        loading={loading}
-        rowKey="id"
-        dataSource={items}
-        columns={columns}
-        scroll={{ x: 1400 }}
-        pagination={{
-          current:   page,
-          pageSize,
-          total,
-          showTotal: t => `${t} total`,
-          onChange:  p => setPage(p),
-        }}
-      />
+        <Table
+          size="small"
+          loading={loading}
+          rowKey="id"
+          dataSource={items}
+          columns={columns}
+          scroll={{ x: 1400 }}
+          rowClassName="dashcard-row"
+          pagination={{
+            current:   page,
+            pageSize,
+            total,
+            showTotal: t => `${t} total`,
+            onChange:  p => setPage(p),
+          }}
+        />
+      </Card>
     </div>
   );
 }

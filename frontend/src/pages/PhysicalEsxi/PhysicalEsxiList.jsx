@@ -8,12 +8,13 @@ import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined,
   EyeOutlined, EyeInvisibleOutlined, LockOutlined, UnlockOutlined, CopyOutlined,
-  CheckCircleFilled, CloseCircleFilled, SyncOutlined,
+  CheckCircleFilled, CloseCircleFilled, SyncOutlined, HddOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
 import { copyToClipboard } from '../../utils/clipboard';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const PAGE_KEY = 'physical_esxi_servers';
 
@@ -422,7 +423,8 @@ export default function PhysicalEsxiList() {
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>{title}</Typography.Title>}
+      className="dashcard"
+      title={<Space><HddOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>{title}</Typography.Title></Space>}
       extra={
         <Space>
           {!loading && data.total > 0 && (
@@ -430,13 +432,15 @@ export default function PhysicalEsxiList() {
               {data.total} server{data.total !== 1 ? 's' : ''}
             </Typography.Text>
           )}
-          <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
-          <Button icon={<DownloadOutlined />} onClick={onExport}>Export</Button>
-          {canWrite && <Link to="/physical-esxi/import"><Button icon={<UploadOutlined />}>Import</Button></Link>}
+          <Tooltip title="Reload the current view"><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Tooltip>
+          <Tooltip title="Export this view to Excel"><Button icon={<DownloadOutlined />} onClick={onExport}>Export</Button></Tooltip>
+          {canWrite && <Link to="/physical-esxi/import"><Tooltip title="Bulk import from a spreadsheet"><Button icon={<UploadOutlined />}>Import</Button></Tooltip></Link>}
           {canWrite && (
-            <Button icon={<SyncOutlined />} onClick={() => { setSyncResult(null); setSyncConfirmOpen(true); }}>
-              Copy from VM Discovery
-            </Button>
+            <Tooltip title="Copy new ESXi hosts discovered by VM Discovery into this list">
+              <Button icon={<SyncOutlined />} onClick={() => { setSyncResult(null); setSyncConfirmOpen(true); }}>
+                Copy from VM Discovery
+              </Button>
+            </Tooltip>
           )}
           {canWrite && (
             <Link to="/physical-esxi/new">
@@ -446,6 +450,7 @@ export default function PhysicalEsxiList() {
         </Space>
       }
     >
+      <style>{DASH_CSS}</style>
       {/* ── Filters ── */}
       <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={8}>
@@ -525,6 +530,7 @@ export default function PhysicalEsxiList() {
         loading={loading}
         dataSource={data.items}
         size="small"
+        rowClassName="dashcard-row"
         sticky
         rowSelection={canWrite ? {
           selectedRowKeys: selectedIds,

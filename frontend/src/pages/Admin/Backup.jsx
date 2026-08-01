@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Card, Tabs, Alert, Button, Form, Input, InputNumber, Select, Switch, Space, Typography,
-  TimePicker, Upload, App, Tag, Table, Divider, Modal, Checkbox,
+  TimePicker, Upload, App, Tag, Table, Divider, Modal, Checkbox, Tooltip,
 } from 'antd';
 import {
   DatabaseOutlined, FileTextOutlined, DownloadOutlined, UploadOutlined,
@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const CSV_TARGETS = [
   { value: 'assets',                label: 'Asset Inventory',     desc: 'All assets, VM names, IPs, patching status, custom fields' },
@@ -252,7 +253,7 @@ function PgBackupTab() {
         style={{ marginBottom: 16 }}
       />
 
-      <Card type="inner" title={<Space><PlayCircleOutlined /><span>Manual Backup</span></Space>} style={{ marginBottom: 16 }}>
+      <Card type="inner" className="dashcard" title={<Space><PlayCircleOutlined /><span>Manual Backup</span></Space>} style={{ marginBottom: 16, animationDelay: '0ms' }}>
         <Space wrap>
           <Button type="primary" icon={<DatabaseOutlined />} onClick={onRunNow} loading={running}>
             Download SQL Dump Now
@@ -273,7 +274,7 @@ function PgBackupTab() {
         </Typography.Paragraph>
       </Card>
 
-      <Card type="inner" title={<Space><SaveOutlined /><span>Backup Schedule</span></Space>} style={{ marginBottom: 16 }}>
+      <Card type="inner" className="dashcard" title={<Space><SaveOutlined /><span>Backup Schedule</span></Space>} style={{ marginBottom: 16, animationDelay: '60ms' }}>
         <ScheduleForm kind="pg" settings={settings} onSaved={() => load()} />
         {settings?.enabled && (
           <Alert type="success" showIcon style={{ marginTop: 12 }}
@@ -343,7 +344,7 @@ function CsvExportTab() {
         style={{ marginBottom: 16 }}
       />
 
-      <Card type="inner" title={<Space><FileTextOutlined /><span>Export Selection</span></Space>} style={{ marginBottom: 16 }}>
+      <Card type="inner" className="dashcard" title={<Space><FileTextOutlined /><span>Export Selection</span></Space>} style={{ marginBottom: 16, animationDelay: '0ms' }}>
         <Checkbox.Group
           value={selected}
           onChange={setSelected}
@@ -362,7 +363,7 @@ function CsvExportTab() {
         </Button>
       </Card>
 
-      <Card type="inner" title={<Space><SaveOutlined /><span>Export Schedule</span></Space>} style={{ marginBottom: 16 }}>
+      <Card type="inner" className="dashcard" title={<Space><SaveOutlined /><span>Export Schedule</span></Space>} style={{ marginBottom: 16, animationDelay: '60ms' }}>
         <ScheduleForm kind="csv" settings={settings} onSaved={() => load()} />
       </Card>
 
@@ -464,7 +465,7 @@ function RestoreByDateTab() {
         style={{ marginBottom: 16 }}
       />
 
-      <Card type="inner" style={{ marginBottom: 16 }} title={<Space><RollbackOutlined /><span>Choose target</span></Space>}>
+      <Card type="inner" className="dashcard" style={{ marginBottom: 16, animationDelay: '0ms' }} title={<Space><RollbackOutlined /><span>Choose target</span></Space>}>
         <Space size={16} wrap>
           <div>
             <Typography.Text strong>Inventory</Typography.Text>
@@ -494,9 +495,9 @@ function RestoreByDateTab() {
         </Space>
       </Card>
 
-      <Card type="inner" style={{ marginBottom: 16 }}
+      <Card type="inner" className="dashcard" style={{ marginBottom: 16, animationDelay: '60ms' }}
         title={<Space><HistoryOutlined /><span>Restore from a historical backup</span></Space>}
-        extra={<Button size="small" icon={<ReloadOutlined />} onClick={loadFiles}>Refresh list</Button>}
+        extra={<Tooltip title="Reload the list of available backup files"><Button size="small" icon={<ReloadOutlined />} onClick={loadFiles}>Refresh list</Button></Tooltip>}
       >
         <Typography.Paragraph type="secondary" style={{ marginTop: -8 }}>
           Files are read from the CSV export directory on the server. Run a CSV export first to populate this list.
@@ -532,7 +533,7 @@ function RestoreByDateTab() {
         </Button>
       </Card>
 
-      <Card type="inner" title={<Space><UploadOutlined /><span>Restore from uploaded CSV</span></Space>}>
+      <Card type="inner" className="dashcard" style={{ animationDelay: '120ms' }} title={<Space><UploadOutlined /><span>Restore from uploaded CSV</span></Space>}>
         <Upload
           accept=".csv"
           maxCount={1}
@@ -559,7 +560,8 @@ function RestoreByDateTab() {
 
 export default function AdminBackup() {
   return (
-    <Card title={<Typography.Title level={4} style={{ margin: 0 }}>Backup / Export &amp; Import</Typography.Title>}>
+    <Card className="dashcard" title={<Space><DatabaseOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>Backup / Export &amp; Import</Typography.Title></Space>}>
+      <style>{DASH_CSS}</style>
       <Tabs
         items={[
           { key: 'pg',  label: <span><DatabaseOutlined /> PostgreSQL Backup</span>, children: <PgBackupTab /> },

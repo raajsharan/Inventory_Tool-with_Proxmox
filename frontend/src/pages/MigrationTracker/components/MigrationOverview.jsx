@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme, Popover, List, Button } from 'antd';
+import { Row, Col, Card, Statistic, Progress, Table, Tag, Spin, Typography, theme, Popover, List, Button, Tooltip } from 'antd';
 import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined,
   DatabaseOutlined, ClusterOutlined, StopOutlined, DeleteOutlined, ReloadOutlined,
@@ -43,13 +43,15 @@ export default function MigrationOverview({ projectId }) {
     <div style={{ padding: '0 0 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={5} style={{ margin: 0 }}>Overall Migration Progress</Title>
-        <Button icon={<ReloadOutlined />} loading={refreshing} onClick={() => load(true)}>
-          Refresh
-        </Button>
+        <Tooltip title="Reload the latest migration counts">
+          <Button icon={<ReloadOutlined />} loading={refreshing} onClick={() => load(true)}>
+            Refresh
+          </Button>
+        </Tooltip>
       </div>
 
       {/* ── Big progress bar ─────────────────────────────────────────────── */}
-      <Card size="small" style={{ marginBottom: 20 }}>
+      <Card size="small" className="migration-card" style={{ marginBottom: 20 }}>
         <Row gutter={24} align="middle">
           <Col flex="auto">
             <Progress
@@ -74,9 +76,9 @@ export default function MigrationOverview({ projectId }) {
           { title: 'Fully Migrated',       value: hosts.fully_migrated,       icon: <CheckCircleOutlined />,  color: '#52c41a' },
           { title: 'Pending Vacate',       value: hosts.pending_vacate,       icon: <ClockCircleOutlined />,  color: '#fa8c16' },
           { title: 'VMs to Migrate',       value: totalVMs,                   icon: <ClusterOutlined />,      color: undefined },
-        ].map(s => (
+        ].map((s, si) => (
           <Col key={s.title} xs={12} sm={6}>
-            <Card size="small">
+            <Card size="small" className="migration-card" style={{ animationDelay: `${si * 50}ms` }}>
               <Statistic
                 title={s.title}
                 value={s.value ?? 0}
@@ -95,9 +97,9 @@ export default function MigrationOverview({ projectId }) {
           { label: 'Bomgar VMs',     d: bomgar },
           { label: 'Security VMs',   d: security },
           { label: 'Standalone ESXi',d: standalone },
-        ].map(({ label, d }) => (
+        ].map(({ label, d }, li) => (
           <Col key={label} xs={24} sm={8}>
-            <Card size="small" title={label}>
+            <Card size="small" className="migration-card" style={{ animationDelay: `${li * 60}ms` }} title={label}>
               <Row gutter={8}>
                 <Col span={12}>
                   <Statistic title="Total" value={d.total ?? 0} />

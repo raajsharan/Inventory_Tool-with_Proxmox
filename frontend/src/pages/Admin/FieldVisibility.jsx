@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, Tabs, Switch, Typography, Space, Button, App, Tag, Row, Col, Divider, Alert,
+  Card, Tabs, Switch, Typography, Space, Button, App, Tag, Row, Col, Divider, Alert, Tooltip,
 } from 'antd';
-import { SaveOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined, ControlOutlined } from '@ant-design/icons';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 export default function FieldVisibility() {
   const { message } = App.useApp();
@@ -63,16 +64,18 @@ export default function FieldVisibility() {
 
   return (
     <Card
-      title={<Typography.Title level={4} style={{ margin: 0 }}>Field Customization</Typography.Title>}
+      className="dashcard"
+      title={<Space><ControlOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>Field Customization</Typography.Title></Space>}
       extra={
         <Space>
           <Tag color="blue">{shownCount} shown</Tag>
           <Tag>{hidden.length} hidden</Tag>
-          <Button icon={<ReloadOutlined />} onClick={() => load(active)} loading={loading}>Reload</Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving}>Save</Button>
+          <Tooltip title="Discard unsaved changes and reload"><Button icon={<ReloadOutlined />} onClick={() => load(active)} loading={loading}>Reload</Button></Tooltip>
+          <Tooltip title="Apply field visibility changes"><Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving}>Save</Button></Tooltip>
         </Space>
       }
     >
+      <style>{DASH_CSS}</style>
       <Alert
         type="info"
         showIcon
@@ -86,8 +89,8 @@ export default function FieldVisibility() {
         items={pages.map(p => ({ key: p.key, label: p.label }))}
       />
 
-      {grouped.map(g => (
-        <div key={g.name} style={{ marginBottom: 16 }}>
+      {grouped.map((g, gi) => (
+        <div key={g.name} className="dashcard" style={{ marginBottom: 16, animationDelay: `${gi * 50}ms` }}>
           <Divider orientation="left" style={{ fontSize: 12, letterSpacing: 1, color: '#94a3b8', textTransform: 'uppercase' }}>
             {g.name}
           </Divider>
