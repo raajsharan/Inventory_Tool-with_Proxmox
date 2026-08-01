@@ -746,16 +746,22 @@ function ExtendedInventoryTab({ data, compCfg = {} }) {
     { title: 'Tenable',        dataIndex: 'tenable',        width: 90,  align: 'center', render: numCell('cyan') },
   ];
 
+  const totalInventory = useCountUp(h.totalInventory ?? 0);
+  const patchingCompliancePct = useCountUp((h.patchingCompliancePct ?? 0) * 10);
+  const operationalReadinessPct = useCountUp((h.operationalReadinessPct ?? 0) * 100);
+  const infrastructureHealthScore = useCountUp(h.infrastructureHealthScore ?? 0);
+
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <Wgt tab="ext" k="kpi_cards"><Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '0ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Total Inventory</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {(h.totalInventory ?? 0).toLocaleString()}
+                  {totalInventory.toLocaleString()}
                 </div>
                 <Typography.Text type="secondary">Assets under management</Typography.Text>
               </div>
@@ -766,12 +772,12 @@ function ExtendedInventoryTab({ data, compCfg = {} }) {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '60ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Patching Compliance</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {(h.patchingCompliancePct ?? 0).toFixed(1)}%
+                  {(patchingCompliancePct / 10).toFixed(1)}%
                 </div>
                 <Typography.Text type="secondary">Current compliance level</Typography.Text>
               </div>
@@ -782,12 +788,12 @@ function ExtendedInventoryTab({ data, compCfg = {} }) {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '120ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Operational Readiness</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1 }}>
-                  {(h.operationalReadinessPct ?? 0).toFixed(2)}%
+                  {(operationalReadinessPct / 100).toFixed(2)}%
                 </div>
                 <Typography.Text type="secondary">
                   {h.pendingActions ?? 0} {h.pendingActions === 1 ? 'asset' : 'assets'} pending actions
@@ -800,12 +806,12 @@ function ExtendedInventoryTab({ data, compCfg = {} }) {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card className="dashcard" style={{ animationDelay: '180ms' }}>
             <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
               <div>
                 <Typography.Text type="secondary">Infrastructure Health Score</Typography.Text>
                 <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1, color: '#1677ff' }}>
-                  {h.infrastructureHealthScore ?? 0}
+                  {infrastructureHealthScore}
                 </div>
                 <Typography.Text type="secondary">Weighted from compliance and readiness</Typography.Text>
               </div>
