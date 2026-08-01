@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, Typography } from 'antd';
+import { Card, Collapse, Typography } from 'antd';
+import { CaretRightOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -14,6 +15,13 @@ export const DASH_CSS = `
 .dashcard:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.09); }
 .dashcard-row { transition: background 0.15s ease; }
 .dashcard-minibar-fill { transition: width 0.6s cubic-bezier(0.22,1,0.36,1); }
+
+/* Make the Collapse used by ExpandableTableCard read like the size="small"
+   Cards it sits next to, instead of antd's default Collapse chrome. */
+.dashcard-collapse.ant-collapse { background: #fff; border-radius: 8px; border: 1px solid #f0f0f0; }
+.dashcard-collapse .ant-collapse-item { border-bottom: none; }
+.dashcard-collapse .ant-collapse-header { padding: 9px 12px !important; align-items: center !important; }
+.dashcard-collapse .ant-collapse-content-box { padding: 0 !important; }
 `;
 
 // Counts up from 0 to the target value with an ease-out curve — small bit of
@@ -79,5 +87,25 @@ export function SplitBar({ segments, total, width = 100 }) {
         <div key={s.color} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} />
       ))}
     </div>
+  );
+}
+
+// A Card-styled, single-panel Collapse — click the title (or the caret) to
+// expand/collapse the table underneath, caret rotates 90° when open. Uses
+// antd's built-in Collapse animation rather than a custom height transition.
+export function ExpandableTableCard({ title, extra, defaultOpen = true, index = 0, children }) {
+  return (
+    <Collapse
+      className="dashcard dashcard-collapse"
+      style={{ animationDelay: `${index * 40}ms` }}
+      defaultActiveKey={defaultOpen ? ['1'] : []}
+      expandIcon={({ isActive }) => <CaretRightOutlined rotate={isActive ? 90 : 0} />}
+      items={[{
+        key: '1',
+        label: <Text strong>{title}</Text>,
+        extra,
+        children,
+      }]}
+    />
   );
 }
