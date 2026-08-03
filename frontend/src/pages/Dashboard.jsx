@@ -1617,7 +1617,8 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <Typography.Link underline strong>
               Manage Engine compliance with Extended Inventory
             </Typography.Link>{' '}
-            → <strong>{extCompliancePct}%</strong>{' '}
+            → {extNumerator.toLocaleString()}/{extComplianceDenom.toLocaleString()} x 100 ={' '}
+            <strong>{extCompliancePct}%</strong>{' '}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {EXT_FOOTNOTE}
             </Typography.Text>
