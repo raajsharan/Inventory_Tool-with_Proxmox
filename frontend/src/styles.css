@@ -45,14 +45,43 @@ body[data-theme="dark"] .app-header {
 }
 .page-shell {
   padding: 20px;
-  background: #f5f7fb;
   min-height: calc(100vh - 64px);
+  /* Ambient identity — carries the login page's signal/online glow and
+     node-grid texture through every route, at a contrast low enough to
+     never compete with content. */
+  background:
+    radial-gradient(900px 480px at 100% -8%, rgba(47,111,237,0.07) 0%, transparent 62%),
+    radial-gradient(700px 420px at -6% 108%, rgba(52,211,153,0.055) 0%, transparent 58%),
+    radial-gradient(rgba(91,107,140,0.09) 1px, transparent 1.4px) 0 0/26px 26px,
+    #f5f7fb;
+  background-attachment: fixed, fixed, fixed, fixed;
 }
 body[data-theme="dark"] .page-shell {
-  background: #141414;
+  background:
+    radial-gradient(900px 480px at 100% -8%, rgba(47,111,237,0.14) 0%, transparent 62%),
+    radial-gradient(700px 420px at -6% 108%, rgba(52,211,153,0.08) 0%, transparent 58%),
+    radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1.4px) 0 0/26px 26px,
+    #141414;
+  background-attachment: fixed, fixed, fixed, fixed;
 }
 body[data-theme="dark"] .logo-title {
   background: #000;
+}
+/* Sidebar gets the same navy-to-void depth as the login stage instead of a
+   flat fill — same palette, just given a sense of recession. */
+.ant-layout-sider {
+  background: linear-gradient(180deg, #0B1530 0%, #0A122A 55%, #060b1d 100%) !important;
+}
+body[data-theme="dark"] .ant-layout-sider {
+  background: linear-gradient(180deg, #000000 0%, #0a0a0a 60%, #000000 100%) !important;
+}
+/* App-wide card shadow tinted with the ink token instead of flat black —
+   ties every Card back to the same identity as the masthead/login card. */
+.ant-card {
+  box-shadow: 0 1px 2px rgba(11,21,48,0.04), 0 4px 14px rgba(11,21,48,0.05);
+}
+body[data-theme="dark"] .ant-card {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.35);
 }
 /* Soften the bright green input background in dark mode for inventory forms */
 body[data-theme="dark"] .inventory-form .ant-input,

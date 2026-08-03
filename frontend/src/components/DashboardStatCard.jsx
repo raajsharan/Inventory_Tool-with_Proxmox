@@ -10,8 +10,16 @@ const { Text } = Typography;
 // tables. Inject DASH_CSS once per page via <style>{DASH_CSS}</style>.
 export const DASH_CSS = `
 @keyframes dashcard-fadein { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.dashcard { animation: dashcard-fadein 0.45s cubic-bezier(0.22,1,0.36,1) both;
+.dashcard { position: relative; overflow: hidden;
+  animation: dashcard-fadein 0.45s cubic-bezier(0.22,1,0.36,1) both;
   transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.dashcard::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2.5px;
+  background: linear-gradient(90deg, var(--signal, #2F6FED), var(--online, #34D399));
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform 0.35s cubic-bezier(0.22,1,0.36,1);
+}
+.dashcard:hover::before { transform: scaleX(1); }
 .dashcard:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.09); }
 .dashcard-row { transition: background 0.15s ease; }
 .dashcard-minibar-fill { transition: width 0.6s cubic-bezier(0.22,1,0.36,1); }
