@@ -1370,15 +1370,13 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
-  // Extended Inventory ME compliance display uses its own formula —
-  // (Auto.total + Manual.total + Other.total) / (grand total No − grand
-  // total Yes) — kept separate from meExtYes/meExtDen below, which still
-  // feed the combined MSL+Extended banner above using the original
-  // bucket-filtered definition. "Auto"/"Manual"/"Other" are literal bucket
-  // names from the backend's CASE statement (Other = its ELSE branch),
-  // not a sum of every non-Auto/Manual row.
-  const extBucketTotal = (name) => meExtRows.find((r) => r.bucket === name)?.total || 0;
-  const extNumerator = extBucketTotal('Auto') + extBucketTotal('Manual') + extBucketTotal('Other');
+  // Extended Inventory ME compliance display — numerator uses the same
+  // method as MSL (Yes-sum over buckets not in the exclude list, which for
+  // Ext's default exclude list leaves exactly Auto + Manual + Other),
+  // denominator is grand total No − grand total Yes. Kept separate from
+  // meExtYes/meExtDen below, which still feed the combined MSL+Extended
+  // banner above using their original (Yes/Total-based) definition.
+  const extNumerator = meExtIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
   const extGrandNo    = meExtRows.reduce((s, r) => s + (r.no_me  || 0), 0);
   const extGrandYes   = meExtRows.reduce((s, r) => s + (r.yes_me || 0), 0);
   const extComplianceDenom = extGrandNo - extGrandYes;
