@@ -6,21 +6,26 @@ const ThemeContext = createContext(null);
 const FONT_STEPS = [12, 13, 14, 15, 16, 17];     // ant default ~14
 const DEFAULT_FONT_PX = 14;
 
+// Matches the design tokens in styles.css (--ink-900/--ink-700/--signal) so
+// the login page's ops navy / signal blue identity carries through the rest
+// of the app instead of stopping at the login screen. "Manrope" replaces
+// "Inter", which was never actually loaded (no @font-face/import for it) and
+// was silently falling back to the system font stack.
 const BASE_TOKEN = {
-  colorPrimary: '#1f3a8a',
-  colorInfo: '#1f3a8a',
+  colorPrimary: '#2F6FED',
+  colorInfo: '#2F6FED',
   borderRadius: 6,
-  fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  fontFamily: '"Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
 };
 
 const LIGHT_COMPONENTS = {
-  Layout: { headerBg: '#ffffff', siderBg: '#0f1e4d', triggerBg: '#0b1740' },
-  Menu:   { darkItemBg: '#0f1e4d', darkSubMenuItemBg: '#0b1740', darkItemSelectedBg: '#1f3a8a' },
+  Layout: { headerBg: '#ffffff', siderBg: '#0B1530', triggerBg: '#0A122A' },
+  Menu:   { darkItemBg: '#0B1530', darkSubMenuItemBg: '#0A122A', darkItemSelectedBg: '#2F6FED' },
 };
 
 const DARK_COMPONENTS = {
   Layout: { headerBg: '#141414', siderBg: '#000000', triggerBg: '#0a0a0a', bodyBg: '#1f1f1f' },
-  Menu:   { darkItemBg: '#000000', darkSubMenuItemBg: '#0a0a0a', darkItemSelectedBg: '#1f3a8a' },
+  Menu:   { darkItemBg: '#000000', darkSubMenuItemBg: '#0a0a0a', darkItemSelectedBg: '#2F6FED' },
 };
 
 export function ThemeProvider({ children }) {
