@@ -8,14 +8,14 @@ const DEFAULT_FONT_PX = 14;
 
 // Matches the design tokens in styles.css (--ink-900/--ink-700/--signal) so
 // the login page's ops navy / signal blue identity carries through the rest
-// of the app instead of stopping at the login screen. "Manrope" replaces
-// "Inter", which was never actually loaded (no @font-face/import for it) and
-// was silently falling back to the system font stack.
+// of the app instead of stopping at the login screen. "Plus Jakarta Sans"
+// replaces "Inter", which was never actually loaded (no @font-face/import
+// for it) and was silently falling back to the system font stack.
 const BASE_TOKEN = {
   colorPrimary: '#2F6FED',
   colorInfo: '#2F6FED',
   borderRadius: 6,
-  fontFamily: '"Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
 };
 
 const LIGHT_COMPONENTS = {

@@ -1,11 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 /* Design tokens — ops navy / signal blue / operator green, with the app's
    existing AntD body stack. Display + mono faces fall back to system fonts
    when Google Fonts is unreachable (offline deployments).
    --font-ui is the app-wide body/UI face (tables, forms, menus — anywhere
    text is dense and needs to stay legible at 12-13px), distinct from the
-   --font-display face reserved for headings/wordmarks. */
+   --font-display face reserved for headings/wordmarks. Plus Jakarta Sans
+   keeps strong figure/number legibility for the data-dense tables while
+   staying warmer than a pure grotesk pairing with Space Grotesk. */
 :root {
   --ink-900: #0B1530;
   --ink-700: #16255B;
@@ -15,7 +17,7 @@
   --slate:   #5B6B8C;
   --line:    #E3E8F2;
   --font-display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
-  --font-ui:      'Manrope', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --font-ui:      'Plus Jakarta Sans', -apple-system, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
 }
 
