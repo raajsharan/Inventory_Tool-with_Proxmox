@@ -62,6 +62,8 @@ export default function VMSnapshots() {
         rowKey="name"
         dataSource={rows}
         columns={columns}
+        scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
         pagination={{ pageSize: 50, showTotal: t => `${t} total` }}
       />
     </Card>

@@ -204,6 +204,7 @@ export default function VMMacUpload() {
           dataSource={files}
           columns={columns}
           pagination={false}
+          scroll={{ x: 'max-content' }}
           locale={{ emptyText: 'No mapping files uploaded yet' }}
         />
       </Card>

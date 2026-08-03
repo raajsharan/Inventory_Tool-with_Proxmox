@@ -69,6 +69,7 @@ export default function VMESXiTopology() {
             dataSource={group.esxi_hosts}
             columns={esxiCols}
             pagination={false}
+            scroll={{ x: 'max-content' }}
           />
         </>
       ),

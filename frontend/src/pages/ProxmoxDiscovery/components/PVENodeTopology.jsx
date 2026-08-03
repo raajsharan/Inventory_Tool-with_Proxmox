@@ -42,6 +42,7 @@ export default function PVENodeTopology() {
           dataSource={entry.nodes}
           columns={nodeColumns}
           pagination={false}
+          scroll={{ x: 'max-content' }}
         />
       ),
     };

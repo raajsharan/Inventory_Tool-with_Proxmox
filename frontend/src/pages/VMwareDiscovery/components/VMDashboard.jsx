@@ -120,6 +120,7 @@ export default function VMDashboard() {
               columns={hostCols}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
@@ -132,6 +133,7 @@ export default function VMDashboard() {
               columns={osCols}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>

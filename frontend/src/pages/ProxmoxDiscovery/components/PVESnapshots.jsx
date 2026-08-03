@@ -52,6 +52,7 @@ export default function PVESnapshots() {
               rowKey={r => `${r.source_host}-${r.vmid}`}
               dataSource={data}
               columns={columns}
+              scroll={{ x: 'max-content' }}
               pagination={{ pageSize: 50, showTotal: t => `${t} total` }}
             />
           )

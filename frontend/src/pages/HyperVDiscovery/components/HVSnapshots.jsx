@@ -51,6 +51,7 @@ export default function HVSnapshots() {
               rowKey="id"
               dataSource={data}
               columns={columns}
+              scroll={{ x: 'max-content' }}
               pagination={{ pageSize: 50, showTotal: t => `${t} total` }}
             />
           )

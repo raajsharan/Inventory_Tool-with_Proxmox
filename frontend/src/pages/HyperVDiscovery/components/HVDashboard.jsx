@@ -140,6 +140,7 @@ export default function HVDashboard() {
               columns={hostColumns}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
@@ -152,6 +153,7 @@ export default function HVDashboard() {
               columns={osColumns}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
@@ -167,6 +169,7 @@ export default function HVDashboard() {
               columns={runColumns}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>

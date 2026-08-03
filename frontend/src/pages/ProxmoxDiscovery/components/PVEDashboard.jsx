@@ -116,6 +116,7 @@ export default function PVEDashboard() {
               columns={nodeColumns}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
@@ -128,6 +129,7 @@ export default function PVEDashboard() {
               columns={osColumns}
               pagination={false}
               rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>

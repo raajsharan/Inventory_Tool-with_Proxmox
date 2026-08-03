@@ -76,7 +76,7 @@ export default function VMDrift() {
               size="small"
               title={<Space><PlusOutlined style={{ color: '#52c41a' }} /><Text>Added ({d.added.length})</Text></Space>}
             >
-              <Table size="small" rowKey="id" dataSource={d.added} columns={addedCols} pagination={false} />
+              <Table size="small" rowKey="id" dataSource={d.added} columns={addedCols} pagination={false} scroll={{ x: 'max-content' }} />
             </Card>
           )}
           {d.removed.length > 0 && (
@@ -84,7 +84,7 @@ export default function VMDrift() {
               size="small"
               title={<Space><MinusOutlined style={{ color: '#ff4d4f' }} /><Text>Removed ({d.removed.length})</Text></Space>}
             >
-              <Table size="small" rowKey="id" dataSource={d.removed} columns={addedCols} pagination={false} />
+              <Table size="small" rowKey="id" dataSource={d.removed} columns={addedCols} pagination={false} scroll={{ x: 'max-content' }} />
             </Card>
           )}
           {d.changed.length > 0 && (
@@ -92,7 +92,7 @@ export default function VMDrift() {
               size="small"
               title={<Space><SwapOutlined style={{ color: '#fa8c16' }} /><Text>Changed ({d.changed.length})</Text></Space>}
             >
-              <Table size="small" rowKey="id" dataSource={d.changed} columns={changedCols} pagination={false} />
+              <Table size="small" rowKey="id" dataSource={d.changed} columns={changedCols} pagination={false} scroll={{ x: 'max-content' }} />
             </Card>
           )}
         </Space>

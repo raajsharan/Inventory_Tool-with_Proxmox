@@ -95,6 +95,7 @@ export default function PVENodesList() {
         dataSource={filtered}
         columns={columns}
         scroll={{ x: 1500 }}
+        sticky={{ offsetScroll: 0 }}
         pagination={{
           pageSize: 50,
           showTotal: t => `${t} total`,

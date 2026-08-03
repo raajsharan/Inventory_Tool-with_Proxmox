@@ -334,6 +334,7 @@ export default function VMAssetEditor() {
                 dataSource={results}
                 columns={columns}
                 scroll={{ x: 1700 }}
+                sticky={{ offsetScroll: 0 }}
                 rowClassName={r => r.has_edit ? 'asset-edited-row' : ''}
                 pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} total` }}
               />

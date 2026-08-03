@@ -33,6 +33,7 @@ function PVETable({ vms, emptyText }) {
       rowKey="id"
       dataSource={vms}
       columns={baseCols}
+      scroll={{ x: 'max-content' }}
       pagination={{ pageSize: 50, showTotal: t => `${t} total` }}
     />
   );

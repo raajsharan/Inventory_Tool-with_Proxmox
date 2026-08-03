@@ -202,6 +202,7 @@ export default function VMMacLookup() {
                 dataSource={data?.results || []}
                 columns={columns}
                 scroll={{ x: 1800 }}
+                sticky={{ offsetScroll: 0 }}
                 pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} total` }}
                 rowClassName={r => r.is_matched ? 'mac-matched-row' : ''}
               />

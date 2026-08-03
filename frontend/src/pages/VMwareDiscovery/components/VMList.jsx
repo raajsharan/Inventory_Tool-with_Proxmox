@@ -207,6 +207,7 @@ export default function VMList({ hostId }) {
           rowClassName="dashcard-row"
           columns={columns}
           scroll={{ x: 1700 }}
+          sticky={{ offsetScroll: 0 }}
           pagination={{
             current: page,
             pageSize,
