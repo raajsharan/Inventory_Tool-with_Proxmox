@@ -1370,6 +1370,19 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
+  // Extended Inventory ME compliance display uses its own formula —
+  // (grand total of all buckets) / (grand total No − grand total Yes) —
+  // kept separate from meExtYes/meExtDen below, which still feed the
+  // combined MSL+Extended banner above using the original bucket-filtered
+  // definition.
+  const extGrandTotal = meExtRows.reduce((s, r) => s + (r.total  || 0), 0);
+  const extGrandNo    = meExtRows.reduce((s, r) => s + (r.no_me  || 0), 0);
+  const extGrandYes   = meExtRows.reduce((s, r) => s + (r.yes_me || 0), 0);
+  const extComplianceDenom = extGrandNo - extGrandYes;
+  const extCompliancePct = extComplianceDenom
+    ? ((extGrandTotal / extComplianceDenom) * 100).toFixed(2)
+    : '0.00';
+
   const meMslYes  = meMslIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
   // Denominator is the grand-total "Yes" count across ALL patching-type
   // buckets (including excluded ones like EOL - No Patches), not the
@@ -1603,8 +1616,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <Typography.Link underline strong>
               Manage Engine compliance with Extended Inventory
             </Typography.Link>{' '}
-            → {meExtYes.toLocaleString()}/{meExtDen.toLocaleString()} x 100 ={' '}
-            <strong>{meExtDen ? ((meExtYes / meExtDen) * 100).toFixed(2) : '0.00'}%</strong>{' '}
+            → <strong>{extCompliancePct}%</strong>{' '}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {EXT_FOOTNOTE}
             </Typography.Text>
