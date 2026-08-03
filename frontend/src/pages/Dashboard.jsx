@@ -1371,7 +1371,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
   const meMslYes  = meMslIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
-  const meMslDen  = meMslIncl.reduce((s, r) => s + (r.total  || 0), 0);
+  // Denominator is the grand-total "Yes" count across ALL patching-type
+  // buckets (including excluded ones like EOL - No Patches), not the
+  // included-only No+Yes total — matches the "Total" row's Yes column.
+  const meMslDen  = meMslRows.reduce((s, r) => s + (r.yes_me || 0), 0);
   const meExtYes  = meExtIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
   const meExtDen  = meExtIncl.reduce((s, r) => s + (r.total  || 0), 0);
 
