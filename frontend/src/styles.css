@@ -287,14 +287,24 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
    Skills applied: micro-interactions · page-transitions · web-motion-design
    ══════════════════════════════════════════════════════════════════════ */
 
-/* Central token system — tune all motion here. */
+/* Central token system — tune all motion here.
+   Values follow the motion-design skill's decision tree: ease-out for
+   things entering/exiting the screen, ease-in-out for things already
+   visible that reposition, plain `ease` for subtle hover/color states. */
 :root {
-  --anim-fast:   100ms;
-  --anim-std:    200ms;
-  --anim-enter:  cubic-bezier(0.22, 1, 0.36, 1);   /* decelerate-in spring */
-  --anim-exit:   cubic-bezier(0.4,  0, 1, 1);       /* ease-in */
-  --anim-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* elastic overshoot */
-  --anim-smooth: cubic-bezier(0.4,  0, 0.2, 1);     /* material standard */
+  --dur-1: 120ms;   /* micro feedback — button press */
+  --dur-2: 180ms;   /* dropdowns, popovers, small surfaces */
+  --dur-3: 240ms;   /* modals, drawers, medium/large surfaces */
+
+  --ease-out-quart:    cubic-bezier(.165, .84, .44, 1);   /* enter/exit default */
+  --ease-in-out-cubic: cubic-bezier(.645, .045, .355, 1); /* reposition/morph */
+
+  --anim-fast:   var(--dur-1);
+  --anim-std:    var(--dur-2);
+  --anim-enter:  var(--ease-out-quart);
+  --anim-exit:   cubic-bezier(0.4,  0, 1, 1);       /* ease-in — exits are faster, no return trip */
+  --anim-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* elastic overshoot — Switch thumb only */
+  --anim-smooth: var(--ease-in-out-cubic);
 }
 
 /* ----- Button hover lift (Anticipation) ------------------------------- */
@@ -353,15 +363,21 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
 /* Open: decelerate spring. Close: ease-in (faster exit feels snappier). */
 .ant-drawer-content-wrapper {
   will-change: transform;
-  transition: transform 220ms var(--anim-enter) !important;
+  transition: transform var(--dur-3) var(--ease-out-quart) !important;
 }
 
 /* ----- Modal entrance (page-transitions) ------------------------------ */
+/* Medium/large surface: dur-3 (240ms) + a touch of scale, per the
+   enter/exit guidance — never scale(0), 0.95 reads as "settling in". */
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);   }
+}
 .ant-modal-content {
-  animation: fadeInUp 0.20s var(--anim-enter) both;
+  animation: modalIn var(--dur-3) var(--ease-out-quart) both;
 }
 .ant-modal-mask {
-  animation: fadeIn 0.18s ease both;
+  animation: fadeIn var(--dur-2) ease both;
 }
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -371,14 +387,14 @@ body[data-theme="dark"] .stat-tile:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.4
 /* ----- Dropdown / Select / Picker open -------------------------------- */
 /* Panel unfolds from top with slight scale — like opening a physical lid.*/
 @keyframes dropdownOpen {
-  from { opacity: 0; transform: scaleY(0.94) translateY(-4px); }
+  from { opacity: 0; transform: scaleY(0.96) translateY(-4px); }
   to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
 }
 /* ant-select-dropdown excluded: scaleY transform triggers Ant Design's
    position recalculation loop, causing flicker on inline table selects. */
 .ant-dropdown-menu,
 .ant-picker-dropdown {
-  animation: dropdownOpen 0.16s var(--anim-enter) both;
+  animation: dropdownOpen var(--dur-2) var(--ease-out-quart) both;
   transform-origin: top center;
 }
 
