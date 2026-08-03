@@ -1370,18 +1370,16 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
-  // Extended Inventory ME compliance display — numerator uses the same
-  // method as MSL (Yes-sum over buckets not in the exclude list, which for
-  // Ext's default exclude list leaves exactly Auto + Manual + Other),
-  // denominator is grand total No − grand total Yes. Kept separate from
-  // meExtYes/meExtDen below, which still feed the combined MSL+Extended
-  // banner above using their original (Yes/Total-based) definition.
+  // Extended Inventory ME compliance display now mirrors MSL's method
+  // exactly: numerator = Yes-sum over buckets not in the exclude list
+  // (Auto + Manual + Other for Ext's default exclude list), denominator =
+  // grand total Yes across ALL buckets. Kept separate from meExtYes/meExtDen
+  // below, which still feed the combined MSL+Extended banner above using
+  // their original (Yes/Total-based) definition.
   const extNumerator = meExtIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
-  const extGrandNo    = meExtRows.reduce((s, r) => s + (r.no_me  || 0), 0);
-  const extGrandYes   = meExtRows.reduce((s, r) => s + (r.yes_me || 0), 0);
-  const extComplianceDenom = extGrandNo - extGrandYes;
-  const extCompliancePct = extComplianceDenom
-    ? ((extNumerator / extComplianceDenom) * 100).toFixed(2)
+  const extGrandYes  = meExtRows.reduce((s, r) => s + (r.yes_me || 0), 0);
+  const extCompliancePct = extGrandYes
+    ? ((extNumerator / extGrandYes) * 100).toFixed(2)
     : '0.00';
 
   const meMslYes  = meMslIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
