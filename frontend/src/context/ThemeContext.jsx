@@ -14,8 +14,18 @@ const DEFAULT_FONT_PX = 14;
 const BASE_TOKEN = {
   colorPrimary: '#2F6FED',
   colorInfo: '#2F6FED',
-  borderRadius: 6,
+  colorLink: '#2F6FED',
+  colorLinkHover: '#5A8CF2',
+  colorSuccess: '#22B37D',
+  borderRadius: 8,
+  borderRadiusLG: 12,
+  borderRadiusSM: 6,
   fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  // Ink-tinted shadow (vs. antd's flat black default) so every popover,
+  // dropdown, and modal reads as part of the same ops-navy identity as
+  // the Cards, which already carry this same shadow via styles.css.
+  boxShadow: '0 3px 6px -4px rgba(11,21,48,0.12), 0 6px 16px 0 rgba(11,21,48,0.08)',
+  boxShadowSecondary: '0 6px 16px 0 rgba(11,21,48,0.08)',
 };
 
 const LIGHT_COMPONENTS = {

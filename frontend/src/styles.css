@@ -105,6 +105,20 @@ body[data-theme="dark"] h4, body[data-theme="dark"] h5, body[data-theme="dark"] 
 body[data-theme="dark"] .ant-typography { color: #f1f5f9; }
 body[data-theme="dark"] .ant-typography.ant-typography-secondary { color: #94a3b8; }
 
+/* Type hierarchy — the display face was previously scoped to the Login
+   page and Weekly Report masthead only, so every other page title/Card
+   header fell back to the body face and read as flat as a paragraph.
+   Applying it to headings + Card titles app-wide gives real hierarchy
+   without touching body copy, tables, or form text. */
+h1, h2, h3, h4,
+.ant-typography h1, .ant-typography h2, .ant-typography h3, .ant-typography h4,
+.ant-card-head-title,
+.ant-modal-title,
+.ant-page-header-heading-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.2px;
+}
+
 /* Dashboard stat-tile grid — 5 across on lg, 3 on md, 2 on small. */
 .stat-grid-5 {
   display: grid;
