@@ -19,6 +19,7 @@ import { useAppTheme } from '../../context/ThemeContext.jsx';
 import api from '../../api/client';
 import GlobalSearch from '../GlobalSearch.jsx';
 import AlertBell from '../AlertBell.jsx';
+import GlobalHorizontalScroll from '../GlobalHorizontalScroll.jsx';
 import { NAV_STORAGE_KEY, loadNavOrder } from '../../pages/Admin/NavOrder.jsx';
 
 const { Sider, Header, Content, Footer } = Layout;
@@ -181,6 +182,7 @@ export default function AppLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
+      <GlobalHorizontalScroll />
       <Sider
         width={240}
         breakpoint="lg"

@@ -930,6 +930,39 @@ a.wr-figure { display: block; color: inherit; }
 a.wr-figure:hover .wr-figure-value { color: var(--signal); }
 body[data-theme="dark"] a.wr-figure:hover .wr-figure-value { color: #7AA5FF; }
 
+/* ────────────────────────────────────────────────────────────────────
+   Global horizontal-scroll enhancer (GlobalHorizontalScroll.jsx) — pan
+   any wide table by dragging anywhere inside it, and a floating
+   scrollbar pinned to the viewport bottom for whichever table is in
+   view, so it's always reachable regardless of scroll position.
+   ──────────────────────────────────────────────────────────────────── */
+.hscroll-managed { cursor: grab; }
+.hscroll-managed.hscroll-dragging { cursor: grabbing; user-select: none; }
+
+.hscroll-float-track {
+  position: fixed;
+  bottom: 5px;
+  height: 9px;
+  z-index: 900;
+  background: rgba(91,107,140,0.14);
+  border-radius: 999px;
+  pointer-events: auto;
+}
+body[data-theme="dark"] .hscroll-float-track { background: rgba(255,255,255,0.08); }
+.hscroll-float-thumb {
+  position: absolute;
+  top: 1px; bottom: 1px;
+  background: var(--signal);
+  border-radius: 999px;
+  cursor: grab;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+.hscroll-float-thumb:hover, .hscroll-float-thumb:active { opacity: 1; cursor: grabbing; }
+@media print {
+  .hscroll-float-track { display: none !important; }
+}
+
 /* Global search result rows */
 .global-search-row:hover { background: rgba(47, 111, 237, 0.07); }
 body[data-theme="dark"] .global-search-row:hover { background: rgba(47, 111, 237, 0.18); }
