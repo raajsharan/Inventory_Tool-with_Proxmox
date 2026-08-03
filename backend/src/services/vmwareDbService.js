@@ -261,7 +261,9 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
 async function getLatestVMs(hostId) {
   let where = '';
   const params = [];
-  if (hostId) { params.push(hostId); where = 'AND v.host_id = $1'; }
+  // Inside the CTE this filters vmware_discovery_runs directly (no "v"
+  // alias in scope there — that belongs to the outer query).
+  if (hostId) { params.push(hostId); where = 'AND host_id = $1'; }
 
   const { rows } = await db.query(
     `WITH latest_runs AS (

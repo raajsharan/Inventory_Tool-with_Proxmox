@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS proxmox_discovered_vms (
   source_host     VARCHAR(255),
   vmid            INTEGER,
   name            VARCHAR(255),
+  hostname        VARCHAR(255),      -- guest OS hostname (QEMU guest agent / LXC config)
   vm_type         VARCHAR(10),       -- 'qemu' or 'lxc'
   node            VARCHAR(255),      -- Proxmox node name
   status          VARCHAR(50),       -- 'running', 'stopped', 'paused'

@@ -17,6 +17,8 @@ function stateTag(s) {
 const columns = [
   { title: 'Name',     dataIndex: 'name',         key: 'name',    ellipsis: true,
     render: v => <span><LaptopOutlined style={{ color: '#722ed1', marginRight: 6 }} />{v}</span> },
+  { title: 'Hostname', dataIndex: 'hostname',     key: 'hostname', width: 160, ellipsis: true,
+    render: v => v || '—' },
   { title: 'State',    dataIndex: 'state',         key: 'state',   width: 100, render: stateTag },
   { title: 'vCPUs',   dataIndex: 'cpu_count',     key: 'cpu',     width: 80 },
   { title: 'Mem (MB)', dataIndex: 'memory_mb',    key: 'memory',  width: 110 },
@@ -89,6 +91,7 @@ export default function HVList() {
           dataSource={items}
           columns={columns}
           scroll={{ x: 1400 }}
+          sticky={{ offsetScroll: 0 }}
           rowClassName="dashcard-row"
           pagination={{
             current:   page,

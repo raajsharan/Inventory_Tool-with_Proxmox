@@ -50,6 +50,7 @@ $vms = Get-VM | ForEach-Object {
   $diskGB = 0
   foreach ($d in $disks) { try { $diskGB += (Get-VHD -Path $d.Path).FileSize / 1GB } catch {} }
   $osName = ''
+  $hostName = ''
   # Only query the guest OS over the network for running VMs — a WMI call
   # to a powered-off VM's hostname has nothing to respond and hangs until a
   # slow RPC/DCOM timeout, which for several off VMs in a row can blow past
@@ -57,10 +58,12 @@ $vms = Get-VM | ForEach-Object {
   # through (silently dropping every VM after the one that was mid-timeout).
   if ($vm.State.ToString() -eq 'Running') {
     try { $info = Get-WmiObject -Class Win32_OperatingSystem -ComputerName $vm.VMName -ErrorAction Stop; $osName = $info.Caption } catch {}
+    try { $cs = Get-WmiObject -Class Win32_ComputerSystem -ComputerName $vm.VMName -ErrorAction Stop; $hostName = $cs.Name } catch {}
   }
   [PSCustomObject]@{
     VmId           = $vm.VMId.ToString()
     Name           = $vm.VMName
+    HostName       = $hostName
     State          = $vm.State.ToString()
     Generation     = $vm.Generation
     CpuCount       = $vm.ProcessorCount
@@ -94,6 +97,7 @@ function parseVMs(raw) {
     return arr.map(v => ({
       vm_id:           v.VmId          || '',
       name:            v.Name          || '',
+      hostname:        v.HostName      || null,
       state:           v.State         || '',
       generation:      v.Generation    || null,
       cpu_count:       v.CpuCount      || null,

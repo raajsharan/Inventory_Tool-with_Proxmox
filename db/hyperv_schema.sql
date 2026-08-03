@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS hyperv_discovered_vms (
   source_host     VARCHAR(255),
   vm_id           VARCHAR(255),
   name            VARCHAR(255),
+  hostname        VARCHAR(255),      -- guest OS computer name (Win32_ComputerSystem)
   state           VARCHAR(50),
   generation      INT,
   cpu_count       INT,

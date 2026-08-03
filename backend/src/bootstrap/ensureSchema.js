@@ -44,6 +44,11 @@ const STATEMENTS = [
   // ── Proxmox discovery: MAC addresses (proxmox_schema.sql predates this column)
   `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS macs TEXT[]`,
 
+  // ── Proxmox / Hyper-V discovery: guest OS hostname (VMware already had this;
+  // Proxmox/Hyper-V predate collecting it, so the Hostname column was blank).
+  `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS hostname VARCHAR(255)`,
+  `ALTER TABLE hyperv_discovered_vms  ADD COLUMN IF NOT EXISTS hostname VARCHAR(255)`,
+
   // ── VMware / Proxmox discovery: current failure state on the host row.
   // Same gap as Hyper-V below — last_discovery_at/last_vm_count are only
   // ever set on SUCCESS, so a host that fails every run (bad password,

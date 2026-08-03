@@ -171,9 +171,10 @@ async function listVMs(req, res) {
   if (search) {
     const s = search.toLowerCase();
     vms = vms.filter(v =>
-      (v.name  || '').toLowerCase().includes(s) ||
-      (v.node  || '').toLowerCase().includes(s) ||
-      (v.ips   || []).some(ip => ip.includes(s))
+      (v.name     || '').toLowerCase().includes(s) ||
+      (v.hostname || '').toLowerCase().includes(s) ||
+      (v.node     || '').toLowerCase().includes(s) ||
+      (v.ips      || []).some(ip => ip.includes(s))
     );
   }
   if (status) vms = vms.filter(v => v.status === status);
@@ -205,10 +206,10 @@ async function getRunHistory(req, res) {
 
 async function exportCSV(req, res) {
   const vms = await db.getLatestVMs(req.query.hostId ? Number(req.query.hostId) : undefined);
-  const header = 'VMID,Name,Type,Node,Status,CPUs,Memory(MB),Disk(GB),IPs,OS Type,Uptime(s),Template,Snapshots,Tags,Pool,Cluster,Source Host\n';
+  const header = 'VMID,Name,Hostname,Type,Node,Status,CPUs,Memory(MB),Disk(GB),IPs,OS Type,Uptime(s),Template,Snapshots,Tags,Pool,Cluster,Source Host\n';
   const rows = vms.map(v =>
     [
-      v.vmid, v.name, v.vm_type, v.node, v.status,
+      v.vmid, v.name, v.hostname, v.vm_type, v.node, v.status,
       v.cpu_count, v.memory_mb, v.disk_gb,
       (v.ips   || []).join('; '),
       v.os_type, v.uptime_seconds,

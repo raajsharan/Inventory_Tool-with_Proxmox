@@ -80,6 +80,7 @@ export default function PVEList() {
   const columns = [
     { title: 'VMID',     dataIndex: 'vmid',        key: 'vmid',        width: 80 },
     { title: 'Name',     dataIndex: 'name',         key: 'name',        width: 220, ellipsis: true, render: textCell },
+    { title: 'Hostname', dataIndex: 'hostname',     key: 'hostname',    width: 180, ellipsis: true, render: textCell },
     { title: 'Type',     dataIndex: 'vm_type',      key: 'vm_type',     width: 110, render: typeIcon },
     { title: 'Node',     dataIndex: 'node',         key: 'node',        width: 140, ellipsis: true, render: textCell },
     { title: 'Status',   dataIndex: 'status',       key: 'status',      width: 100, render: statusTag },
@@ -180,6 +181,7 @@ export default function PVEList() {
             dataSource={items}
             columns={columns}
             scroll={{ x: 1900 }}
+            sticky={{ offsetScroll: 0 }}
             rowClassName="dashcard-row"
             pagination={{
               current:   page,

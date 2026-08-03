@@ -167,6 +167,11 @@ function extractLxcIPs(config) {
   return ips.size ? [...ips] : ['Not Available'];
 }
 
+function extractQemuHostname(agentHost) {
+  const name = agentHost?.result?.['host-name'];
+  return name && typeof name === 'string' ? name : null;
+}
+
 function extractNetMacs(config) {
   if (!config) return [];
   const macs = new Set();
@@ -325,15 +330,19 @@ async function discoverVE(hostname, port, getter, verifySSL) {
         try {
           const vmid = vm.vmid;
           const base  = `/api2/json/nodes/${node}/qemu/${vmid}`;
-          const [config, snaps, agentNet] = await Promise.all([
+          const [config, snaps, agentNet, agentHost] = await Promise.all([
             getter(`${base}/config`),
             getter(`${base}/snapshot`),
             vm.status === 'running' ? getter(`${base}/agent/network-get-interfaces`).catch(() => null) : null,
+            // Requires QEMU guest agent running in the guest — best-effort,
+            // silently unavailable on VMs without it (matches agentNet above).
+            vm.status === 'running' ? getter(`${base}/agent/get-host-name`).catch(() => null) : null,
           ]);
           const { snapshot_count, snapshot_oldest } = processSnapshots(snaps);
           return {
             vmid,
             name:            vm.name || `VM-${vmid}`,
+            hostname:        extractQemuHostname(agentHost),
             vm_type:         'qemu',
             node,
             status:          vm.status || 'stopped',
@@ -374,6 +383,7 @@ async function discoverVE(hostname, port, getter, verifySSL) {
           return {
             vmid,
             name:            ct.name || `CT-${vmid}`,
+            hostname:        config?.hostname || null,
             vm_type:         'lxc',
             node,
             status:          ct.status || 'stopped',

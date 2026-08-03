@@ -202,11 +202,11 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
   let i = 1;
   for (const vm of vms) {
     values.push(
-      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
+      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
     );
     params.push(
       runId, hostId, sourceHost,
-      vm.vmid, vm.name, vm.vm_type, vm.node,
+      vm.vmid, vm.name, vm.hostname, vm.vm_type, vm.node,
       vm.status, vm.cpu_count, vm.memory_mb, vm.disk_gb,
       vm.ips, vm.macs, vm.os_type, vm.uptime_seconds, vm.is_template,
       vm.snapshot_count, vm.snapshot_oldest,
@@ -216,7 +216,7 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
   await db.query(
     `INSERT INTO proxmox_discovered_vms
        (run_id, host_id, source_host,
-        vmid, name, vm_type, node,
+        vmid, name, hostname, vm_type, node,
         status, cpu_count, memory_mb, disk_gb,
         ips, macs, os_type, uptime_seconds, is_template,
         snapshot_count, snapshot_oldest,
@@ -229,7 +229,10 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
 async function getLatestVMs(hostId) {
   const params = [];
   let where = '';
-  if (hostId) { params.push(hostId); where = 'AND v.host_id = $1'; }
+  // Inside the CTE this filters proxmox_discovery_runs directly (no "v"
+  // alias in scope there — that belongs to the outer query), matching the
+  // same fix applied to getLatestNodes above.
+  if (hostId) { params.push(hostId); where = 'AND host_id = $1'; }
   const { rows } = await db.query(
     `WITH latest_runs AS (
        SELECT DISTINCT ON (host_id) id AS run_id, host_id

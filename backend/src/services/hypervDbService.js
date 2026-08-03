@@ -185,11 +185,11 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
   let i = 1;
   for (const vm of vms) {
     values.push(
-      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
+      `($${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++},$${i++})`
     );
     params.push(
       runId, hostId, sourceHost,
-      vm.vm_id, vm.name, vm.state, vm.generation,
+      vm.vm_id, vm.name, vm.hostname, vm.state, vm.generation,
       vm.cpu_count, vm.memory_mb, vm.memory_type, vm.disk_gb,
       vm.ips, vm.mac_addresses, vm.os_name, vm.os_type,
       vm.uptime_seconds, vm.is_template,
@@ -200,7 +200,7 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
   await db.query(
     `INSERT INTO hyperv_discovered_vms
        (run_id, host_id, source_host,
-        vm_id, name, state, generation,
+        vm_id, name, hostname, state, generation,
         cpu_count, memory_mb, memory_type, disk_gb,
         ips, mac_addresses, os_name, os_type,
         uptime_seconds, is_template,
@@ -213,7 +213,9 @@ async function saveVMs(runId, hostId, sourceHost, vms) {
 async function getLatestVMs(hostId) {
   const params = [];
   let where = '';
-  if (hostId) { params.push(hostId); where = 'AND v.host_id = $1'; }
+  // Inside the CTE this filters hyperv_discovery_runs directly (no "v"
+  // alias in scope there — that belongs to the outer query).
+  if (hostId) { params.push(hostId); where = 'AND host_id = $1'; }
   const { rows } = await db.query(
     `WITH latest_runs AS (
        SELECT DISTINCT ON (host_id) id AS run_id, host_id

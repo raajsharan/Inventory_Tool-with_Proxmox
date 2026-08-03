@@ -74,7 +74,7 @@ async function listVMs(req, res, next) {
     const { search, state, os_type } = req.query;
     if (search) {
       const q = search.toLowerCase();
-      vms = vms.filter(v => (v.name || '').toLowerCase().includes(q) || (v.source_host || '').toLowerCase().includes(q));
+      vms = vms.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hostname || '').toLowerCase().includes(q) || (v.source_host || '').toLowerCase().includes(q));
     }
     if (state)   vms = vms.filter(v => (v.state   || '').toLowerCase() === state.toLowerCase());
     if (os_type) vms = vms.filter(v => (v.os_type || '').toLowerCase() === os_type.toLowerCase());
