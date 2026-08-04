@@ -16,10 +16,11 @@ const INVENTORIES = {
 const INVENTORY_OPTS = Object.entries(INVENTORIES).map(([value, m]) => ({ value, label: m.label }));
 
 const columns = [
-  { title: 'VM Name',       dataIndex: 'vm_name',       ellipsis: true },
+  { title: 'VM Name',       dataIndex: 'vm_name',       width: 260, ellipsis: true },
   { title: 'IP Address',    dataIndex: 'ip_address',    width: 150 },
   { title: 'Asset Type',    dataIndex: 'asset_type',    width: 130 },
   { title: 'Server Status', dataIndex: 'server_status', width: 130 },
+  { title: 'Location',      dataIndex: 'location',      width: 160, ellipsis: true },
 ];
 
 export default function AssetTransfer() {
@@ -27,6 +28,8 @@ export default function AssetTransfer() {
   const [source, setSource] = useState('ext_assets');
   const [target, setTarget] = useState('assets');
   const [search, setSearch] = useState('');
+  const [location, setLocation] = useState(undefined);
+  const [locationOpts, setLocationOpts] = useState([]);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -36,13 +39,20 @@ export default function AssetTransfer() {
   const [result, setResult] = useState(null); // { moved, failed }
   const pageSize = 20;
 
+  useEffect(() => {
+    api.get('/dropdowns').then(r => {
+      const opts = (r.data.grouped?.location || []).map(d => ({ label: d.value, value: d.value }));
+      setLocationOpts(opts);
+    }).catch(() => {});
+  }, []);
+
   async function load() {
     setLoading(true);
     setResult(null);
     setSelectedIds([]);
     try {
       const { data } = await api.get(INVENTORIES[source].apiPath, {
-        params: { search: search || undefined, page, pageSize },
+        params: { search: search || undefined, location: location || undefined, page, pageSize },
       });
       setRows(data.items || []);
       setTotal(data.total || 0);
@@ -51,7 +61,7 @@ export default function AssetTransfer() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [source, page]); // eslint-disable-line
+  useEffect(() => { load(); }, [source, page, location]); // eslint-disable-line
 
   function onSourceChange(v) {
     setSource(v);
@@ -105,6 +115,14 @@ export default function AssetTransfer() {
             allowClear
             style={{ width: 240 }}
           />
+          <Select
+            allowClear
+            placeholder="Location"
+            value={location}
+            onChange={v => { setLocation(v); setPage(1); }}
+            options={locationOpts}
+            style={{ width: 180 }}
+          />
           <Button onClick={() => { setPage(1); load(); }}>Search</Button>
         </Space>
 
@@ -148,6 +166,7 @@ export default function AssetTransfer() {
           loading={loading}
           dataSource={rows}
           columns={columns}
+          tableLayout="fixed"
           rowSelection={{
             selectedRowKeys: selectedIds,
             onChange: setSelectedIds,
