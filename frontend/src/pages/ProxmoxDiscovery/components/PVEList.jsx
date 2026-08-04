@@ -141,7 +141,7 @@ export default function PVEList() {
       <div style={{ padding: 16 }}>
         <style>{DASH_CSS}</style>
         {error && <Alert type="error" showIcon message="Couldn't load VMs" description={error} style={{ marginBottom: 12 }} />}
-        <Card size="small" className="dashcard">
+        <Card size="small" className="dashcard" title={`${total} VMs / Containers`}>
           <Space wrap style={{ marginBottom: 12 }}>
             <Input
               prefix={<SearchOutlined />}
