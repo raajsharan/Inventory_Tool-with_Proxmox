@@ -48,8 +48,8 @@ router.post(
   '/',
   authenticate,
   authorize(...writeRoles),
-  body('vmName').exists().withMessage('vmName required').bail().isString(),
-  body('ipAddress').exists().withMessage('ipAddress required').bail().matches(IP_RE).withMessage('Invalid IP address'),
+  body('vm_name').exists().withMessage('vm_name required').bail().isString(),
+  body('ip_address').exists().withMessage('ip_address required').bail().matches(IP_RE).withMessage('Invalid IP address'),
   validate,
   c.create
 );
