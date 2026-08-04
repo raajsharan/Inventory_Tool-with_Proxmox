@@ -25,6 +25,8 @@ router.get('/drift',         ...guard, ctrl.getDrift);
 router.get('/node-topology', ...guard, ctrl.getNodeTopology);
 router.get('/stale',         ...guard, ctrl.getStaleVMs);
 router.get('/snapshots',     ...guard, ctrl.getSnapshots);
+router.get('/mac-lookup',        ...guard, ctrl.getMacLookup);
+router.get('/mac-lookup/export', ...guard, ctrl.exportMacLookupCSV);
 router.get('/runs',          ...guard, ctrl.getRunHistory);
 
 module.exports = router;

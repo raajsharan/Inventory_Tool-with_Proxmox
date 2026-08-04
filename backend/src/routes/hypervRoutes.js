@@ -17,6 +17,8 @@ router.get('/dashboard',  ...guard, ctrl.getDashboard);
 router.get('/drift',      ...guard, ctrl.getDrift);
 router.get('/stale',      ...guard, ctrl.getStale);
 router.get('/snapshots',  ...guard, ctrl.getSnapshots);
+router.get('/mac-lookup',        ...guard, ctrl.getMacLookup);
+router.get('/mac-lookup/export', ...guard, ctrl.exportMacLookupCSV);
 router.get('/runs',       ...guard, ctrl.getRuns);
 
 module.exports = router;

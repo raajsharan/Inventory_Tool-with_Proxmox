@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Typography, Tabs, Card } from 'antd';
 import {
   DashboardOutlined, UnorderedListOutlined, CloudServerOutlined,
-  SwapOutlined, CameraOutlined, WarningOutlined,
+  SwapOutlined, CameraOutlined, WarningOutlined, AimOutlined,
 } from '@ant-design/icons';
 import HVDashboard from './components/HVDashboard.jsx';
 import HVList      from './components/HVList.jsx';
@@ -10,6 +10,7 @@ import HVHosts     from './components/HVHosts.jsx';
 import HVDrift     from './components/HVDrift.jsx';
 import HVSnapshots from './components/HVSnapshots.jsx';
 import HVStale     from './components/HVStale.jsx';
+import HVMacLookup from './components/HVMacLookup.jsx';
 
 const { Title } = Typography;
 
@@ -47,6 +48,11 @@ export default function HyperVDiscovery() {
       key:      'stale',
       label:    <span><WarningOutlined /> Stale VMs</span>,
       children: <HVStale />,
+    },
+    {
+      key:      'mac-lookup',
+      label:    <span><AimOutlined /> MAC Lookup</span>,
+      children: <HVMacLookup />,
     },
   ];
 

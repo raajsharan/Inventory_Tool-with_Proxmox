@@ -3,7 +3,7 @@ import { Typography, Tabs, Card } from 'antd';
 import {
   DashboardOutlined, UnorderedListOutlined, CloudServerOutlined,
   SwapOutlined, CameraOutlined, ApartmentOutlined, WarningOutlined,
-  ClusterOutlined,
+  ClusterOutlined, AimOutlined,
 } from '@ant-design/icons';
 import PVEDashboard    from './components/PVEDashboard.jsx';
 import PVEList         from './components/PVEList.jsx';
@@ -13,6 +13,7 @@ import PVEDrift        from './components/PVEDrift.jsx';
 import PVESnapshots    from './components/PVESnapshots.jsx';
 import PVENodeTopology from './components/PVENodeTopology.jsx';
 import PVEStale        from './components/PVEStale.jsx';
+import PVEMacLookup    from './components/PVEMacLookup.jsx';
 
 const { Title } = Typography;
 
@@ -60,6 +61,11 @@ export default function ProxmoxDiscovery() {
       key: 'stale',
       label: <span><WarningOutlined /> Stale VMs</span>,
       children: <PVEStale />,
+    },
+    {
+      key: 'mac-lookup',
+      label: <span><AimOutlined /> MAC Lookup</span>,
+      children: <PVEMacLookup />,
     },
   ];
 
