@@ -93,6 +93,11 @@ export function AuthProvider({ children }) {
       const { data } = await api.post('/auth/login', { email, password });
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      // Consumed once by AppLayout to show the "your recurring tasks"
+      // notification — set fresh on every real login (not on a page
+      // refresh with an already-valid session), including logging back
+      // in again within the same browser tab.
+      sessionStorage.setItem('justLoggedIn', '1');
       setUser(data.user);
       return data.user;
     } finally { setLoading(false); }

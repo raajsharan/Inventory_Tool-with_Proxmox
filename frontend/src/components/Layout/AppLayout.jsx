@@ -60,14 +60,15 @@ export default function AppLayout() {
       .catch(() => {});
   }, []);
 
-  // Once per browser session, let the 3 people tracked in
-  // Recurring_Activity_Ready_Reckoner.md know what's currently theirs —
-  // everyone else gets nothing back and no notification.
+  // On every fresh login (not on a page refresh with an already-valid
+  // session), let the 3 people tracked in Recurring_Activity_Ready_Reckoner.md
+  // know what's currently theirs — everyone else gets nothing back and no
+  // notification. AuthContext.login() sets the flag; consumed once here.
   useEffect(() => {
-    if (sessionStorage.getItem('myTasksNotified')) return;
+    if (!sessionStorage.getItem('justLoggedIn')) return;
+    sessionStorage.removeItem('justLoggedIn');
     api.get('/recurring-activities/my-tasks').then(r => {
       const { isTeamMember, monthly, weekly } = r.data;
-      sessionStorage.setItem('myTasksNotified', '1');
       if (!isTeamMember) return;
       const lines = [...monthly.activities, ...weekly.activities].map(a => `${a.label}: ${a.current}`);
       if (!lines.length) return;
