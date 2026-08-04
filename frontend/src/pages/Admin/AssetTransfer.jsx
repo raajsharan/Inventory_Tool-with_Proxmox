@@ -33,11 +33,11 @@ export default function AssetTransfer() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [transferring, setTransferring] = useState(false);
   const [result, setResult] = useState(null); // { moved, failed }
-  const pageSize = 20;
 
   useEffect(() => {
     api.get('/dropdowns').then(r => {
@@ -61,7 +61,7 @@ export default function AssetTransfer() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [source, page, location]); // eslint-disable-line
+  useEffect(() => { load(); }, [source, page, pageSize, location]); // eslint-disable-line
 
   function onSourceChange(v) {
     setSource(v);
@@ -176,7 +176,9 @@ export default function AssetTransfer() {
             current: page,
             pageSize,
             total,
-            onChange: setPage,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100],
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
             showTotal: t => `${t} total`,
           }}
         />
