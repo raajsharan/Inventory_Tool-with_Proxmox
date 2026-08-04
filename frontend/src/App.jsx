@@ -45,6 +45,7 @@ const AdminBranding          = lazy(() => import('./pages/Admin/Branding.jsx'));
 const Profile                = lazy(() => import('./pages/Profile.jsx'));
 const RecycleBin             = lazy(() => import('./pages/Admin/RecycleBin.jsx'));
 const AssetTransfer          = lazy(() => import('./pages/Admin/AssetTransfer.jsx'));
+const RecurringActivities    = lazy(() => import('./pages/Admin/RecurringActivities.jsx'));
 const DataHealth             = lazy(() => import('./pages/Admin/DataHealth.jsx'));
 const ComplianceConfig       = lazy(() => import('./pages/Admin/ComplianceConfig.jsx'));
 const MigrationConfig        = lazy(() => import('./pages/Admin/MigrationConfig.jsx'));
@@ -137,6 +138,7 @@ export default function App() {
           <Route path="/admin/branding" element={<AdminBranding />} />
           <Route path="/admin/recycle-bin" element={<RecycleBin />} />
           <Route path="/admin/asset-transfer" element={<AssetTransfer />} />
+          <Route path="/admin/recurring-activities" element={<RecurringActivities />} />
           <Route path="/admin/data-health" element={<DataHealth />} />
           <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
           <Route path="/admin/migration-config"         element={<MigrationConfig />} />

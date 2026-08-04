@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Breadcrumb, Space, Typography, Button, Tooltip } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Breadcrumb, Space, Typography, Button, Tooltip, notification } from 'antd';
 import {
   DashboardOutlined, DatabaseOutlined, PlusOutlined, UploadOutlined,
   AppstoreAddOutlined, AppstoreOutlined, UnorderedListOutlined,
@@ -13,6 +13,7 @@ import {
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
   ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -57,6 +58,27 @@ export default function AppLayout() {
     fetch('/health').then(r => r.json())
       .then(h => { if (h?.commit && h.commit !== 'unknown') setBuildCommit(h.commit); })
       .catch(() => {});
+  }, []);
+
+  // Once per browser session, let the 3 people tracked in
+  // Recurring_Activity_Ready_Reckoner.md know what's currently theirs —
+  // everyone else gets nothing back and no notification.
+  useEffect(() => {
+    if (sessionStorage.getItem('myTasksNotified')) return;
+    api.get('/recurring-activities/my-tasks').then(r => {
+      const { isTeamMember, monthly, weekly } = r.data;
+      sessionStorage.setItem('myTasksNotified', '1');
+      if (!isTeamMember) return;
+      const lines = [...monthly.activities, ...weekly.activities].map(a => `${a.label}: ${a.current}`);
+      if (!lines.length) return;
+      notification.open({
+        message: 'Your recurring tasks this period',
+        description: <div>{lines.map((l, i) => <div key={i}>{l}</div>)}</div>,
+        icon: <CalendarOutlined style={{ color: '#1677ff' }} />,
+        placement: 'topRight',
+        duration: 10,
+      });
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -167,6 +189,7 @@ export default function AppLayout() {
       can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,          label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
       can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,              label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
       can('admin/asset-transfer')   && { key: '/admin/asset-transfer',    icon: <SwapOutlined />,              label: <Link to="/admin/asset-transfer">Asset Transfer</Link> },
+      can('admin/recurring-activities') && { key: '/admin/recurring-activities', icon: <CalendarOutlined />,  label: <Link to="/admin/recurring-activities">Recurring Activities</Link> },
       can('admin/data-health')      && { key: '/admin/data-health',       icon: <HeartOutlined />,             label: <Link to="/admin/data-health">Data Health</Link> },
       can('admin/compliance-config')  && { key: '/admin/compliance-config',  icon: <ControlOutlined />,         label: <Link to="/admin/compliance-config">Compliance Config</Link> },
       can('admin/migration-config')   && { key: '/admin/migration-config',   icon: <ProjectOutlined />,          label: <Link to="/admin/migration-config">Migration Config</Link> },

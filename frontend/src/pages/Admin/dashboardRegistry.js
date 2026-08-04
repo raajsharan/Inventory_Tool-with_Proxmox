@@ -7,7 +7,7 @@
  * Config shape stored in dashboard_config.config (JSONB):
  * {
  *   default_view: 'inventory' | 'infrastructure',
- *   default_tab:  'exec' | 'asset' | 'ext' | 'weekly',
+ *   default_tab:  'exec' | 'asset' | 'ext' | 'weekly' | 'my_tasks',
  *   tabs:    { [key]: { visible?: bool, title?: string, order?: number } },
  *   widgets: { [key]: { ...future per-widget settings... } }
  * }
@@ -20,10 +20,11 @@ export const DASHBOARD_VIEWS = [
 ];
 
 export const DASHBOARD_TABS = [
-  { key: 'exec',   defaultTitle: 'Executive Overview', description: 'Summary tiles, MSL & endpoint compliance' },
-  { key: 'asset',  defaultTitle: 'Asset Inventory',    description: 'Status, patching, and location charts' },
-  { key: 'ext',    defaultTitle: 'Extended Inventory', description: 'Ext. endpoint compliance and distribution' },
-  { key: 'weekly', defaultTitle: 'Weekly Report',      description: 'The formal compliance report' },
+  { key: 'exec',     defaultTitle: 'Executive Overview', description: 'Summary tiles, MSL & endpoint compliance' },
+  { key: 'asset',    defaultTitle: 'Asset Inventory',    description: 'Status, patching, and location charts' },
+  { key: 'ext',      defaultTitle: 'Extended Inventory', description: 'Ext. endpoint compliance and distribution' },
+  { key: 'weekly',   defaultTitle: 'Weekly Report',      description: 'The formal compliance report' },
+  { key: 'my_tasks', defaultTitle: 'My Tasks',           description: 'Your current recurring activity assignments' },
 ];
 
 // Widgets inside each tab — show/hide and rename via Dashboard Settings.

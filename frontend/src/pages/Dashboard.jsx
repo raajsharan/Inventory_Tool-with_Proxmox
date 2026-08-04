@@ -1638,6 +1638,86 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 }
 
 // ---------------------------------------------------------------------------
+// My Tasks — the logged-in user's own current recurring activity
+// assignments (monthly + weekly rotation), computed server-side from the
+// same rules as Recurring_Activity_Ready_Reckoner.md. Only the 3 team
+// members named in that doc get anything back.
+// ---------------------------------------------------------------------------
+
+function TaskRow({ activity, periodLabel }) {
+  const tone = activity.type === 'shared' ? '#8c8c8c' : '#1677ff';
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '10px 14px', border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+      borderRadius: 8, marginBottom: 8,
+    }}>
+      <div>
+        <Typography.Text strong>{activity.label}</Typography.Text>
+        <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>{periodLabel}</Typography.Text></div>
+      </div>
+      <Tag color={activity.type === 'shared' ? 'default' : 'blue'} style={{ color: tone, fontWeight: 600, margin: 0 }}>
+        {activity.current}
+      </Tag>
+    </div>
+  );
+}
+
+function MyTasksTab() {
+  const [tasks, setTasks] = useState(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    api.get('/recurring-activities/my-tasks')
+      .then(r => setTasks(r.data))
+      .catch(e => setErr(e.response?.data?.error || 'Failed to load your tasks.'));
+  }, []);
+
+  if (err) return <Alert type="error" message={err} showIcon />;
+  if (!tasks) return <Spin />;
+
+  if (!tasks.isTeamMember) {
+    return (
+      <Card>
+        <Typography.Text type="secondary">
+          You're not part of the recurring activity rotation tracked in Recurring_Activity_Ready_Reckoner.md.
+        </Typography.Text>
+      </Card>
+    );
+  }
+
+  const nothingThisPeriod = !tasks.monthly.activities.length && !tasks.weekly.activities.length;
+
+  return (
+    <div>
+      <Typography.Paragraph type="secondary">
+        Your current recurring activity assignments, computed from the team rotation schedule.
+      </Typography.Paragraph>
+
+      {nothingThisPeriod && (
+        <Alert type="info" showIcon message="You have no recurring activities assigned for the current period." style={{ marginBottom: 16 }} />
+      )}
+
+      {tasks.monthly.activities.length > 0 && (
+        <Card size="small" title={<Space><CalendarOutlined /><span>Monthly — {tasks.monthly.period.current}</span></Space>} style={{ marginBottom: 16 }}>
+          {tasks.monthly.activities.map(a => (
+            <TaskRow key={a.key} activity={a} periodLabel={`Next: ${a.next} · ${tasks.monthly.period.next}`} />
+          ))}
+        </Card>
+      )}
+
+      {tasks.weekly.activities.length > 0 && (
+        <Card size="small" title={<Space><CalendarOutlined /><span>Weekly — {tasks.weekly.period.current}</span></Space>}>
+          {tasks.weekly.activities.map(a => (
+            <TaskRow key={a.key} activity={a} periodLabel={`Next: ${a.next} · ${tasks.weekly.period.next}`} />
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Root Dashboard — toggle between Inventory and Infrastructure views
 // ---------------------------------------------------------------------------
 
@@ -1692,6 +1772,7 @@ export default function Dashboard() {
                      labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} /><CustomWidgets tab="asset" /></>,
     ext:    (d) => <><ExtendedInventoryTab data={d} compCfg={compCfg} /><CustomWidgets tab="ext" /></>,
     weekly: (d) => <WeeklyReportTab data={d} isDark={isDark} compCfg={compCfg} />,
+    my_tasks: () => <MyTasksTab />,
   };
   const cfgTabs = resolveTabs(dashCfg || {}).filter(t => t.visible && TAB_CONTENT[t.key]);
   const tabItems = (cfgTabs.length ? cfgTabs : [{ key: 'exec', title: 'Executive Overview' }])

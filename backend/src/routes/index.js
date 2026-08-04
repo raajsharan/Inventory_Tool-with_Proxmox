@@ -43,5 +43,10 @@ router.use('/endpoint-central',         authenticate, requirePageAccess('endpoin
 router.use('/teams-notification',       require('./teamsNotificationRoutes'));
 router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
 router.use('/alerts',                   require('./alertsRoutes'));
+// /my-tasks is open to any authenticated user (each team member's own
+// tasks); /reckoner, /config, /overrides are admin-only via authorize()
+// inside recurringActivityRoutes.js — no page-access gate at the mount,
+// since that would also block ordinary team members from /my-tasks.
+router.use('/recurring-activities',     authenticate, require('./recurringActivityRoutes'));
 
 module.exports = router;

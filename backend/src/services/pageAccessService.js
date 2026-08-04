@@ -32,6 +32,7 @@ const STATIC_PAGES = [
   { key: 'admin/branding',        label: 'Branding & Customization', group: 'Administration' },
   { key: 'admin/recycle-bin',     label: 'Recycle Bin',              group: 'Administration' },
   { key: 'admin/asset-transfer',  label: 'Asset Transfer',           group: 'Administration' },
+  { key: 'admin/recurring-activities', label: 'Recurring Activities', group: 'Administration' },
   { key: 'admin/data-health',     label: 'Data Health',              group: 'Administration' },
   { key: 'admin/dashboard-settings', label: 'Dashboard Settings',    group: 'Administration' },
   { key: 'admin/compliance-config',   label: 'Compliance Config',     group: 'Administration' },

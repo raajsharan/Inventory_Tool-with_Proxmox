@@ -202,6 +202,29 @@ const STATEMENTS = [
    )`,
   `INSERT INTO compliance_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
 
+  // ── recurring activity rotation config (Ready Reckoner — admin-editable)
+  `CREATE TABLE IF NOT EXISTS recurring_activity_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO recurring_activity_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+
+  // ── recurring activity manual overrides (leave, handover) — take priority
+  // over the automatic rotation for one specific period + activity
+  `CREATE TABLE IF NOT EXISTS recurring_activity_overrides (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      frequency     VARCHAR(10) NOT NULL CHECK (frequency IN ('monthly','weekly')),
+      period_key    VARCHAR(20) NOT NULL,   -- '2026-08' or '2026-08-03' (Monday)
+      activity_key  VARCHAR(64) NOT NULL,
+      assigned_to   VARCHAR(120) NOT NULL,
+      reason        TEXT,
+      created_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (frequency, period_key, activity_key)
+   )`,
+
   // ── ManageEngine Endpoint Central connection config (singleton row)
   // NOTE: api_key and auth_password store AES-256-GCM ciphertext (see
   // utils/crypto.js), written/read via endpointCentralService.js — never
