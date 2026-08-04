@@ -55,7 +55,31 @@ async function removeOverride(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// Status/planned/completed-date updates are allowed for admins, or for
+// whoever is actually assigned to that exact period + activity right now
+// (shared activities are "assigned" to everyone on the team). Reassigning
+// *who* owns a task stays admin-only, via the overrides endpoints above.
+async function updateStatus(req, res, next) {
+  try {
+    const { frequency, periodKey, activityKey, status, plannedDate, completedDate } = req.body || {};
+    if (!['monthly', 'weekly'].includes(frequency)) throw new ApiError(400, 'frequency must be "monthly" or "weekly"');
+    if (!periodKey || !activityKey) throw new ApiError(400, 'periodKey and activityKey are required');
+    if (status && !['not_started', 'in_progress', 'completed'].includes(status)) {
+      throw new ApiError(400, 'status must be one of not_started, in_progress, completed');
+    }
+
+    const isAdmin = ['admin', 'superadmin'].includes(req.user.role);
+    if (!isAdmin) {
+      const allowed = await svc.canUpdateStatus(req.user, frequency, periodKey, activityKey);
+      if (!allowed) throw new ApiError(403, 'You can only update the status of your own tasks');
+    }
+
+    res.json(await svc.setStatus({ frequency, periodKey, activityKey, status, plannedDate, completedDate }, req.user.id));
+  } catch (e) { next(e); }
+}
+
 module.exports = {
   getMyTasks, getReckoner, getConfig, saveConfig,
   listOverrides, addOverride, removeOverride,
+  updateStatus,
 };

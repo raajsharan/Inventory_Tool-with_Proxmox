@@ -225,6 +225,24 @@ const STATEMENTS = [
       UNIQUE (frequency, period_key, activity_key)
    )`,
 
+  // ── recurring activity progress tracking (status + planned/completed
+  // dates) — one row per period + activity, updatable by the currently
+  // assigned person or an admin (assignment itself is admin-only, via
+  // recurring_activity_overrides above)
+  `CREATE TABLE IF NOT EXISTS recurring_activity_status (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      frequency      VARCHAR(10) NOT NULL CHECK (frequency IN ('monthly','weekly')),
+      period_key     VARCHAR(20) NOT NULL,
+      activity_key   VARCHAR(64) NOT NULL,
+      status         VARCHAR(20) NOT NULL DEFAULT 'not_started'
+                        CHECK (status IN ('not_started','in_progress','completed')),
+      planned_date   DATE,
+      completed_date DATE,
+      updated_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (frequency, period_key, activity_key)
+   )`,
+
   // ── ManageEngine Endpoint Central connection config (singleton row)
   // NOTE: api_key and auth_password store AES-256-GCM ciphertext (see
   // utils/crypto.js), written/read via endpointCentralService.js — never

@@ -2,8 +2,9 @@
 import { Link } from 'react-router-dom';
 import {
   Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
-  App, Input, Tooltip,
+  App, Input, Tooltip, Select, DatePicker,
 } from 'antd';
+import dayjs from 'dayjs';
 import {
   DatabaseOutlined, SafetyCertificateOutlined, ThunderboltOutlined,
   HddOutlined, DesktopOutlined, AppstoreOutlined, SafetyOutlined, BugOutlined,
@@ -1645,10 +1646,19 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 // members named in that doc get anything back.
 // ---------------------------------------------------------------------------
 
-function TaskTile({ activity, nextPeriodLabel, index }) {
+const TASK_STATUS_OPTS = [
+  { value: 'not_started', label: 'Not Started', color: 'default' },
+  { value: 'in_progress', label: 'In Progress',  color: 'processing' },
+  { value: 'completed',   label: 'Completed',    color: 'success' },
+];
+const statusMeta = (v) => TASK_STATUS_OPTS.find(o => o.value === v) || TASK_STATUS_OPTS[0];
+
+function TaskTile({ activity, nextPeriodLabel, index, onChange }) {
   const isShared = activity.type === 'shared';
   const color = isShared ? '#8c8c8c' : '#1677ff';
   const bg    = isShared ? 'rgba(140,140,140,0.12)' : 'rgba(22,119,255,0.12)';
+  const meta  = statusMeta(activity.status);
+
   return (
     <div className="dashcard" style={{
       animationDelay: `${index * 60}ms`,
@@ -1665,12 +1675,46 @@ function TaskTile({ activity, nextPeriodLabel, index }) {
         </div>
         <Typography.Text strong style={{ fontSize: 14, lineHeight: 1.3 }}>{activity.label}</Typography.Text>
       </Space>
-      <Tag
-        color={isShared ? 'default' : 'blue'}
-        style={{ alignSelf: 'flex-start', margin: 0, fontWeight: 600 }}
-      >
-        {isShared ? 'Shared by all 3' : "It's yours this period"}
-      </Tag>
+
+      <Space wrap size={[6, 6]}>
+        <Tag color={isShared ? 'default' : 'blue'} style={{ margin: 0, fontWeight: 600 }}>
+          {isShared ? 'Shared by all 3' : "It's yours this period"}
+        </Tag>
+        <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>
+      </Space>
+
+      <div>
+        <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>Status</Typography.Text>
+        <Select
+          size="small"
+          value={activity.status || 'not_started'}
+          options={TASK_STATUS_OPTS}
+          style={{ width: '100%' }}
+          onChange={(v) => onChange({ status: v })}
+        />
+      </div>
+
+      <Row gutter={8}>
+        <Col span={12}>
+          <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>Planned Date</Typography.Text>
+          <DatePicker
+            size="small"
+            style={{ width: '100%' }}
+            value={activity.plannedDate ? dayjs(activity.plannedDate) : null}
+            onChange={(d) => onChange({ plannedDate: d ? d.format('YYYY-MM-DD') : null })}
+          />
+        </Col>
+        <Col span={12}>
+          <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>Completed Date</Typography.Text>
+          <DatePicker
+            size="small"
+            style={{ width: '100%' }}
+            value={activity.completedDate ? dayjs(activity.completedDate) : null}
+            onChange={(d) => onChange({ completedDate: d ? d.format('YYYY-MM-DD') : null })}
+          />
+        </Col>
+      </Row>
+
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         Next up: <strong>{activity.next}</strong> · {nextPeriodLabel}
       </Typography.Text>
@@ -1678,7 +1722,7 @@ function TaskTile({ activity, nextPeriodLabel, index }) {
   );
 }
 
-function TaskSection({ icon, title, periodLabel, activities, nextPeriodLabel }) {
+function TaskSection({ icon, title, periodLabel, activities, nextPeriodLabel, onActivityChange }) {
   if (!activities.length) return null;
   return (
     <div style={{ marginBottom: 24 }}>
@@ -1698,7 +1742,12 @@ function TaskSection({ icon, title, periodLabel, activities, nextPeriodLabel }) 
       <Row gutter={[12, 12]}>
         {activities.map((a, i) => (
           <Col key={a.key} xs={24} sm={12} lg={8}>
-            <TaskTile activity={a} nextPeriodLabel={nextPeriodLabel} index={i} />
+            <TaskTile
+              activity={a}
+              nextPeriodLabel={nextPeriodLabel}
+              index={i}
+              onChange={(patch) => onActivityChange(a.key, patch)}
+            />
           </Col>
         ))}
       </Row>
@@ -1707,14 +1756,46 @@ function TaskSection({ icon, title, periodLabel, activities, nextPeriodLabel }) 
 }
 
 function MyTasksTab() {
+  const { message } = App.useApp();
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState('');
 
-  useEffect(() => {
+  function load() {
     api.get('/recurring-activities/my-tasks')
       .then(r => setTasks(r.data))
       .catch(e => setErr(e.response?.data?.error || 'Failed to load your tasks.'));
-  }, []);
+  }
+  useEffect(() => { load(); }, []);
+
+  // Applies the patch to local state immediately (so the control feels
+  // instant) and persists it — reverts + surfaces an error if the save
+  // fails (e.g. someone else is now assigned this task instead of you).
+  function updateActivity(frequency, sectionPath, activityKey, patch) {
+    const section = sectionPath.reduce((o, k) => o[k], tasks);
+    const periodKey = section.periodKey;
+    const prevActivity = section.activities.find(a => a.key === activityKey);
+    if (!prevActivity) return;
+
+    setTasks(t => {
+      const next = structuredClone(t);
+      const list = sectionPath.reduce((o, k) => o[k], next).activities;
+      const idx = list.findIndex(a => a.key === activityKey);
+      list[idx] = { ...list[idx], ...patch };
+      return next;
+    });
+
+    api.put('/recurring-activities/status', { frequency, periodKey, activityKey, ...patch })
+      .catch(e => {
+        message.error(e.response?.data?.error || 'Failed to save — reverted');
+        setTasks(t => {
+          const next = structuredClone(t);
+          const list = sectionPath.reduce((o, k) => o[k], next).activities;
+          const idx = list.findIndex(a => a.key === activityKey);
+          list[idx] = prevActivity;
+          return next;
+        });
+      });
+  }
 
   if (err) return <Alert type="error" message={err} showIcon />;
   if (!tasks) return <Spin />;
@@ -1729,7 +1810,7 @@ function MyTasksTab() {
     );
   }
 
-  const total = tasks.monthly.activities.length + tasks.weekly.activities.length;
+  const total = tasks.monthly.current.activities.length + tasks.weekly.current.activities.length;
 
   return (
     <div>
@@ -1746,17 +1827,27 @@ function MyTasksTab() {
 
       <TaskSection
         icon={<CalendarOutlined />}
-        title="Monthly"
-        periodLabel={tasks.monthly.period.current}
-        activities={tasks.monthly.activities}
-        nextPeriodLabel={tasks.monthly.period.next}
+        title="Last Month"
+        periodLabel={tasks.monthly.period.last}
+        activities={tasks.monthly.last.activities}
+        nextPeriodLabel={tasks.monthly.period.current}
+        onActivityChange={(key, patch) => updateActivity('monthly', ['monthly', 'last'], key, patch)}
       />
       <TaskSection
         icon={<CalendarOutlined />}
-        title="Weekly"
+        title="Current Month"
+        periodLabel={tasks.monthly.period.current}
+        activities={tasks.monthly.current.activities}
+        nextPeriodLabel={tasks.monthly.period.next}
+        onActivityChange={(key, patch) => updateActivity('monthly', ['monthly', 'current'], key, patch)}
+      />
+      <TaskSection
+        icon={<CalendarOutlined />}
+        title="Current Week"
         periodLabel={tasks.weekly.period.current}
-        activities={tasks.weekly.activities}
+        activities={tasks.weekly.current.activities}
         nextPeriodLabel={tasks.weekly.period.next}
+        onActivityChange={(key, patch) => updateActivity('weekly', ['weekly', 'current'], key, patch)}
       />
     </div>
   );

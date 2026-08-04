@@ -2,8 +2,11 @@ const router = require('express').Router();
 const { authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/recurringActivityController');
 
-// Available to any authenticated user — their own tasks only.
+// Available to any authenticated user — their own tasks only. Status
+// updates are further authorized inside the controller (admin, or the
+// person actually assigned to that period + activity).
 router.get('/my-tasks', ctrl.getMyTasks);
+router.put('/status', ctrl.updateStatus);
 
 // The full Ready Reckoner (everyone's assignments, workload balance,
 // config, overrides) and any changes to it are admin-only.
