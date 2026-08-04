@@ -12,6 +12,7 @@ import {
   CloseCircleOutlined, BlockOutlined,
   BarChartOutlined, CalendarOutlined, FundOutlined, RiseOutlined,
   EnvironmentOutlined, ApartmentOutlined, ClusterOutlined, PlayCircleOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
@@ -1644,21 +1645,63 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 // members named in that doc get anything back.
 // ---------------------------------------------------------------------------
 
-function TaskRow({ activity, periodLabel }) {
-  const tone = activity.type === 'shared' ? '#8c8c8c' : '#1677ff';
+function TaskTile({ activity, nextPeriodLabel, index }) {
+  const isShared = activity.type === 'shared';
+  const color = isShared ? '#8c8c8c' : '#1677ff';
+  const bg    = isShared ? 'rgba(140,140,140,0.12)' : 'rgba(22,119,255,0.12)';
   return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '10px 14px', border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
-      borderRadius: 8, marginBottom: 8,
+    <div className="dashcard" style={{
+      animationDelay: `${index * 60}ms`,
+      border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+      borderRadius: 10, padding: 16, height: '100%',
+      display: 'flex', flexDirection: 'column', gap: 10,
     }}>
-      <div>
-        <Typography.Text strong>{activity.label}</Typography.Text>
-        <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>{periodLabel}</Typography.Text></div>
-      </div>
-      <Tag color={activity.type === 'shared' ? 'default' : 'blue'} style={{ color: tone, fontWeight: 600, margin: 0 }}>
-        {activity.current}
+      <Space align="start">
+        <div style={{
+          background: bg, color, width: 34, height: 34, borderRadius: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          {isShared ? <TeamOutlined /> : <SyncOutlined />}
+        </div>
+        <Typography.Text strong style={{ fontSize: 14, lineHeight: 1.3 }}>{activity.label}</Typography.Text>
+      </Space>
+      <Tag
+        color={isShared ? 'default' : 'blue'}
+        style={{ alignSelf: 'flex-start', margin: 0, fontWeight: 600 }}
+      >
+        {isShared ? 'Shared by all 3' : "It's yours this period"}
       </Tag>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        Next up: <strong>{activity.next}</strong> · {nextPeriodLabel}
+      </Typography.Text>
+    </div>
+  );
+}
+
+function TaskSection({ icon, title, periodLabel, activities, nextPeriodLabel }) {
+  if (!activities.length) return null;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <Space align="center" style={{ marginBottom: 12 }}>
+        <div style={{
+          background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+          width: 32, height: 32, borderRadius: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {icon}
+        </div>
+        <div>
+          <Typography.Text strong style={{ fontSize: 15, display: 'block' }}>{title}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{periodLabel}</Typography.Text>
+        </div>
+      </Space>
+      <Row gutter={[12, 12]}>
+        {activities.map((a, i) => (
+          <Col key={a.key} xs={24} sm={12} lg={8}>
+            <TaskTile activity={a} nextPeriodLabel={nextPeriodLabel} index={i} />
+          </Col>
+        ))}
+      </Row>
     </div>
   );
 }
@@ -1686,33 +1729,35 @@ function MyTasksTab() {
     );
   }
 
-  const nothingThisPeriod = !tasks.monthly.activities.length && !tasks.weekly.activities.length;
+  const total = tasks.monthly.activities.length + tasks.weekly.activities.length;
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <Typography.Paragraph type="secondary">
-        Your current recurring activity assignments, computed from the team rotation schedule.
+        {total
+          ? `${total} recurring ${total === 1 ? 'activity is' : 'activities are'} yours this period.`
+          : 'Your current recurring activity assignments, computed from the team rotation schedule.'}
       </Typography.Paragraph>
 
-      {nothingThisPeriod && (
+      {!total && (
         <Alert type="info" showIcon message="You have no recurring activities assigned for the current period." style={{ marginBottom: 16 }} />
       )}
 
-      {tasks.monthly.activities.length > 0 && (
-        <Card size="small" title={<Space><CalendarOutlined /><span>Monthly — {tasks.monthly.period.current}</span></Space>} style={{ marginBottom: 16 }}>
-          {tasks.monthly.activities.map(a => (
-            <TaskRow key={a.key} activity={a} periodLabel={`Next: ${a.next} · ${tasks.monthly.period.next}`} />
-          ))}
-        </Card>
-      )}
-
-      {tasks.weekly.activities.length > 0 && (
-        <Card size="small" title={<Space><CalendarOutlined /><span>Weekly — {tasks.weekly.period.current}</span></Space>}>
-          {tasks.weekly.activities.map(a => (
-            <TaskRow key={a.key} activity={a} periodLabel={`Next: ${a.next} · ${tasks.weekly.period.next}`} />
-          ))}
-        </Card>
-      )}
+      <TaskSection
+        icon={<CalendarOutlined />}
+        title="Monthly"
+        periodLabel={tasks.monthly.period.current}
+        activities={tasks.monthly.activities}
+        nextPeriodLabel={tasks.monthly.period.next}
+      />
+      <TaskSection
+        icon={<CalendarOutlined />}
+        title="Weekly"
+        periodLabel={tasks.weekly.period.current}
+        activities={tasks.weekly.activities}
+        nextPeriodLabel={tasks.weekly.period.next}
+      />
     </div>
   );
 }
