@@ -373,7 +373,9 @@ function ExecutiveOverview({ data, compCfg = {} }) {
         </div>
       </div></Wgt>
 
-      <Wgt tab="exec" k="msl_compliance"><Card style={{ marginTop: 24 }}
+      <Row gutter={16} style={{ marginTop: 24 }}>
+      <Col xs={24} lg={12}>
+      <Wgt tab="exec" k="msl_compliance"><Card style={{ height: '100%' }}
         title={
           <Space>
             <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
@@ -396,20 +398,23 @@ function ExecutiveOverview({ data, compCfg = {} }) {
           textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 12, fontWeight: 600 }}>
           Location-wise count
         </Typography.Text>
-        <Table
-          size="small"
-          rowKey="location"
-          pagination={false}
-          dataSource={msl.locations || []}
-          columns={[
-            { title: 'Location', dataIndex: 'location' },
-            { title: 'Count', dataIndex: 'count', align: 'right', width: 120,
-              render: v => <a style={{ fontWeight: 600 }}>{(v ?? 0).toLocaleString()}</a> },
-          ]}
-        />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+          {(msl.locations || []).map(loc => (
+            <div key={loc.location} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '6px 12px', fontSize: 13,
+              border: '1px solid var(--ant-color-border-secondary, #f0f0f0)', borderRadius: 6,
+            }}>
+              <Typography.Text>{loc.location}</Typography.Text>
+              <Typography.Text strong style={{ color: '#1677ff' }}>{(loc.count ?? 0).toLocaleString()}</Typography.Text>
+            </div>
+          ))}
+        </div>
       </Card></Wgt>
+      </Col>
 
-      <Wgt tab="exec" k="ext_compliance"><Card style={{ marginTop: 16 }}
+      <Col xs={24} lg={12}>
+      <Wgt tab="exec" k="ext_compliance"><Card style={{ height: '100%' }}
         title={
           <Space>
             <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
@@ -474,6 +479,8 @@ function ExecutiveOverview({ data, compCfg = {} }) {
           />
         </div>
       </Card></Wgt>
+      </Col>
+      </Row>
     </div>
   );
 }
