@@ -346,7 +346,7 @@ async function getDrift() {
   // with host count.
   const runIds = [...new Set(diffable.flatMap(r => [r.current_run_id, r.previous_run_id]))];
   const { rows: allVms } = await db.query(
-    `SELECT * FROM vmware_discovered_vms WHERE run_id = ANY($1::int[])`, [runIds]
+    `SELECT * FROM vmware_discovered_vms WHERE run_id = ANY($1::uuid[])`, [runIds]
   );
   const vmsByRun = new Map();
   for (const vm of allVms) {
