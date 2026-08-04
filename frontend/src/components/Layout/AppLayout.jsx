@@ -37,6 +37,13 @@ export default function AppLayout() {
   const [customPages, setCustomPages] = useState([]);
   const [navOrder, setNavOrder] = useState(() => loadNavOrder() || DEFAULT_NAV_KEYS);
   const [buildCommit, setBuildCommit] = useState(null);
+  // Sidebar submenus behave like an accordion — opening one closes any other
+  // that was open, instead of letting them stack up indefinitely.
+  const [openKeys, setOpenKeys] = useState(() => [
+    ...['/vmware-discovery', '/proxmox-discovery', '/hyperv-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
+    ...['/software-status', '/nessus-status', '/tenable-report', '/endpoint-central'].includes(loc.pathname) ? ['software-services'] : [],
+    ...loc.pathname.startsWith('/admin/') ? ['admin'] : [],
+  ]);
   // Sidebar collapse — remembered across sessions.
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sider-collapsed') === '1');
   const toggleSider = (v) => {
@@ -176,6 +183,16 @@ export default function AppLayout() {
   };
 
   const items = [...mainItems, adminItem].filter(Boolean);
+  const rootSubmenuKeys = items.filter(i => i?.children).map(i => i.key);
+
+  function onMenuOpenChange(keys) {
+    const latestOpenKey = keys.find(k => !openKeys.includes(k));
+    if (!latestOpenKey || !rootSubmenuKeys.includes(latestOpenKey)) {
+      setOpenKeys(keys);
+    } else {
+      setOpenKeys([latestOpenKey]);
+    }
+  }
 
   const crumbs = loc.pathname.split('/').filter(Boolean).map((seg, i, arr) => ({
     title: <Link to={'/' + arr.slice(0, i + 1).join('/')}>{seg.replace(/-/g,' ').replace(/^./, c => c.toUpperCase())}</Link>,
@@ -227,10 +244,8 @@ export default function AppLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[loc.pathname]}
-          defaultOpenKeys={[
-            ...['/vmware-discovery', '/proxmox-discovery', '/hyperv-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
-            ...['/software-status', '/nessus-status', '/tenable-report', '/endpoint-central'].includes(loc.pathname) ? ['software-services'] : [],
-          ]}
+          openKeys={openKeys}
+          onOpenChange={onMenuOpenChange}
           items={items}
         />
       </Sider>
