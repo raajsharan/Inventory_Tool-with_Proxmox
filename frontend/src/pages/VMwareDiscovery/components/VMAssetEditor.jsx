@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Card, Row, Col, Statistic, Table, Tag, Tooltip, Input, Button, Space,
-  Drawer, Form, Typography, Popconfirm, message, Empty, Badge, Spin,
+  Drawer, Form, Typography, Popconfirm, message, Empty, Badge, Spin, Alert,
 } from 'antd';
 import {
   EditOutlined, UndoOutlined, DownloadOutlined, SearchOutlined,
@@ -37,6 +37,7 @@ export default function VMAssetEditor() {
   const [drawerOpen,  setDrawerOpen]  = useState(false);
   const [editTarget,  setEditTarget]  = useState(null);
   const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState(null);
   const [form]                        = Form.useForm();
 
   const load = useCallback((f = filter, q = search) => {
@@ -45,7 +46,8 @@ export default function VMAssetEditor() {
     if (f && f !== 'all') params.filter = f;
     if (q) params.search = q;
     api.get('/vmware/asset-editor', { params })
-      .then(r => setData(r.data))
+      .then(r => { setData(r.data); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load asset editor data.'))
       .finally(() => setLoading(false));
   }, [filter, search]); // eslint-disable-line
 
@@ -262,6 +264,7 @@ export default function VMAssetEditor() {
 
   return (
     <div style={{ padding: 16 }}>
+      {error && <Alert type="error" showIcon message="Couldn't load asset editor data" description={error} style={{ marginBottom: 16 }} />}
       {/* Stat cards + filter bar */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         {FILTERS.map(f => (

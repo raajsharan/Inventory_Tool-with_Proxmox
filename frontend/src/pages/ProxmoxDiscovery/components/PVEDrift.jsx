@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Collapse, Card, Table, Tag, Badge, Spin, Empty, Space, Typography } from 'antd';
+import { Collapse, Card, Table, Tag, Badge, Spin, Empty, Space, Typography, Alert } from 'antd';
 import { PlusCircleOutlined, MinusCircleOutlined, SwapOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -55,12 +55,17 @@ function DriftSection({ title, icon, color, data, columns, emptyText }) {
 export default function PVEDrift() {
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
-    api.get('/proxmox/drift').then(r => setData(r.data)).finally(() => setLoading(false));
+    api.get('/proxmox/drift')
+      .then(r => setData(r.data))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load change detection.'))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load change detection" description={error} style={{ margin: 24 }} />;
   if (!data.length) return <Empty description="No drift data — run discovery at least twice per host." style={{ marginTop: 60 }} />;
 
   const panels = data.map(d => ({

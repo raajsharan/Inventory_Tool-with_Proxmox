@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Row, Col, Card, Table, Spin, Empty, Tag, Typography } from 'antd';
+import { Row, Col, Card, Table, Spin, Empty, Tag, Typography, Alert } from 'antd';
 import {
   PlayCircleOutlined, StopOutlined, PauseCircleOutlined,
   LaptopOutlined, ClockCircleOutlined, WindowsOutlined, LinuxOutlined, DesktopOutlined,
@@ -29,6 +29,7 @@ export default function HVDashboard() {
   const [data,    setData]    = useState(null);
   const [runs,    setRuns]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -37,10 +38,13 @@ export default function HVDashboard() {
     ]).then(([d, r]) => {
       setData(d.data);
       setRuns(r.data.slice(0, 10));
-    }).finally(() => setLoading(false));
+      setError(null);
+    }).catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load the dashboard.'))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load the dashboard" description={error} style={{ margin: 24 }} />;
   if (!data)   return <Empty description="No data" style={{ marginTop: 80 }} />;
 
   const { stats, byHost, byOS } = data;

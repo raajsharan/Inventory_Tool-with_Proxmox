@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Switch, Space,
-  Tag, App, Tooltip, Popconfirm, Card, Typography,
+  Tag, App, Tooltip, Popconfirm, Card, Typography, Alert,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
@@ -40,11 +40,15 @@ export default function VMHosts({ onDiscoveryStarted }) {
   const [testResult, setTest]   = useState({});
   const [testing, setTesting]   = useState({});
   const [topology, setTopology] = useState({});   // vcenter host → esxi_hosts[]
+  const [error, setError]       = useState(null);
   const [form] = Form.useForm();
 
   const load = () => {
     setLoading(true);
-    api.get('/vmware/hosts').then(r => setHosts(r.data.hosts || [])).finally(() => setLoading(false));
+    api.get('/vmware/hosts')
+      .then(r => { setHosts(r.data.hosts || []); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load hosts.'))
+      .finally(() => setLoading(false));
     api.get('/vmware/esxi-topology').then(r => {
       const map = {};
       for (const t of r.data.topology || r.data || []) {
@@ -203,6 +207,7 @@ export default function VMHosts({ onDiscoveryStarted }) {
       extra={isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Host</Button>}
     >
       <style>{DOT_CSS}</style>
+      {error && <Alert type="error" showIcon message="Couldn't load hosts" description={error} style={{ marginBottom: 12 }} />}
       <Table
         size="small"
         rowKey="id"

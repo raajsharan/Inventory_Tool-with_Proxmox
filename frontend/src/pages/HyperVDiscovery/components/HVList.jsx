@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Select, Space, Tag, Tooltip, Card } from 'antd';
+import { Table, Input, Select, Space, Tag, Tooltip, Card, Alert } from 'antd';
 import { SearchOutlined, LaptopOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { DASH_CSS } from '../../../components/DashboardStatCard.jsx';
@@ -43,6 +43,7 @@ export default function HVList() {
   const [search,  setSearch]  = useState('');
   const [state,   setState]   = useState('');
   const [page,    setPage]    = useState(1);
+  const [error,   setError]   = useState(null);
   const pageSize = 50;
 
   const load = useCallback(() => {
@@ -51,7 +52,8 @@ export default function HVList() {
     if (search) params.search = search;
     if (state)  params.state  = state;
     api.get('/hyperv/vms', { params })
-      .then(r => { setItems(r.data.items); setTotal(r.data.total); })
+      .then(r => { setItems(r.data.items); setTotal(r.data.total); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load VMs.'))
       .finally(() => setLoading(false));
   }, [search, state]);
 
@@ -60,6 +62,7 @@ export default function HVList() {
   return (
     <div style={{ padding: 16 }}>
       <style>{DASH_CSS}</style>
+      {error && <Alert type="error" showIcon message="Couldn't load VMs" description={error} style={{ marginBottom: 12 }} />}
       <Card size="small" className="dashcard">
         <Space wrap style={{ marginBottom: 12 }}>
           <Input

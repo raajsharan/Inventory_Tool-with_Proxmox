@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Space, Tag, Tooltip } from 'antd';
+import { Table, Input, Space, Tag, Tooltip, Alert } from 'antd';
 import { SearchOutlined, ClusterOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -56,11 +56,13 @@ export default function PVENodesList() {
   const [items,   setItems]   = useState([]);
   const [loading, setLoading] = useState(false);
   const [search,  setSearch]  = useState('');
+  const [error,   setError]   = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
     api.get('/proxmox/nodes')
-      .then(r => setItems(r.data.items || []))
+      .then(r => { setItems(r.data.items || []); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load nodes.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -77,6 +79,7 @@ export default function PVENodesList() {
 
   return (
     <div style={{ padding: 16 }}>
+      {error && <Alert type="error" showIcon message="Couldn't load nodes" description={error} style={{ marginBottom: 12 }} />}
       <Space wrap style={{ marginBottom: 12 }}>
         <Input
           prefix={<SearchOutlined />}

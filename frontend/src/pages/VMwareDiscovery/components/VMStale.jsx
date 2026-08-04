@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Tabs, Table, Tag, Spin, Empty, Card, Badge } from 'antd';
+import { Tabs, Table, Tag, Spin, Empty, Card, Badge, Alert } from 'antd';
 import api from '../../../api/client';
 
 function powerTag(state) {
@@ -37,14 +37,17 @@ function VMTable({ vms, emptyText }) {
 export default function VMStale() {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
     api.get('/vmware/stale')
       .then(r => setData(r.data))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load stale VMs.'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load stale VMs" description={error} style={{ margin: 24 }} />;
   if (!data) return <Empty description="No data" style={{ marginTop: 80 }} />;
 
   const { removed, noNetwork, poweredOff } = data;

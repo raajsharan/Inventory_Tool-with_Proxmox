@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Spin, Empty, Card, Tooltip } from 'antd';
+import { Table, Tag, Spin, Empty, Card, Tooltip, Alert } from 'antd';
 import { WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -15,14 +15,17 @@ function ageDays(oldest) {
 export default function VMSnapshots() {
   const [rows, setRows]       = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
     api.get('/vmware/snapshots')
       .then(r => setRows(r.data.snapshots || []))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load snapshots.'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load snapshots" description={error} style={{ margin: 24 }} />;
   if (!rows.length) return <Empty description="No VMs with snapshots found." style={{ marginTop: 80 }} />;
 
   const columns = [

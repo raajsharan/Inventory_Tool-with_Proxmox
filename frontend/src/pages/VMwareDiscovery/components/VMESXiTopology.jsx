@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Card, Collapse, Table, Tag, Spin, Empty, Row, Col, Statistic } from 'antd';
+import { Card, Collapse, Table, Tag, Spin, Empty, Row, Col, Statistic, Alert } from 'antd';
 import { HddOutlined, CloudServerOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 
 export default function VMESXiTopology() {
   const [topology, setTopology] = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
 
   useEffect(() => {
     api.get('/vmware/esxi-topology')
       .then(r => setTopology(r.data.topology || []))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load ESXi topology.'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load ESXi topology" description={error} style={{ margin: 24 }} />;
   if (!topology.length) return <Empty description="No topology data. Run a discovery first." style={{ marginTop: 80 }} />;
 
   const esxiCols = [

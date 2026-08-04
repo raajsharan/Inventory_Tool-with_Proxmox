@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Switch, Select,
-  Space, Tag, Popconfirm, message, Tooltip, Typography,
+  Space, Tag, Popconfirm, message, Tooltip, Typography, Alert,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
@@ -40,12 +40,16 @@ export default function PVEHosts({ onDiscoveryStarted }) {
   const [editing,    setEditing]    = useState(null);
   const [testResult, setTestResult] = useState(null);
   const [testing,    setTesting]    = useState(false);
+  const [error,      setError]      = useState(null);
   const [form]                      = Form.useForm();
   const hostType = Form.useWatch('hostType', form);
 
   const load = () => {
     setLoading(true);
-    api.get('/proxmox/hosts').then(r => setHosts(r.data)).finally(() => setLoading(false));
+    api.get('/proxmox/hosts')
+      .then(r => { setHosts(r.data); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load hosts.'))
+      .finally(() => setLoading(false));
     api.get('/proxmox/nodes').then(r => {
       const map = {};
       for (const n of r.data.items || []) {
@@ -178,6 +182,7 @@ export default function PVEHosts({ onDiscoveryStarted }) {
   return (
     <div style={{ padding: 16 }}>
       <style>{DOT_CSS}</style>
+      {error && <Alert type="error" showIcon message="Couldn't load hosts" description={error} style={{ marginBottom: 12 }} />}
       {isAdmin && (
         <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} style={{ marginBottom: 12 }}>
           Add Host

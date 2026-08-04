@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Table, Tag, Collapse, Typography, Spin, Empty, Space, Badge } from 'antd';
+import { Card, Table, Tag, Collapse, Typography, Spin, Empty, Space, Badge, Alert } from 'antd';
 import { PlusOutlined, MinusOutlined, SwapOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -42,14 +42,17 @@ const changedCols = [
 export default function VMDrift() {
   const [drift, setDrift] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     api.get('/vmware/drift')
       .then(r => setDrift(r.data.drift || []))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load change detection.'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load change detection" description={error} style={{ margin: 24 }} />;
 
   const noDrift = drift.every(d => !d.summary.added && !d.summary.removed && !d.summary.changed);
 

@@ -19,11 +19,13 @@ export default function VMMacUpload() {
   const [files,     setFiles]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   function loadFiles() {
     setLoading(true);
     api.get('/vmware/mac-lookup/files')
-      .then(r => setFiles(r.data.files || []))
+      .then(r => { setFiles(r.data.files || []); setLoadError(null); })
+      .catch(e => setLoadError(e?.response?.data?.error || e.message || 'Failed to load mapping files.'))
       .finally(() => setLoading(false));
   }
 
@@ -124,6 +126,7 @@ export default function VMMacUpload() {
 
   return (
     <div style={{ padding: 16 }}>
+      {loadError && <Alert type="error" showIcon message="Couldn't load mapping files" description={loadError} style={{ marginBottom: 16 }} />}
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={8}>
           <Card size="small">

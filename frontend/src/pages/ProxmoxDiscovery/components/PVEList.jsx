@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Select, Space, Button, Tag, Tooltip, Card } from 'antd';
+import { Table, Input, Select, Space, Button, Tag, Tooltip, Card, Alert } from 'antd';
 import {
   SearchOutlined, DownloadOutlined, ContainerOutlined, LaptopOutlined,
   AppstoreAddOutlined,
@@ -32,6 +32,7 @@ export default function PVEList() {
   const [vmType,  setVmType]  = useState('');
   const [page,     setPage]     = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [error,    setError]    = useState(null);
 
   // Add-to-inventory modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,7 +45,8 @@ export default function PVEList() {
     if (status)  params.status  = status;
     if (vmType)  params.vmType  = vmType;
     api.get('/proxmox/vms', { params })
-      .then(r => { setItems(r.data.items); setTotal(r.data.total); })
+      .then(r => { setItems(r.data.items); setTotal(r.data.total); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load VMs.'))
       .finally(() => setLoading(false));
   }, [page, pageSize, search, status, vmType]);
 
@@ -138,6 +140,7 @@ export default function PVEList() {
     <>
       <div style={{ padding: 16 }}>
         <style>{DASH_CSS}</style>
+        {error && <Alert type="error" showIcon message="Couldn't load VMs" description={error} style={{ marginBottom: 12 }} />}
         <Card size="small" className="dashcard">
           <Space wrap style={{ marginBottom: 12 }}>
             <Input

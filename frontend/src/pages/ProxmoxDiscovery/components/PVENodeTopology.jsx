@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Collapse, Table, Tag, Spin, Empty, Badge, Space, Typography } from 'antd';
+import { Collapse, Table, Tag, Spin, Empty, Badge, Space, Typography, Alert } from 'antd';
 import api from '../../../api/client';
 
 const { Text } = Typography;
@@ -16,12 +16,17 @@ const nodeColumns = [
 export default function PVENodeTopology() {
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
-    api.get('/proxmox/node-topology').then(r => setData(r.data)).finally(() => setLoading(false));
+    api.get('/proxmox/node-topology')
+      .then(r => setData(r.data))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load node topology.'))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load node topology" description={error} style={{ margin: 24 }} />;
   if (!data.length) return <Empty description="No topology data available — run a discovery first." style={{ marginTop: 60 }} />;
 
   const panels = data.map(entry => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Spin, Empty, Card, Tooltip } from 'antd';
+import { Table, Tag, Spin, Empty, Card, Tooltip, Alert } from 'antd';
 import { WarningOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 
@@ -33,12 +33,17 @@ const columns = [
 export default function HVSnapshots() {
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
-    api.get('/hyperv/snapshots').then(r => setData(r.data)).finally(() => setLoading(false));
+    api.get('/hyperv/snapshots')
+      .then(r => setData(r.data))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load snapshots.'))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load snapshots" description={error} style={{ margin: 24 }} />;
 
   return (
     <div style={{ padding: 16 }}>

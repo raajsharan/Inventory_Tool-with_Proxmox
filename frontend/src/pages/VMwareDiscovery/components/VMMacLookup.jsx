@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Card, Row, Col, Statistic, Table, Tag, Tooltip, Input, Select, Button, Space, Empty, Spin,
+  Card, Row, Col, Statistic, Table, Tag, Tooltip, Input, Select, Button, Space, Empty, Spin, Alert,
 } from 'antd';
 import {
   CheckCircleOutlined, CloseCircleOutlined, SearchOutlined,
@@ -23,6 +23,7 @@ export default function VMMacLookup() {
   const [search,      setSearch]      = useState('');
   const [matchFilter, setMatchFilter] = useState('');
   const [powerFilter, setPowerFilter] = useState('');
+  const [error,       setError]       = useState(null);
 
   const load = useCallback((q = search, mf = matchFilter, pf = powerFilter) => {
     setLoading(true);
@@ -31,7 +32,8 @@ export default function VMMacLookup() {
     if (mf) params.matchFilter = mf;
     if (pf) params.powerState  = pf;
     api.get('/vmware/mac-lookup', { params })
-      .then(r => setData(r.data))
+      .then(r => { setData(r.data); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load MAC lookup data.'))
       .finally(() => setLoading(false));
   }, [search, matchFilter, powerFilter]); // eslint-disable-line
 
@@ -142,7 +144,9 @@ export default function VMMacLookup() {
         ))}
       </Row>
 
-      {!hasMapping && !loading && (
+      {error && <Alert type="error" showIcon message="Couldn't load MAC lookup data" description={error} style={{ marginBottom: 16 }} />}
+
+      {!error && !hasMapping && !loading && (
         <Empty
           description="No mapping file uploaded yet — go to the Upload tab to add one."
           style={{ margin: '40px 0' }}
@@ -151,7 +155,7 @@ export default function VMMacLookup() {
         </Empty>
       )}
 
-      {hasMapping && (
+      {!error && hasMapping && (
         <Card
           size="small"
           title={`${stats.total ?? 0} VMs`}

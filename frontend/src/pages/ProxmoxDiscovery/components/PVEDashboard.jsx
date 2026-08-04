@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Row, Col, Card, Table, Spin, Empty, Tag, Typography } from 'antd';
+import { Row, Col, Card, Table, Spin, Empty, Tag, Typography, Alert } from 'antd';
 import {
   PlayCircleOutlined, PauseCircleOutlined, StopOutlined, AppstoreOutlined,
   LaptopOutlined, ContainerOutlined, WindowsOutlined, LinuxOutlined, DesktopOutlined,
@@ -20,14 +20,17 @@ function osIcon(os) {
 export default function PVEDashboard() {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     api.get('/proxmox/dashboard')
       .then(r => setData(r.data))
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load the dashboard.'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (error) return <Alert type="error" showIcon message="Couldn't load the dashboard" description={error} style={{ margin: 24 }} />;
   if (!data)   return <Empty description="No data" style={{ marginTop: 80 }} />;
 
   const { stats, byNode, byOS } = data;

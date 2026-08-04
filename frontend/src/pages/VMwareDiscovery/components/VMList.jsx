@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Select, Space, Button, Tag, Tooltip, Card } from 'antd';
+import { Table, Input, Select, Space, Button, Tag, Tooltip, Card, Alert } from 'antd';
 import { SearchOutlined, ReloadOutlined, DownloadOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import AddToInventoryModal, { vmwareToInventory } from '../../../components/AddToInventoryModal.jsx';
@@ -17,6 +17,7 @@ function powerTag(state) {
 export default function VMList({ hostId }) {
   const [data, setData]         = useState({ items: [], total: 0 });
   const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
   const [search, setSearch]     = useState('');
   const [powerFilter, setPower] = useState(undefined);
   const [page, setPage]         = useState(1);
@@ -34,7 +35,8 @@ export default function VMList({ hostId }) {
     if (effective.powerFilter) params.powerState = effective.powerFilter;
     if (effective.hostId)      params.hostId     = effective.hostId;
     api.get('/vmware/vms', { params })
-      .then(r => setData(r.data))
+      .then(r => { setData(r.data); setError(null); })
+      .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load VMs.'))
       .finally(() => setLoading(false));
   }, [page, search, powerFilter, hostId]); // eslint-disable-line
 
@@ -159,6 +161,7 @@ export default function VMList({ hostId }) {
   return (
     <>
       <style>{DASH_CSS}</style>
+      {error && <Alert type="error" showIcon message="Couldn't load VMs" description={error} style={{ marginBottom: 12 }} />}
       <Card
         size="small"
         className="dashcard"
