@@ -23,6 +23,7 @@ router.use('/inventory-fields', authenticate,                                   
 router.use('/backup',           authenticate, requirePageAccess('admin/backup'),            require('./backupRoutes'));
 router.use('/branding',         require('./brandingRoutes'));
 router.use('/recycle-bin',      authenticate, requirePageAccess('admin/recycle-bin'),     require('./recycleBinRoutes'));
+router.use('/asset-transfer',   authenticate, requirePageAccess('admin/asset-transfer'),  require('./assetTransferRoutes'));
 router.use('/vmware',              require('./vmwareRoutes'));
 router.use('/proxmox',             require('./proxmoxRoutes'));
 router.use('/hyperv',              require('./hypervRoutes'));

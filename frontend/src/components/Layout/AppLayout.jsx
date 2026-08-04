@@ -12,7 +12,7 @@ import {
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
-  ProjectOutlined, NotificationOutlined, WindowsOutlined,
+  ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -159,6 +159,7 @@ export default function AppLayout() {
       can('admin/backup')           && { key: '/admin/backup',            icon: <CloudDownloadOutlined />,     label: <Link to="/admin/backup">Backup / Export &amp; Import</Link> },
       can('admin/branding')         && { key: '/admin/branding',          icon: <BgColorsOutlined />,          label: <Link to="/admin/branding">Branding &amp; Customization</Link> },
       can('admin/recycle-bin')      && { key: '/admin/recycle-bin',       icon: <RestOutlined />,              label: <Link to="/admin/recycle-bin">Recycle Bin</Link> },
+      can('admin/asset-transfer')   && { key: '/admin/asset-transfer',    icon: <SwapOutlined />,              label: <Link to="/admin/asset-transfer">Asset Transfer</Link> },
       can('admin/data-health')      && { key: '/admin/data-health',       icon: <HeartOutlined />,             label: <Link to="/admin/data-health">Data Health</Link> },
       can('admin/compliance-config')  && { key: '/admin/compliance-config',  icon: <ControlOutlined />,         label: <Link to="/admin/compliance-config">Compliance Config</Link> },
       can('admin/migration-config')   && { key: '/admin/migration-config',   icon: <ProjectOutlined />,          label: <Link to="/admin/migration-config">Migration Config</Link> },
