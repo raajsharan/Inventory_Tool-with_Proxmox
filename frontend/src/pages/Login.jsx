@@ -217,6 +217,10 @@ export default function Login() {
 
           <div className="login-footer">
             <span dangerouslySetInnerHTML={{ __html: footerHtml }} />
+            <div style={{ marginTop: 4 }}>
+              Need an account? drop a mail to{' '}
+              <a href="mailto:netbrain-IT@netbraintech.com">netbrain-IT@netbraintech.com</a>
+            </div>
           </div>
         </div>
       </div>
