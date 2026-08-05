@@ -2,6 +2,35 @@ const { execFile } = require('child_process');
 const path = require('path');
 const fs   = require('fs');
 
+// Both New-PSSession (WinRM) and Invoke-WmiMethod need a real PowerShell
+// binary. On native Windows that's powershell.exe; on this server's actual
+// Linux deployment it's PowerShell Core (pwsh) — see hypervService.js for
+// the same requirement (PSWSMan module for WinRM, gss-ntlmssp for NTLM/local
+// accounts). Hardcoding "powershell.exe" here always failed with ENOENT on
+// Linux, which is why WinRM/WMI install+verify never actually worked in
+// production even though SSH/PsExec did.
+const PS_BIN = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+
+function describePsError(err, output) {
+  if (err) {
+    if (err.code === 'ENOENT') {
+      return PS_BIN === 'pwsh'
+        ? 'PowerShell (pwsh) is not installed on this server. Install it — see https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux'
+        : 'powershell.exe was not found on this server.';
+    }
+    return `Failed to launch ${PS_BIN}: ${err.message}`;
+  }
+  if (/no supported WSMan client library/i.test(output)) {
+    return 'pwsh on Linux needs the native WSMan library installed separately. Run once on this server: ' +
+      'sudo pwsh -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module -Name PSWSMan -Scope AllUsers -Force; Install-WSMan"';
+  }
+  if (/gss|ntlm|negotiate/i.test(output) && /(auth|credential|denied|failed)/i.test(output)) {
+    return 'If this host uses a local account (not a domain/Kerberos account), the Linux WSMan client needs the ' +
+      'gss-ntlmssp package for NTLM support. Run once on this server: sudo apt install gssntlmssp';
+  }
+  return null;
+}
+
 /**
  * WinRM install via PowerShell Invoke-Command running on the local server.
  * Optionally copies the installer file to the remote VM using Copy-Item -ToSession.
@@ -54,7 +83,7 @@ function winrmInstall({ host, username, password, port = 5985, filePath, remoteD
     }, timeout + 5000);
 
     const child = execFile(
-      'powershell.exe',
+      PS_BIN,
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
       { timeout, maxBuffer: 10 * 1024 * 1024 },
     );
@@ -67,12 +96,13 @@ function winrmInstall({ host, username, password, port = 5985, filePath, remoteD
       const connected = !output.includes('WS-Management') && !output.includes('ETIMEDOUT')
         ? true
         : code !== null;
-      resolve({ connected, error: code !== 0 ? `PowerShell exited with code ${code}` : null, output, exitCode: code });
+      const error = code !== 0 ? (describePsError(null, output) || `PowerShell exited with code ${code}`) : null;
+      resolve({ connected, error, output, exitCode: code });
     });
 
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ connected: false, error: err.message, output, exitCode: null });
+      resolve({ connected: false, error: describePsError(err, output), output, exitCode: null });
     });
   });
 }
@@ -190,7 +220,7 @@ function wmiInstall({ host, username, password, filePath, remoteDir = 'C:/Window
     }, timeout + 5000);
 
     const child = execFile(
-      'powershell.exe',
+      PS_BIN,
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
       { timeout, maxBuffer: 10 * 1024 * 1024 },
     );
@@ -202,7 +232,7 @@ function wmiInstall({ host, username, password, filePath, remoteDir = 'C:/Window
       clearTimeout(timer);
       resolve({
         connected: code !== null,
-        error: code !== 0 ? null : null,   // WMI errors surface in output via $ErrorActionPreference
+        error: code !== 0 ? describePsError(null, output) : null,   // other WMI errors surface in output via $ErrorActionPreference
         output,
         exitCode: code,
       });
@@ -210,7 +240,7 @@ function wmiInstall({ host, username, password, filePath, remoteDir = 'C:/Window
 
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ connected: false, error: err.message, output, exitCode: null });
+      resolve({ connected: false, error: describePsError(err, output), output, exitCode: null });
     });
   });
 }
