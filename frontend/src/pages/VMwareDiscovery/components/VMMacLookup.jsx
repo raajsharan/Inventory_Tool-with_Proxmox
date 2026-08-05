@@ -23,23 +23,25 @@ export default function VMMacLookup() {
   const [search,      setSearch]      = useState('');
   const [matchFilter, setMatchFilter] = useState('');
   const [powerFilter, setPowerFilter] = useState('');
+  const [esxiHostIp,  setEsxiHostIp]  = useState('');
   const [error,       setError]       = useState(null);
 
-  const load = useCallback((q = search, mf = matchFilter, pf = powerFilter) => {
+  const load = useCallback((q = search, mf = matchFilter, pf = powerFilter, ehi = esxiHostIp) => {
     setLoading(true);
     const params = {};
-    if (q)  params.search      = q;
-    if (mf) params.matchFilter = mf;
-    if (pf) params.powerState  = pf;
+    if (q)   params.search      = q;
+    if (mf)  params.matchFilter = mf;
+    if (pf)  params.powerState  = pf;
+    if (ehi) params.esxiHostIp  = ehi;
     api.get('/vmware/mac-lookup', { params })
       .then(r => { setData(r.data); setError(null); })
       .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load MAC lookup data.'))
       .finally(() => setLoading(false));
-  }, [search, matchFilter, powerFilter]); // eslint-disable-line
+  }, [search, matchFilter, powerFilter, esxiHostIp]); // eslint-disable-line
 
   useEffect(() => { load(); }, []); // eslint-disable-line
 
-  function onSearch() { load(search, matchFilter, powerFilter); }
+  function onSearch() { load(search, matchFilter, powerFilter, esxiHostIp); }
 
   async function onExport() {
     const token = localStorage.getItem('token');
@@ -191,6 +193,18 @@ export default function VMMacLookup() {
                 <Option value="poweredOff">Powered Off</Option>
                 <Option value="suspended">Suspended</Option>
               </Select>
+              <Input
+                placeholder="ESXi Host IP…"
+                value={esxiHostIp}
+                onChange={e => {
+                  const v = e.target.value;
+                  setEsxiHostIp(v);
+                  if (!v) load(search, matchFilter, powerFilter, '');
+                }}
+                onPressEnter={onSearch}
+                allowClear
+                style={{ width: 160 }}
+              />
               <Button icon={<SearchOutlined />} onClick={onSearch}>Search</Button>
               <Button icon={<ReloadOutlined />} onClick={() => load()} />
               <Button icon={<DownloadOutlined />} onClick={onExport}>Export CSV</Button>

@@ -201,7 +201,7 @@ async function runDiscoverySync(req, res, next) {
 
 async function listVMs(req, res, next) {
   try {
-    const { hostId, search, powerState, page = 1, pageSize = 50 } = req.query;
+    const { hostId, search, powerState, esxiHostIp, page = 1, pageSize = 50 } = req.query;
     let vms = await dbSvc.getLatestVMs(hostId);
 
     if (search) {
@@ -215,6 +215,10 @@ async function listVMs(req, res, next) {
     }
     if (powerState) {
       vms = vms.filter(v => v.power_state === powerState);
+    }
+    if (esxiHostIp) {
+      const q = esxiHostIp.toLowerCase();
+      vms = vms.filter(v => (v.esxi_host_ip || '').toLowerCase().includes(q));
     }
 
     const total = vms.length;
@@ -352,7 +356,7 @@ async function getMacLookup(req, res, next) {
     const files = macLookupSvc.listFiles();
     const totalMappingEntries = rows.length;
 
-    const { hostId, search, matchFilter, powerState } = req.query;
+    const { hostId, search, matchFilter, powerState, esxiHostIp } = req.query;
     let vms = await dbSvc.getLatestVMs(hostId);
 
     const results = vms.map(vm => {
@@ -409,6 +413,10 @@ async function getMacLookup(req, res, next) {
     if (matchFilter === 'matched')   filtered = filtered.filter(r => r.is_matched);
     if (matchFilter === 'unmatched') filtered = filtered.filter(r => !r.is_matched);
     if (powerState) filtered = filtered.filter(r => r.power_state === powerState);
+    if (esxiHostIp) {
+      const q = esxiHostIp.toLowerCase();
+      filtered = filtered.filter(r => (r.esxi_host_ip || '').toLowerCase().includes(q));
+    }
 
     const matched   = filtered.filter(r => r.is_matched).length;
     const unmatched = filtered.length - matched;

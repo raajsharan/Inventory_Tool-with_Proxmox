@@ -20,6 +20,7 @@ export default function VMList({ hostId }) {
   const [error, setError]       = useState(null);
   const [search, setSearch]     = useState('');
   const [powerFilter, setPower] = useState(undefined);
+  const [esxiHostIp, setEsxiHostIp] = useState('');
   const [page, setPage]         = useState(1);
   const pageSize = 50;
 
@@ -29,16 +30,17 @@ export default function VMList({ hostId }) {
 
   const load = useCallback((overrides = {}) => {
     setLoading(true);
-    const effective = { page, search, powerFilter, hostId, ...overrides };
+    const effective = { page, search, powerFilter, esxiHostIp, hostId, ...overrides };
     const params = { page: effective.page, pageSize };
     if (effective.search)      params.search     = effective.search;
     if (effective.powerFilter) params.powerState = effective.powerFilter;
+    if (effective.esxiHostIp)  params.esxiHostIp  = effective.esxiHostIp;
     if (effective.hostId)      params.hostId     = effective.hostId;
     api.get('/vmware/vms', { params })
       .then(r => { setData(r.data); setError(null); })
       .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load VMs.'))
       .finally(() => setLoading(false));
-  }, [page, search, powerFilter, hostId]); // eslint-disable-line
+  }, [page, search, powerFilter, esxiHostIp, hostId]); // eslint-disable-line
 
   useEffect(() => { load(); }, [page, powerFilter]); // eslint-disable-line
 
@@ -192,6 +194,18 @@ export default function VMList({ hostId }) {
               <Option value="poweredOff">Powered Off</Option>
               <Option value="suspended">Suspended</Option>
             </Select>
+            <Input
+              placeholder="ESXi Host IP…"
+              value={esxiHostIp}
+              onChange={e => {
+                const v = e.target.value;
+                setEsxiHostIp(v);
+                if (!v) { setPage(1); load({ page: 1, esxiHostIp: '' }); }
+              }}
+              onPressEnter={onSearch}
+              style={{ width: 160 }}
+              allowClear
+            />
             <Button icon={<SearchOutlined />} onClick={onSearch}>Search</Button>
             <Tooltip title="Reload the VM list">
               <Button icon={<ReloadOutlined />} onClick={load} />
