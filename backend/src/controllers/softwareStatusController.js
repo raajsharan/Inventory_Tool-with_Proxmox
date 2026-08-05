@@ -2,7 +2,10 @@ const fs          = require('fs');
 const path        = require('path');
 const db          = require('../config/db');
 const { decrypt } = require('../utils/crypto');
-const { sshVerify, sshRunCommand, sshUploadAndRun, isWindows } = require('../utils/sshVerify');
+const {
+  sshVerify, sshRunCommand, sshUploadAndRun, isWindows,
+  WINDOWS_CONFIG, parseWindowsService, SEP,
+} = require('../utils/sshVerify');
 const { ping } = require('../utils/ping');
 const { winrmInstall, psexecInstall, wmiInstall }              = require('../utils/winInstall');
 const ApiError    = require('../utils/ApiError');
@@ -61,6 +64,42 @@ function mergeLocationConfig(globalCfg, locCfg) {
   }
   merged.config_source = `location:${locCfg.location}`;
   return merged;
+}
+
+// Checks the ManageEngine service + binary over WinRM instead of SSH — most
+// Windows hosts don't run an SSH server, so sshVerify alone would report
+// "Unreachable" for a perfectly healthy, pingable Windows machine (it was
+// only ever testing whether SSH specifically was open, not the host itself).
+async function winrmVerify({ host, username, password, port, cfg = WINDOWS_CONFIG }) {
+  const svcName = cfg.serviceName.replace(/'/g, "''");
+  const binPath = cfg.binaryPath.replace(/'/g, "''");
+  const script = [
+    `$svc = Get-Service '${svcName}' -ErrorAction SilentlyContinue`,
+    `if ($svc) { Write-Output $svc.Status.ToString() } else { Write-Output 'NOT_FOUND' }`,
+    `Write-Output '${SEP}'`,
+    `if (Test-Path '${binPath}') { Write-Output 'FILE_EXISTS' } else { Write-Output 'FILE_NOT_FOUND' }`,
+  ].join('; ');
+
+  const r = await winrmInstall({ host, username, password, port: port || 5985, command: script, timeout: 15000 });
+  if (!r.connected) {
+    return { connected: false, error: r.error, service: null, file: null, platform: 'windows' };
+  }
+
+  const raw     = r.output || '';
+  const sepIdx  = raw.indexOf(SEP);
+  const svcRaw  = (sepIdx >= 0 ? raw.slice(0, sepIdx) : raw).trim();
+  const fileRaw = (sepIdx >= 0 ? raw.slice(sepIdx + SEP.length) : '').trim();
+  const serviceStatus = parseWindowsService(svcRaw);
+  const fileExists    = fileRaw.includes('FILE_EXISTS');
+
+  return {
+    connected: true,
+    error: null,
+    service: { status: serviceStatus, output: svcRaw, name: cfg.serviceName },
+    file:    { exists: fileExists, path: cfg.binaryPath },
+    installed: serviceStatus === 'running' || fileExists,
+    platform: 'windows',
+  };
 }
 
 async function getLocationConfigRow(location) {
@@ -145,7 +184,7 @@ async function verify(req, res, next) {
     const { ip_address, source, port = 22 } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
-    const [{ username, password, osType }, pingResult] = await Promise.all([
+    const [{ username, password, osType, location }, pingResult] = await Promise.all([
       resolveVm(ip_address, source),
       ping(ip_address),
     ]);
@@ -153,7 +192,24 @@ async function verify(req, res, next) {
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
 
-    const result = await sshVerify({ host: ip_address, port, username, password, osType });
+    let result;
+    if (isWindows(osType)) {
+      const { rows: cfg } = await db.query(`SELECT windows_winrm_port FROM software_install_config WHERE id = 1`);
+      const locCfg = await getLocationConfigRow(location);
+      const winrmPort = locCfg?.windows_winrm_port || cfg[0]?.windows_winrm_port || 5985;
+
+      result = await winrmVerify({ host: ip_address, username, password, port: winrmPort });
+      // A handful of Windows hosts run OpenSSH instead of WinRM — only fall
+      // back to SSH if WinRM specifically failed to connect, not if it
+      // connected and just found the service/binary missing.
+      if (!result.connected) {
+        const sshResult = await sshVerify({ host: ip_address, port, username, password, osType });
+        if (sshResult.connected) result = sshResult;
+      }
+    } else {
+      result = await sshVerify({ host: ip_address, port, username, password, osType });
+    }
+
     result.ping = pingResult;
     result.meta = { credentials_source: 'stored', os_type: osType };
     res.json(result);

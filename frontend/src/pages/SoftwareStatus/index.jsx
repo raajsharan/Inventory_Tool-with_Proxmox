@@ -297,12 +297,23 @@ export default function SoftwareStatus() {
         const r  = vs.result;
         if (vs.state === 'loading') return <Spin size="small" />;
         if (vs.state === 'done' && r) {
-          if (!r.connected) return (
-            <Space wrap size={4}>
-              <Tag color="error" icon={<ExclamationCircleFilled />}>Unreachable</Tag>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => runVerify(vm)} />
-            </Space>
-          );
+          if (!r.connected) {
+            // Distinguish "host is actually down" (ping failed too) from
+            // "host is up but WinRM/SSH couldn't connect" (wrong
+            // credentials, closed port, firewall) — the latter used to be
+            // mislabeled "Unreachable", which reads as the host being down.
+            const pingedOk = r.ping?.reachable;
+            return (
+              <Space wrap size={4}>
+                <Tooltip title={pingedOk ? `Host responds to ping, but the agent check couldn't connect: ${r.error || 'no response'}` : (r.error || 'No ping response')}>
+                  <Tag color={pingedOk ? 'warning' : 'error'} icon={<ExclamationCircleFilled />}>
+                    {pingedOk ? 'Agent check failed (host is up)' : 'Unreachable'}
+                  </Tag>
+                </Tooltip>
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => runVerify(vm)} />
+              </Space>
+            );
+          }
           const svc  = r.service || {};
           const file = r.file   || {};
           const sm   = SVC_META[svc.status] || SVC_META.unknown;
