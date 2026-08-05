@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import {
   Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
-  App, Input, Tooltip, Select, DatePicker,
+  App, Input, Tooltip, Select, DatePicker, Divider,
 } from 'antd';
 import dayjs from 'dayjs';
 import {
@@ -1833,6 +1833,11 @@ function MyTasksTab() {
         nextPeriodLabel={tasks.monthly.period.current}
         onActivityChange={(key, patch) => updateActivity('monthly', ['monthly', 'last'], key, patch)}
       />
+
+      {tasks.monthly.last.activities.length > 0 && tasks.monthly.current.activities.length > 0 && (
+        <Divider style={{ margin: '4px 0 24px', borderColor: 'var(--ant-color-border-secondary, #f0f0f0)' }} />
+      )}
+
       <TaskSection
         icon={<CalendarOutlined />}
         title="Current Month"
@@ -1841,6 +1846,11 @@ function MyTasksTab() {
         nextPeriodLabel={tasks.monthly.period.next}
         onActivityChange={(key, patch) => updateActivity('monthly', ['monthly', 'current'], key, patch)}
       />
+
+      {(tasks.monthly.last.activities.length > 0 || tasks.monthly.current.activities.length > 0) && tasks.weekly.current.activities.length > 0 && (
+        <Divider style={{ margin: '4px 0 24px', borderColor: 'var(--ant-color-border-secondary, #f0f0f0)' }} />
+      )}
+
       <TaskSection
         icon={<CalendarOutlined />}
         title="Current Week"
