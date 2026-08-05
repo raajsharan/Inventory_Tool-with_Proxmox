@@ -21,7 +21,8 @@ function stateTag(s) {
 }
 
 const columns = [
-  { title: 'Name',      dataIndex: 'name',           key: 'name',  ellipsis: true },
+  { title: 'Name',      dataIndex: 'name',           key: 'name',
+    render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> },
   { title: 'State',     dataIndex: 'state',           key: 'state', width: 100, render: stateTag },
   { title: 'Snapshots', dataIndex: 'count',           key: 'count', width: 110,
     sorter: (a, b) => b.count - a.count },

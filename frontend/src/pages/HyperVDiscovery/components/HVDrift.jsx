@@ -14,7 +14,8 @@ function stateTag(s) {
 }
 
 const baseCols = [
-  { title: 'Name',  dataIndex: 'name',        key: 'name',   ellipsis: true },
+  { title: 'Name',  dataIndex: 'name',        key: 'name',
+    render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> },
   { title: 'State', dataIndex: 'state',        key: 'state',  width: 100, render: stateTag },
   { title: 'IPs',   dataIndex: 'ips',          key: 'ips',
     render: v => Array.isArray(v) ? v.join(', ') || '—' : '—' },

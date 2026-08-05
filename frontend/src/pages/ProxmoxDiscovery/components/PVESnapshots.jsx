@@ -13,7 +13,8 @@ function ageWarning(oldest) {
 
 const columns = [
   { title: 'VMID',    dataIndex: 'vmid',        key: 'vmid',     width: 80 },
-  { title: 'Name',    dataIndex: 'name',         key: 'name',     ellipsis: true },
+  { title: 'Name',    dataIndex: 'name',         key: 'name',
+    render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> },
   {
     title: 'Type', dataIndex: 'vm_type', key: 'vm_type', width: 90,
     render: t => t === 'lxc' ? <Tag color="blue">LXC</Tag> : <Tag color="purple">QEMU</Tag>,

@@ -14,7 +14,8 @@ function statusTag(s) {
 
 const baseCols = [
   { title: 'VMID',    dataIndex: 'vmid',        key: 'vmid',    width: 80 },
-  { title: 'Name',    dataIndex: 'name',         key: 'name',    ellipsis: true },
+  { title: 'Name',    dataIndex: 'name',         key: 'name',
+    render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> },
   { title: 'Type',    dataIndex: 'vm_type',      key: 'type',    width: 90,  render: typeTag },
   { title: 'Node',    dataIndex: 'node',         key: 'node',    ellipsis: true },
   { title: 'Status',  dataIndex: 'status',       key: 'status',  width: 100, render: statusTag },

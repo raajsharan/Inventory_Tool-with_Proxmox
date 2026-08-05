@@ -16,7 +16,8 @@ const INVENTORIES = {
 const INVENTORY_OPTS = Object.entries(INVENTORIES).map(([value, m]) => ({ value, label: m.label }));
 
 const columns = [
-  { title: 'VM Name',       dataIndex: 'vm_name',       width: 260, ellipsis: true },
+  { title: 'VM Name',       dataIndex: 'vm_name',       width: 260,
+    render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> },
   { title: 'IP Address',    dataIndex: 'ip_address',    width: 150 },
   { title: 'Asset Type',    dataIndex: 'asset_type',    width: 130 },
   { title: 'Server Status', dataIndex: 'server_status', width: 130 },

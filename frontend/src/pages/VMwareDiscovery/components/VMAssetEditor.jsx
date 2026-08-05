@@ -122,17 +122,15 @@ export default function VMAssetEditor() {
 
   const columns = [
     {
-      title: 'VM Name', key: 'name', width: 200, ellipsis: true,
+      title: 'VM Name', key: 'name', width: 200,
       render: (_, r) => (
-        <Space size={4}>
-          <Tooltip title={r.name}>
-            <Text style={{ maxWidth: 170, display: 'inline-block' }} ellipsis>
-              {r.edit.asset_name && r.edit.asset_name !== r.name
-                ? <><span style={{ color: '#52c41a', fontWeight: 500 }}>{r.edit.asset_name}</span><br /><Text type="secondary" style={{ fontSize: 11 }}>{r.name}</Text></>
-                : r.name
-              }
-            </Text>
-          </Tooltip>
+        <Space size={4} align="start">
+          <Text style={{ display: 'inline-block', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {r.edit.asset_name && r.edit.asset_name !== r.name
+              ? <><span style={{ color: '#52c41a', fontWeight: 500 }}>{r.edit.asset_name}</span><br /><Text type="secondary" style={{ fontSize: 11 }}>{r.name}</Text></>
+              : r.name
+            }
+          </Text>
           {r.has_edit && <Badge dot color="#52c41a" title="Has local edits" />}
         </Space>
       ),

@@ -54,8 +54,8 @@ export default function PVEMacLookup() {
 
   const columns = [
     {
-      title: 'Name', dataIndex: 'name', key: 'name', ellipsis: true, width: 180,
-      render: v => <Tooltip title={v}>{v}</Tooltip>,
+      title: 'Name', dataIndex: 'name', key: 'name', width: 180,
+      render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span>,
     },
     { title: 'Hostname', dataIndex: 'hostname', key: 'hostname', ellipsis: true, width: 160 },
     { title: 'Node', dataIndex: 'node', key: 'node', ellipsis: true, width: 140 },

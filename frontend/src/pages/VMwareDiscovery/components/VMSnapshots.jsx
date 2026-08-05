@@ -29,7 +29,8 @@ export default function VMSnapshots() {
   if (!rows.length) return <Empty description="No VMs with snapshots found." style={{ marginTop: 80 }} />;
 
   const columns = [
-    { title: 'VM Name', dataIndex: 'name', key: 'name', ellipsis: true },
+    { title: 'VM Name', dataIndex: 'name', key: 'name',
+      render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> },
     { title: 'vCenter / ESXi', dataIndex: 'source_host', key: 'source_host', ellipsis: true },
     { title: 'ESXi Host', dataIndex: 'esxi_host', key: 'esxi_host', ellipsis: true },
     {
