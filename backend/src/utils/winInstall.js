@@ -11,6 +11,36 @@ const fs   = require('fs');
 // production even though SSH/PsExec did.
 const PS_BIN = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
 
+// PowerShell serializes terminating errors that cross a remoting/redirect
+// boundary (e.g. New-PSDrive/Invoke-WmiMethod failures under -EncodedCommand)
+// into "CLIXML" — a "#< CLIXML" marker followed by an XML blob where every
+// character outside plain ASCII, including ANSI colour codes, is escaped as
+// "_xHHHH_". Decode it into the plain-text message PowerShell actually meant
+// to show, instead of leaving that unreadable in the output box.
+function decodeCliXml(raw) {
+  const idx = raw.indexOf('#< CLIXML');
+  if (idx < 0) return null;
+  const xmlPart = raw.slice(idx);
+  const lines = [...xmlPart.matchAll(/<S[^>]*>([\s\S]*?)<\/S>/g)].map(m => m[1]);
+  if (!lines.length) return null;
+  const text = lines.join('')
+    .replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-9;]*m/g, '') // drop ANSI colour codes the escape above just revealed
+    .trim();
+  return text || null;
+}
+
+// Replaces a raw CLIXML blob in captured output with its decoded text, so
+// the transcript shown to the user stays readable end to end instead of
+// switching to unreadable escape codes partway through.
+function cleanPsOutput(raw) {
+  const idx = raw.indexOf('#< CLIXML');
+  if (idx < 0) return raw;
+  const decoded = decodeCliXml(raw);
+  return raw.slice(0, idx).trimEnd() + (decoded ? `\n${decoded}` : '');
+}
+
 function describePsError(err, output) {
   if (err) {
     if (err.code === 'ENOENT') {
@@ -28,6 +58,8 @@ function describePsError(err, output) {
     return 'If this host uses a local account (not a domain/Kerberos account), the Linux WSMan client needs the ' +
       'gss-ntlmssp package for NTLM support. Run once on this server: sudo apt install gssntlmssp';
   }
+  const cliXml = decodeCliXml(output);
+  if (cliXml) return cliXml;
   return null;
 }
 
@@ -93,6 +125,7 @@ function winrmInstall({ host, username, password, port = 5985, filePath, remoteD
 
     child.on('close', (code) => {
       clearTimeout(timer);
+      output = cleanPsOutput(output);
       const connected = !output.includes('WS-Management') && !output.includes('ETIMEDOUT')
         ? true
         : code !== null;
@@ -230,6 +263,7 @@ function wmiInstall({ host, username, password, filePath, remoteDir = 'C:/Window
 
     child.on('close', (code) => {
       clearTimeout(timer);
+      output = cleanPsOutput(output);
       resolve({
         connected: code !== null,
         error: code !== 0 ? describePsError(null, output) : null,   // other WMI errors surface in output via $ErrorActionPreference

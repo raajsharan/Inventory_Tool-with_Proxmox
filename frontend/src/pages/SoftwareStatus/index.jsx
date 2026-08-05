@@ -314,6 +314,18 @@ export default function SoftwareStatus() {
               </Space>
             );
           }
+          if (r.restricted_shell) {
+            return (
+              <Space wrap size={4}>
+                <Tooltip title={r.restricted_reason}>
+                  <Tag color="warning" icon={<ExclamationCircleFilled />}>Restricted shell — can't check</Tag>
+                </Tooltip>
+                <Button size="small" type="link" style={{ padding: 0 }}
+                  onClick={() => setVerifyDetail({ open: true, vm, result: r })}>Details</Button>
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => runVerify(vm)} />
+              </Space>
+            );
+          }
           const svc  = r.service || {};
           const file = r.file   || {};
           const sm   = SVC_META[svc.status] || SVC_META.unknown;
@@ -649,6 +661,27 @@ function VerifyDetail({ vm, result }) {
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         {pingTag && <Space>{pingTag}</Space>}
         <Alert type="error" showIcon message="Could not connect" description={result.error} />
+      </Space>
+    );
+  }
+
+  if (result.restricted_shell) {
+    return (
+      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space>{pingTag}<Tag>credentials: {result.meta?.credentials_source || 'stored'}</Tag></Space>
+        <Alert
+          type="warning"
+          showIcon
+          message="Connected, but can't run the check — this account has a restricted shell"
+          description="SSH accepted the login and opened a command channel, but the account is locked to a
+            non-interactive shell (commonly OpenSSH's ForceCommand internal-sftp for SFTP-only accounts), so the
+            diagnostic command never actually ran. This isn't the same as the agent being missing — use an account
+            with normal shell access to get a real Service/Binary check on this host."
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+          Raw response
+        </Typography.Text>
+        <TerminalBox>{result.restricted_reason}</TerminalBox>
       </Space>
     );
   }

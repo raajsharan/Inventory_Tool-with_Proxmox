@@ -130,9 +130,28 @@ function sshVerify({ host, port = 22, username, password, osType = '', timeout =
         stream.on('close', () => {
           clearTimeout(timer);
 
-          const sepIdx   = raw.indexOf(SEP);
-          const svcRaw   = (sepIdx >= 0 ? raw.slice(0, sepIdx) : raw).trim();
-          const fileRaw  = (sepIdx >= 0 ? raw.slice(sepIdx + SEP.length) : '').trim();
+          const sepIdx = raw.indexOf(SEP);
+          if (sepIdx < 0) {
+            // The SSH session connected and the exec channel opened, but our
+            // command's own output markers never came back — almost always
+            // because the account is locked to a restricted shell (e.g.
+            // OpenSSH "ForceCommand internal-sftp" limits the session to
+            // SFTP only), so the diagnostic command never actually ran.
+            // Reporting "Unknown"/"Not Found" here would read as "checked
+            // and the agent is missing", which isn't what happened.
+            return done({
+              connected: true,
+              error: null,
+              restricted_shell: true,
+              restricted_reason: raw.trim() || 'No output — the account may be restricted to a non-interactive shell.',
+              service: null,
+              file: null,
+              installed: null,
+            });
+          }
+
+          const svcRaw   = raw.slice(0, sepIdx).trim();
+          const fileRaw  = raw.slice(sepIdx + SEP.length).trim();
 
           const serviceStatus = parseService(svcRaw);
           const fileExists    = fileRaw.includes('FILE_EXISTS');
