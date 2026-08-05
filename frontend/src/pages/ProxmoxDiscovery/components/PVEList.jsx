@@ -81,7 +81,8 @@ export default function PVEList() {
 
   const columns = [
     { title: 'VMID',     dataIndex: 'vmid',        key: 'vmid',        width: 80 },
-    { title: 'Name',     dataIndex: 'name',         key: 'name',        width: 220, ellipsis: true, render: textCell },
+    { title: 'Name',     dataIndex: 'name',         key: 'name',        width: 220,
+      render: v => v ? <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span> : '—' },
     { title: 'Hostname', dataIndex: 'hostname',     key: 'hostname',    width: 180, ellipsis: true, render: textCell },
     { title: 'Type',     dataIndex: 'vm_type',      key: 'vm_type',     width: 110, render: typeIcon },
     { title: 'Node',     dataIndex: 'node',         key: 'node',        width: 140, ellipsis: true, render: textCell },

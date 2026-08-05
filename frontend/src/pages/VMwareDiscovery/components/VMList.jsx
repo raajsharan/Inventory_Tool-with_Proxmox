@@ -66,8 +66,8 @@ export default function VMList({ hostId }) {
 
   const columns = [
     {
-      title: 'VM Name', dataIndex: 'name', key: 'name', ellipsis: true,
-      render: v => <Tooltip title={v}>{v}</Tooltip>,
+      title: 'VM Name', dataIndex: 'name', key: 'name', width: 220,
+      render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{v}</span>,
     },
     { title: 'Hostname',    dataIndex: 'hostname',       key: 'hostname', ellipsis: true },
     {

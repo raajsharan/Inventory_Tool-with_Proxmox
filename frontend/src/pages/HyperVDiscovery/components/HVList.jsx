@@ -15,8 +15,8 @@ function stateTag(s) {
 }
 
 const columns = [
-  { title: 'Name',     dataIndex: 'name',         key: 'name',    ellipsis: true,
-    render: v => <span><LaptopOutlined style={{ color: '#722ed1', marginRight: 6 }} />{v}</span> },
+  { title: 'Name',     dataIndex: 'name',         key: 'name',    width: 220,
+    render: v => <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}><LaptopOutlined style={{ color: '#722ed1', marginRight: 6 }} />{v}</span> },
   { title: 'Hostname', dataIndex: 'hostname',     key: 'hostname', width: 160, ellipsis: true,
     render: v => v || '—' },
   { title: 'State',    dataIndex: 'state',         key: 'state',   width: 100, render: stateTag },
