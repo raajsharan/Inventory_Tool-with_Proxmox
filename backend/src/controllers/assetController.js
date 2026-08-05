@@ -10,6 +10,7 @@ async function list(req, res, next) {
       serverStatus: req.query.serverStatus,
       location: req.query.location,
       eolStatus: req.query.eolStatus,
+      department: req.query.department,
       page: Number(req.query.page) || 1,
       pageSize: Math.min(Number(req.query.pageSize) || 20, 200),
       sortBy: req.query.sortBy,

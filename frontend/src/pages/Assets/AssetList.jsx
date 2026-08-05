@@ -32,18 +32,20 @@ export default function AssetList({
   const [data, setData] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(false);
   const [dropdowns, setDropdowns] = useState({});
+  const [departments, setDepartments] = useState([]);
   const [filters, setFilters] = useState(() => ({
     search:       searchParams.get('q')      || '',
     osType:       searchParams.get('os')     || undefined,
     serverStatus: searchParams.get('status') || undefined,
     location:     searchParams.get('loc')    || undefined,
     eolStatus:    searchParams.get('eol')    || undefined,
+    department:   searchParams.get('dept')   || undefined,
   }));
   const [page, setPage] = useState(() => Number(searchParams.get('page')) || 1);
   const [pageSize, setPageSize] = useState(() => Number(searchParams.get('size')) || 20);
 
   const hasFilters = !!(filters.search || filters.osType || filters.serverStatus
-    || filters.location || filters.eolStatus);
+    || filters.location || filters.eolStatus || filters.department);
 
   // Mirror the view state into the URL (replace — no history spam).
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function AssetList({
     if (filters.serverStatus) p.status = filters.serverStatus;
     if (filters.location)     p.loc    = filters.location;
     if (filters.eolStatus)    p.eol    = filters.eolStatus;
+    if (filters.department)   p.dept   = filters.department;
     if (page > 1)             p.page   = String(page);
     if (pageSize !== 20)      p.size   = String(pageSize);
     setSearchParams(p, { replace: true });
@@ -115,14 +118,15 @@ export default function AssetList({
   }
 
   function clearFilters() {
-    setFilters({ search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined });
+    setFilters({ search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined, department: undefined });
     setPage(1);
-    load({ page: 1, search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined });
+    load({ page: 1, search: '', osType: undefined, serverStatus: undefined, location: undefined, eolStatus: undefined, department: undefined });
   }
 
-  useEffect(() => { load(); }, [page, pageSize, filters.osType, filters.serverStatus, filters.location, filters.eolStatus]); // eslint-disable-line
+  useEffect(() => { load(); }, [page, pageSize, filters.osType, filters.serverStatus, filters.location, filters.eolStatus, filters.department]); // eslint-disable-line
   useEffect(() => {
     api.get('/dropdowns').then(r => setDropdowns(r.data.grouped || {}));
+    api.get('/departments', { params: { activeOnly: 1 } }).then(r => setDepartments(r.data.items || [])).catch(() => {});
     api.get(`/field-visibility/${pageKey}`)
       .then(r => setHiddenSet(new Set(r.data.hidden || [])))
       .catch(() => {});
@@ -396,6 +400,12 @@ export default function AssetList({
         <Col xs={12} md={4}>
           <Select allowClear placeholder="EOL Status" style={{ width: '100%' }} value={filters.eolStatus}
             onChange={(v) => setFilters({ ...filters, eolStatus: v })} options={ddOptions('eol_status')} />
+        </Col>
+        <Col xs={12} md={4}>
+          <Select allowClear showSearch placeholder="Department" style={{ width: '100%' }} value={filters.department}
+            optionFilterProp="label"
+            onChange={(v) => setFilters({ ...filters, department: v })}
+            options={departments.map(d => ({ value: d.name, label: d.name }))} />
         </Col>
       </Row>
 
