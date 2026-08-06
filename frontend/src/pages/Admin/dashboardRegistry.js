@@ -32,7 +32,6 @@ export const DASHBOARD_TABS = [
 export const DASHBOARD_WIDGETS = {
   exec: [
     { key: 'kpi_cards',      defaultTitle: 'Headline KPI cards', renamable: false },
-    { key: 'new_vms',        defaultTitle: 'Newly Discovered VMs' },
     { key: 'asset_summary',  defaultTitle: 'Asset Inventory Summary' },
     { key: 'ext_summary',    defaultTitle: 'Extended Inventory Summary' },
     { key: 'msl_compliance', defaultTitle: 'Total Inventory MSL Compliance' },

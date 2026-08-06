@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import api from '../api/client';
 import { DASH_CSS, StatCard, StatGrid, MiniBar, SplitBar, ExpandableTableCard } from './DashboardStatCard.jsx';
+import NewVMsWidget from './NewVMsWidget.jsx';
 
 function osIcon(os) {
   const s = (os || '').toLowerCase();
@@ -155,6 +156,10 @@ export default function InfrastructureDashboard() {
   return (
     <div style={{ padding: 16 }}>
       <style>{DASH_CSS}</style>
+
+      <div style={{ marginBottom: 16 }}>
+        <NewVMsWidget />
+      </div>
 
       {/* Combined summary cards */}
       <StatGrid>
