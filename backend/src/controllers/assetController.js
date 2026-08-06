@@ -35,9 +35,10 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    const before = await svc.get(req.params.id).catch(() => null);
     const asset = await svc.update(req.params.id, req.body, req.user.id);
     await audit.log({ user: req.user, action: 'UPDATE', entityType: 'asset', entityId: asset.id, details: { vm_name: asset.vm_name }, ipAddress: req.ip });
-    teams.notifyAssetUpdate(asset, 'assets', req.user?.full_name || req.user?.email).catch(() => {});
+    teams.notifyAssetUpdate(before, asset, 'assets', req.user?.full_name || req.user?.email).catch(() => {});
     res.json(asset);
   } catch (e) { next(e); }
 }

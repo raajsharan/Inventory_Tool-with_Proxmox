@@ -100,7 +100,7 @@ function colorForStatus(status) {
   return 'Default';
 }
 
-function buildCard({ title, color = 'Default', facts = [], subtitle = null }) {
+function buildCard({ title, color = 'Default', facts = [], subtitle = null, changesText = null }) {
   const body = [];
 
   if (subtitle) {
@@ -129,6 +129,16 @@ function buildCard({ title, color = 'Default', facts = [], subtitle = null }) {
     });
   }
 
+  if (changesText) {
+    body.push({
+      type: 'TextBlock',
+      text: changesText,
+      wrap: true,
+      spacing: 'Medium',
+      size: 'Small',
+    });
+  }
+
   return {
     type: 'message',
     attachments: [{
@@ -147,6 +157,42 @@ async function send(card) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.webhook_url) return;
   await postJson(cfg.webhook_url, card);
+}
+
+// ── Field-change diff helper ───────────────────────────────────────────────────
+// Compares the before/after asset rows and lists which user-facing fields
+// actually changed, so the Teams card shows what was modified rather than
+// just a generic "Asset Updated" line.
+
+const DIFF_IGNORE_KEYS = new Set([
+  'id', 'created_at', 'updated_at', 'created_by', 'updated_by',
+  'created_by_name', 'updated_by_name', 'deleted_at',
+  'decommissioned_at', 'decommissioned_by',
+  'asset_password', 'asset_password_encrypted', 'extras',
+]);
+
+function fmtFieldValue(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  return String(v);
+}
+
+function fieldLabel(key) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function diffAssetFields(before, after) {
+  if (!before || !after) return [];
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const changes = [];
+  for (const key of keys) {
+    if (DIFF_IGNORE_KEYS.has(key)) continue;
+    const oldVal = before[key] ?? null;
+    const newVal = after[key]  ?? null;
+    if (String(oldVal ?? '') === String(newVal ?? '')) continue;
+    changes.push(`${fieldLabel(key)}: ${fmtFieldValue(oldVal)} → ${fmtFieldValue(newVal)}`);
+  }
+  return changes;
 }
 
 // ── Source label helper ───────────────────────────────────────────────────────
@@ -184,9 +230,14 @@ async function notifyNewAsset(asset, source = 'assets', updatedBy = null) {
   await send(card);
 }
 
-async function notifyAssetUpdate(asset, source = 'assets', updatedBy = null) {
+async function notifyAssetUpdate(before, asset, source = 'assets', updatedBy = null) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_asset_update || !cfg.webhook_url) return;
+
+  const changes = diffAssetFields(before, asset);
+  if (!changes.length) return; // nothing user-facing actually changed — skip the noise
+
+  const changesText = `**Fields changed:**\n\n${changes.map(c => `- ${c}`).join('\n\n')}`;
 
   const card = buildCard({
     subtitle: `✏️ ${sourceLabel(source)}`,
@@ -197,11 +248,9 @@ async function notifyAssetUpdate(asset, source = 'assets', updatedBy = null) {
       { title: 'IP Address',  value: asset.ip_address },
       { title: 'Inventory',   value: sourceLabel(source) },
       { title: 'Status',      value: asset.server_status },
-      { title: 'OS Type',     value: asset.os_type },
-      { title: 'Location',    value: asset.location },
-      { title: 'Department',  value: asset.department },
       { title: 'Updated By',  value: updatedBy },
     ],
+    changesText,
   });
   await send(card);
 }
