@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import {
   Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
-  App, Input, Tooltip, Select, DatePicker, Divider, Badge,
+  App, Input, Tooltip, Select, DatePicker, Badge,
 } from 'antd';
 import dayjs from 'dayjs';
 import {
@@ -1653,20 +1653,34 @@ const TASK_STATUS_OPTS = [
 ];
 const statusMeta = (v) => TASK_STATUS_OPTS.find(o => o.value === v) || TASK_STATUS_OPTS[0];
 
+// Quick-glance status icon, top-right of each tile — same 3 states as the
+// Status select below, just visible without reading the dropdown.
+const STATUS_ICON = {
+  not_started: { icon: <ClockCircleOutlined />, color: '#8c8c8c', title: 'Not Started' },
+  in_progress: { icon: <SyncOutlined spin />,   color: '#1677ff', title: 'In Progress' },
+  completed:   { icon: <CheckCircleOutlined />, color: '#52c41a', title: 'Completed' },
+};
+
 function TaskTile({ activity, nextPeriodLabel, index, onChange }) {
   const isShared = activity.type === 'shared';
   const color = isShared ? '#8c8c8c' : '#1677ff';
   const bg    = isShared ? 'rgba(140,140,140,0.12)' : 'rgba(22,119,255,0.12)';
   const meta  = statusMeta(activity.status);
+  const statusIcon = STATUS_ICON[activity.status || 'not_started'];
 
   return (
     <div className="dashcard" style={{
       animationDelay: `${index * 60}ms`,
       border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
-      borderRadius: 10, padding: 16, height: '100%',
+      borderRadius: 10, padding: 16, height: '100%', position: 'relative',
       display: 'flex', flexDirection: 'column', gap: 10,
     }}>
-      <Space align="start">
+      <Tooltip title={statusIcon.title}>
+        <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 18, color: statusIcon.color, lineHeight: 1 }}>
+          {statusIcon.icon}
+        </span>
+      </Tooltip>
+      <Space align="start" style={{ paddingRight: 22 }}>
         <div style={{
           background: bg, color, width: 34, height: 34, borderRadius: 8,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
@@ -1725,7 +1739,10 @@ function TaskTile({ activity, nextPeriodLabel, index, onChange }) {
 function TaskSection({ icon, title, periodLabel, activities, nextPeriodLabel, onActivityChange }) {
   if (!activities.length) return null;
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{
+      marginBottom: 24, padding: 16, borderRadius: 12,
+      border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+    }}>
       <Space align="center" style={{ marginBottom: 12 }}>
         <div style={{
           background: 'rgba(22,119,255,0.12)', color: '#1677ff',
@@ -1834,10 +1851,6 @@ function MyTasksTab() {
         onActivityChange={(key, patch) => updateActivity('monthly', ['monthly', 'last'], key, patch)}
       />
 
-      {tasks.monthly.last.activities.length > 0 && tasks.monthly.current.activities.length > 0 && (
-        <Divider style={{ margin: '4px 0 24px', borderColor: 'var(--ant-color-border-secondary, #f0f0f0)' }} />
-      )}
-
       <TaskSection
         icon={<CalendarOutlined />}
         title="Current Month"
@@ -1846,10 +1859,6 @@ function MyTasksTab() {
         nextPeriodLabel={tasks.monthly.period.next}
         onActivityChange={(key, patch) => updateActivity('monthly', ['monthly', 'current'], key, patch)}
       />
-
-      {(tasks.monthly.last.activities.length > 0 || tasks.monthly.current.activities.length > 0) && tasks.weekly.current.activities.length > 0 && (
-        <Divider style={{ margin: '4px 0 24px', borderColor: 'var(--ant-color-border-secondary, #f0f0f0)' }} />
-      )}
 
       <TaskSection
         icon={<CalendarOutlined />}
