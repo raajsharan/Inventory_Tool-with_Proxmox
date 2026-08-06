@@ -1,5 +1,8 @@
 const db = require('../config/db');
 const { DEFAULT_CONFIG: COMPLIANCE_DEFAULTS } = require('./complianceConfigController');
+const vmwareDb  = require('../services/vmwareDbService');
+const proxmoxDb = require('../services/proxmoxDbService');
+const hypervDb  = require('../services/hypervDbService');
 
 // Fields allowed in name-conflict cross-table JOINs (whitelist, never interpolate user input).
 const VALID_CONFLICT_FIELDS = new Set(['vm_name', 'os_hostname', 'asset_name', 'ip_address', 'mac_address']);
@@ -733,4 +736,48 @@ async function widgetData(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { summary, getConfig, saveConfig, widgetData };
+// ---------------------------------------------------------------------------
+// New VMs — reuses each integration's own drift detection (latest run vs.
+// the one before it, per host) so this reflects exactly what the most
+// recent poll of each hypervisor turned up. Naturally refreshes itself as
+// each scheduler runs again and the comparison baseline moves forward —
+// the frontend just needs to re-fetch this periodically to stay current.
+// ---------------------------------------------------------------------------
+
+function normalizeAdded(platform, host, added) {
+  return added.map(v => ({
+    platform,
+    host,
+    vm_name:     v.name || null,
+    hostname:    v.hostname || null,
+    os_type:     v.os_type || null,
+    os_version:  platform === 'Hyper-V' ? (v.os_name || null) : (v.os_version || null),
+    ip_address:  (Array.isArray(v.ips) ? v.ips.filter(ip => ip && ip !== 'Not Available') : []).join(', ') || null,
+    source_host: v.source_host || null,
+    mac_address: (Array.isArray(v.macs) ? v.macs : Array.isArray(v.mac_addresses) ? v.mac_addresses : [])
+      .filter(m => m && m !== 'Not Available').join(', ') || null,
+    discovered_at: null, // set below from the run's current_at
+  }));
+}
+
+async function getNewVMs(_req, res, next) {
+  try {
+    const [vmwareDrift, proxmoxDrift, hypervDrift] = await Promise.all([
+      vmwareDb.getDrift(), proxmoxDb.getDrift(), hypervDb.getDrift(),
+    ]);
+
+    const flatten = (platform, drift) => drift.flatMap(d =>
+      normalizeAdded(platform, d.host, d.added).map(v => ({ ...v, discovered_at: d.current_at }))
+    );
+
+    const items = [
+      ...flatten('VMware', vmwareDrift),
+      ...flatten('Proxmox', proxmoxDrift),
+      ...flatten('Hyper-V', hypervDrift),
+    ].sort((a, b) => new Date(b.discovered_at) - new Date(a.discovered_at));
+
+    res.json({ items, total: items.length });
+  } catch (e) { next(e); }
+}
+
+module.exports = { summary, getConfig, saveConfig, widgetData, getNewVMs };
