@@ -1,5 +1,5 @@
 import { Tooltip, Typography } from 'antd';
-import { ThunderboltOutlined, DatabaseOutlined, HddOutlined, FieldTimeOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined, DatabaseOutlined, HddOutlined, FieldTimeOutlined, CloudServerOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -10,13 +10,14 @@ const { Text } = Typography;
 // values (multi-TB disks, etc.) the way a fixed-width chip with inline text
 // used to.
 
-// Small pulsing LED, like a rack-mount status light — green/amber/red by
-// health, plain grey when there's nothing to report yet. Inject this once
+// Small pulsing server icon, like a rack-mount status light — green/amber/red
+// by health, plain grey when there's nothing to report yet. Inject this once
 // per page via <style>{DOT_CSS}</style>.
 export const DOT_CSS = `
-@keyframes hoststat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.hoststat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  margin-right: 6px; animation: hoststat-pulse 1.8s ease-in-out infinite; }
+@keyframes hoststat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.hoststat-dot { display: inline-flex; align-items: center; justify-content: center;
+  margin-right: 6px; font-size: 14px; vertical-align: -2px;
+  animation: hoststat-pulse 1.6s ease-in-out infinite; }
 
 /* Bar fill grows in with an ease-out curve (snappier start, soft landing)
    instead of a flat linear transition, and carries a diagonal shimmer sweep
@@ -47,7 +48,12 @@ export function progressColor(pct) {
 }
 
 export function HealthDot({ color }) {
-  return <span className="hoststat-dot" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />;
+  return (
+    <CloudServerOutlined
+      className="hoststat-dot"
+      style={{ color, filter: `drop-shadow(0 0 3px ${color})` }}
+    />
+  );
 }
 
 // All three discovery integrations (VMware/Proxmox/Hyper-V) share the same
