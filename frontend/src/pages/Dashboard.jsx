@@ -1446,9 +1446,9 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 8, textDecoration: 'underline' }}>
             MSL OVERALL ACTIVE COUNT STATUS
           </Typography.Title>
-          <Typography.Paragraph style={{ marginBottom: 6 }}><strong>Total Inventory MSL Compliance:</strong></Typography.Paragraph>
+          <Typography.Paragraph style={{ marginBottom: 6 }}><strong>Total Inventory Compliances:</strong></Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 16 }}>
-            Asset + Ext Overall: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
+            Overall Asset Inventory: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
           </Typography.Paragraph>
 
           <Typography.Paragraph style={{ marginBottom: 4 }}>
