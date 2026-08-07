@@ -1458,10 +1458,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           </Typography.Paragraph>
 
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total Asset Inventory Count is <strong>{mslOverall.toLocaleString()}</strong> (decommissioned excluded)
+            Total Combined Inventory Count (Asset + Extended) is <strong>{combDen.toLocaleString()}</strong> (decommissioned excluded)
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total decommissioned assets: <strong>{(vmGaps.decommissioned ?? 0).toLocaleString()}</strong>
+            Total decommissioned (Asset + Extended): <strong>{((vmGaps.decommissioned ?? 0) + (ec.decommissioned ?? 0)).toLocaleString()}</strong>
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>
             From active inventory, pending/follow-ups:
@@ -1475,12 +1475,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 8, textDecoration: 'underline' }}>
             EXTENDED INVENTORY
           </Typography.Title>
-          <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total <strong>{(ec.total ?? 0).toLocaleString()}</strong> endpoints (decommissioned, not applicable &amp; not-in-scope excluded)
-          </Typography.Paragraph>
-          <Typography.Paragraph style={{ marginBottom: 8 }}>
-            Total decommissioned VMs: <strong>{(ec.decommissioned ?? 0).toLocaleString()}</strong>
-          </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints, password info is received.
           </Typography.Paragraph>
