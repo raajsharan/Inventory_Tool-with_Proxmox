@@ -1447,12 +1447,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             MSL OVERALL ACTIVE COUNT STATUS
           </Typography.Title>
           <Typography.Paragraph style={{ marginBottom: 6 }}><strong>Total Inventory MSL Compliance:</strong></Typography.Paragraph>
-          <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Asset Inventory Overall: <strong>{mslOverall.toLocaleString()}</strong> out of <strong>{mslOverallD.toLocaleString()}</strong> X 100 = <strong>{pct(mslOverall, mslOverallD)}%</strong>
-          </Typography.Paragraph>
-          <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Ext. Asset Inventory Overall: <strong>{extNum.toLocaleString()}</strong> out of <strong>{extDen.toLocaleString()}</strong> X 100 = <strong>{pct(extNum, extDen)}%</strong>
-          </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 16 }}>
             Asset + Ext Overall: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
           </Typography.Paragraph>
