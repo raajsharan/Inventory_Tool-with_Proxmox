@@ -56,8 +56,7 @@ export const DASHBOARD_WIDGETS = {
   ],
   weekly: [
     { key: 'masthead',           defaultTitle: 'Report masthead (week stamp + figures)', renamable: false },
-    { key: 'asset_inventory',    defaultTitle: 'Asset Inventory' },
-    { key: 'extended_inventory', defaultTitle: 'Extended Inventory' },
+    { key: 'asset_inventory',    defaultTitle: 'Asset Inventory (incl. Extended Inventory)' },
     { key: 'patch_management',   defaultTitle: 'Patch Management Solution' },
     { key: 'location_patching',  defaultTitle: 'Location wise auto/Manual-patching status:' },
     { key: 'department_patching', defaultTitle: 'Departments Patching Onboarding Status:' },

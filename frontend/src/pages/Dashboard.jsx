@@ -1466,15 +1466,15 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>
             From active inventory, pending/follow-ups:
           </Typography.Paragraph>
-          <ul style={{ paddingLeft: 18, marginBottom: 4 }}>
+          <ul style={{ paddingLeft: 18, marginBottom: 16 }}>
             <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
             <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
             <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
-            <li><strong>Follow-ups are in progress for pending info, name conflicts, and password issues.</strong></li>
           </ul>
-        </WeeklyReportRow></Wgt>
 
-        <Wgt tab="weekly" k="extended_inventory"><WeeklyReportRow label={<WTitle tab="weekly" k="extended_inventory" d="Extended Inventory" />}>
+          <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 8, textDecoration: 'underline' }}>
+            EXTENDED INVENTORY
+          </Typography.Title>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             Total <strong>{(ec.total ?? 0).toLocaleString()}</strong> endpoints (decommissioned, not applicable &amp; not-in-scope excluded)
           </Typography.Paragraph>
