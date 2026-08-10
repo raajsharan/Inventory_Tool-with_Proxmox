@@ -237,20 +237,45 @@ async function summary(_req, res, next) {
     `);
 
     // Location-wise count for Asset Inventory + Ext. Assets combined
-    // (shown in the Weekly Report's merged Asset Inventory section).
+    // (shown in the Weekly Report's merged Asset Inventory section). Mirrors
+    // the same row population as mslQ (assets+beijing+physical_esxi, filtered
+    // by the configurable status/EOL lists) and extComplianceQ's in_scope
+    // definition, so this total lines up with mslDenominator + extComp.total.
     const assetExtLocationCountQ = db.query(`
+      WITH inv AS (
+        SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT location, server_status, eol_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT location, server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+      ),
+      inv_f AS (
+        SELECT location FROM inv
+         WHERE (
+           array_length($1::text[], 1) IS NULL
+           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+         )
+         AND (
+           array_length($2::text[], 1) IS NULL
+           OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
+         )
+      ),
+      ext_f AS (
+        SELECT location
+          FROM ext_assets
+         WHERE deleted_at IS NULL
+           AND decommissioned_at IS NULL
+           AND (server_status IS NULL OR (
+                 server_status NOT ILIKE 'Decom%'
+             AND server_status NOT ILIKE 'Not Applic%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
+           ))
+      )
       SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
-        FROM (
-          SELECT location FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-          UNION ALL
-          SELECT location FROM ext_assets
-            WHERE deleted_at IS NULL
-              AND LOWER(COALESCE(server_status,'')) NOT IN ('decommissioned','not applicable','not in scope')
-        ) x
+        FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f) x
         WHERE location IS NOT NULL AND location <> ''
         GROUP BY 1
         ORDER BY 2 DESC;
-    `);
+    `, [mslInclStatuses, mslExclEol]);
 
     // ---------------------------------------------------------------
     // Asset Inventory Active Status (Windows/Linux only, excluding VMware).
