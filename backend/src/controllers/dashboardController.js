@@ -243,7 +243,9 @@ async function summary(_req, res, next) {
     // definition, so this total lines up with mslDenominator + extComp.total.
     // Beijing Assets is shown as a single lumped row (its own inventory,
     // not grouped by its location field) rather than folded into the
-    // per-location breakdown, to avoid double-counting against it.
+    // per-location breakdown, to avoid double-counting against it. Counted
+    // as raw VM-only rows (asset_type = 'vm'), not MSL-scope filtered —
+    // matches the Beijing Assets page's own total, minus non-VM rows.
     const assetExtLocationCountQ = db.query(`
       WITH inv AS (
         SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
@@ -275,14 +277,7 @@ async function summary(_req, res, next) {
       beijing_total AS (
         SELECT COUNT(*)::int AS c FROM beijing_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-           AND (
-             array_length($1::text[], 1) IS NULL
-             OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
-           )
-           AND (
-             array_length($2::text[], 1) IS NULL
-             OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
-           )
+           AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       )
       SELECT location, count FROM (
         SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
