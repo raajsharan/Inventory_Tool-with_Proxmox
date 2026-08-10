@@ -236,6 +236,22 @@ async function summary(_req, res, next) {
         ORDER BY 2 DESC;
     `);
 
+    // Location-wise count for Asset Inventory + Ext. Assets combined
+    // (shown in the Weekly Report's merged Asset Inventory section).
+    const assetExtLocationCountQ = db.query(`
+      SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
+        FROM (
+          SELECT location FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL
+          SELECT location FROM ext_assets
+            WHERE deleted_at IS NULL
+              AND LOWER(COALESCE(server_status,'')) NOT IN ('decommissioned','not applicable','not in scope')
+        ) x
+        WHERE location IS NOT NULL AND location <> ''
+        GROUP BY 1
+        ORDER BY 2 DESC;
+    `);
+
     // ---------------------------------------------------------------
     // Asset Inventory Active Status (Windows/Linux only, excluding VMware).
     // ---------------------------------------------------------------
@@ -546,13 +562,13 @@ async function summary(_req, res, next) {
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
-           meMslBreakdown, meExtBreakdown, extLocationCount] = await Promise.all([
+           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
-      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ,
+      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ,
     ]);
 
     const i = inv.rows[0];
@@ -618,6 +634,7 @@ async function summary(_req, res, next) {
         combinedNumerator:   mslRow.rows[0].msl_numerator + extComp.rows[0].with_password,
         combinedDenominator: mslRow.rows[0].msl_denominator + extComp.rows[0].total,
         locations: locationCount.rows,
+        assetExtLocations: assetExtLocationCount.rows,
       },
 
       extEndpointCompliance: {

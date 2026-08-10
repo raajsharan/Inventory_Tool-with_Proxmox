@@ -1466,30 +1466,18 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
           </ul>
 
-          <Typography.Paragraph style={{ marginBottom: 4 }}>
-            For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints, password info is received.
-          </Typography.Paragraph>
-          <Typography.Paragraph strong style={{ color: isDark ? '#60a5fa' : '#1d4ed8', marginBottom: 12 }}>
-            Compliance: <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> out of <strong>{(ec.total ?? 0).toLocaleString()}</strong> = <strong>{pct(ec.withPassword, ec.total)}%</strong>
-          </Typography.Paragraph>
-          <ul style={{ paddingLeft: 18, marginBottom: 16 }}>
-            <li><strong>{(ec.autoPatching ?? 0).toLocaleString()}</strong> VMs have been added to auto patching.</li>
-            <li><strong>{(ec.manualPatching ?? 0).toLocaleString()}</strong> VMs are marked as manual patching.</li>
-            <li><strong>{(ec.meInstalled ?? 0).toLocaleString()}</strong> VMs have ME Agent installed.</li>
-          </ul>
-
-          {/* Location-wise endpoint count table — always rendered */}
+          {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
-              Location-wise endpoint count:
+              Location-wise count (Assets + Ext. Assets):
             </Typography.Text>
             <Table
               rowKey="location"
               size="small"
-              dataSource={ec.locationCount || []}
+              dataSource={msl.assetExtLocations || []}
               pagination={false}
               tableLayout="fixed"
-              locale={{ emptyText: 'No location data assigned in Extended Inventory' }}
+              locale={{ emptyText: 'No location data assigned' }}
               columns={[
                 { title: 'Location', dataIndex: 'location' },
                 { title: 'Count', dataIndex: 'count', align: 'right',
