@@ -9,6 +9,7 @@
 const cron  = require('node-cron');
 const db    = require('./proxmoxDbService');
 const pxSvc = require('./proxmoxService');
+const teams = require('./teamsNotificationService');
 
 const jobs    = new Map();   // hostId → CronTask
 const running = new Set();   // hostId values currently running
@@ -43,10 +44,21 @@ async function runDiscovery(hostId) {
     await db.saveNodes(runId, hostId, host.host, nodes);
     await db.finishRun(runId, vms.length);
     await db.setLastDiscovery(hostId, vms.length);
+
+    // Notify only on the down -> up transition, not every successful poll.
+    if (host.last_status === 'error') {
+      teams.notifyHostRecovered('Proxmox', host.host).catch(() => {});
+    }
   } catch (err) {
     console.error(`[proxmox-scheduler] discovery failed for ${host.host}: ${err.message}`);
     await db.failRun(runId, err.message);
     await db.setLastDiscoveryFailed(hostId, err.message);
+
+    // Notify immediately, but only on the up -> down transition, so a host
+    // that's already known to be down doesn't re-alert on every poll.
+    if (host.last_status !== 'error') {
+      teams.notifyHostDown('Proxmox', host.host, err.message).catch(() => {});
+    }
   } finally {
     running.delete(hostId);
   }

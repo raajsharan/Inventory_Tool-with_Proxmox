@@ -6,9 +6,10 @@
  * so credentials are never stale in memory.
  */
 
-const cron = require('node-cron');
-const db   = require('./hypervDbService');
-const svc  = require('./hypervService');
+const cron  = require('node-cron');
+const db    = require('./hypervDbService');
+const svc   = require('./hypervService');
+const teams = require('./teamsNotificationService');
 
 const jobs    = new Map();   // hostId → CronTask
 const running = new Set();   // hostId values currently running
@@ -44,6 +45,11 @@ async function runDiscovery(hostId) {
     await db.finishRun(runId, vms.length);
     await db.setLastDiscovery(hostId, vms.length);
 
+    // Notify only on the down -> up transition, not every successful poll.
+    if (host.last_status === 'error') {
+      teams.notifyHostRecovered('Hyper-V', host.host).catch(() => {});
+    }
+
     // Hardware telemetry is a nice-to-have for the Hosts & Credentials
     // table — never let it fail the discovery run itself.
     try {
@@ -56,6 +62,12 @@ async function runDiscovery(hostId) {
     console.error(`[hyperv-scheduler] discovery failed for ${host.host}: ${err.message}`);
     await db.failRun(runId, err.message);
     await db.setLastDiscoveryFailed(hostId, err.message);
+
+    // Notify immediately, but only on the up -> down transition, so a host
+    // that's already known to be down doesn't re-alert on every poll.
+    if (host.last_status !== 'error') {
+      teams.notifyHostDown('Hyper-V', host.host, err.message).catch(() => {});
+    }
   } finally {
     running.delete(hostId);
   }
