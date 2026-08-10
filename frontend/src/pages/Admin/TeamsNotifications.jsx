@@ -26,6 +26,7 @@ export default function TeamsNotifications() {
           notify_asset_update:     r.data.notify_asset_update ?? true,
           notify_decommission:     r.data.notify_decommission ?? true,
           notify_migration_status: r.data.notify_migration_status ?? true,
+          notify_host_down:        r.data.notify_host_down ?? true,
         });
       })
       .catch(() => message.error('Failed to load Teams notification config'));
@@ -116,6 +117,10 @@ export default function TeamsNotifications() {
           </Form.Item>
 
           <Form.Item name="notify_migration_status" valuePropName="checked" label="Migration status changed">
+            <Switch />
+          </Form.Item>
+
+          <Form.Item name="notify_host_down" valuePropName="checked" label="Discovery host lost / regained connectivity">
             <Switch />
           </Form.Item>
 

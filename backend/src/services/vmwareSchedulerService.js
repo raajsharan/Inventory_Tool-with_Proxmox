@@ -10,6 +10,7 @@ try { cron = require('node-cron'); } catch { cron = null; }
 
 const vmSvc  = require('./vmwareService');
 const dbSvc  = require('./vmwareDbService');
+const teams  = require('./teamsNotificationService');
 
 const jobs = {};       // host -> cron.Task
 const running = new Set();  // hosts currently being discovered
@@ -45,6 +46,11 @@ async function runDiscovery(host) {
     await dbSvc.finishRun(runId, vms.length);
     await dbSvc.setLastDiscovery(record.id, vms.length);
 
+    // Notify only on the down -> up transition, not every successful poll.
+    if (record.last_status === 'error') {
+      teams.notifyHostRecovered('VMware', host).catch(() => {});
+    }
+
     // Hardware telemetry (CPU/RAM/disk/uptime) is a nice-to-have for the
     // Hosts & Credentials table — never let it fail the discovery run itself.
     // Row-level columns only make sense for a standalone ESXi host (exactly
@@ -67,6 +73,12 @@ async function runDiscovery(host) {
     console.error(`[vmware-scheduler] ${host} failed:`, err.message);
     if (runId) await dbSvc.failRun(runId, err.message);
     await dbSvc.setLastDiscoveryFailed(record.id, err.message);
+
+    // Notify immediately, but only on the up -> down transition, so a host
+    // that's already known to be down doesn't re-alert on every poll.
+    if (record.last_status !== 'error') {
+      teams.notifyHostDown('VMware', host, err.message).catch(() => {});
+    }
   } finally {
     running.delete(host);
   }

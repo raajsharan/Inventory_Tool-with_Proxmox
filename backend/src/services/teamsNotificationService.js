@@ -52,6 +52,7 @@ const DEFAULTS = {
   notify_asset_update:   true,
   notify_decommission:   true,
   notify_migration_status: true,
+  notify_host_down:      true,
 };
 
 async function getConfig() {
@@ -68,13 +69,14 @@ async function saveConfig(fields) {
     notify_asset_update   = cfg.notify_asset_update,
     notify_decommission   = cfg.notify_decommission,
     notify_migration_status = cfg.notify_migration_status,
+    notify_host_down      = cfg.notify_host_down,
   } = fields;
 
   await db.query(
     `INSERT INTO teams_notification_config
         (webhook_url, enabled, notify_new_asset, notify_asset_update,
-         notify_decommission, notify_migration_status, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,NOW())
+         notify_decommission, notify_migration_status, notify_host_down, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
      ON CONFLICT (singleton) DO UPDATE SET
         webhook_url             = EXCLUDED.webhook_url,
         enabled                 = EXCLUDED.enabled,
@@ -82,9 +84,10 @@ async function saveConfig(fields) {
         notify_asset_update     = EXCLUDED.notify_asset_update,
         notify_decommission     = EXCLUDED.notify_decommission,
         notify_migration_status = EXCLUDED.notify_migration_status,
+        notify_host_down        = EXCLUDED.notify_host_down,
         updated_at              = NOW()`,
     [webhook_url, enabled, notify_new_asset, notify_asset_update,
-     notify_decommission, notify_migration_status],
+     notify_decommission, notify_migration_status, notify_host_down],
   );
   return getConfig();
 }
@@ -313,6 +316,39 @@ async function notifyMigrationStatus(vmName, category, newStatus, updatedBy = nu
   await send(card);
 }
 
+async function notifyHostDown(platform, host, errorMessage = null) {
+  const cfg = await getConfig();
+  if (!cfg.enabled || !cfg.notify_host_down || !cfg.webhook_url) return;
+
+  const card = buildCard({
+    subtitle: `🔴 ${platform} Discovery`,
+    title: `Host Unreachable: ${host}`,
+    color: 'Attention',
+    facts: [
+      { title: 'Host',     value: host },
+      { title: 'Platform', value: platform },
+      { title: 'Error',    value: errorMessage },
+    ],
+  });
+  await send(card);
+}
+
+async function notifyHostRecovered(platform, host) {
+  const cfg = await getConfig();
+  if (!cfg.enabled || !cfg.notify_host_down || !cfg.webhook_url) return;
+
+  const card = buildCard({
+    subtitle: `🟢 ${platform} Discovery`,
+    title: `Host Connectivity Restored: ${host}`,
+    color: 'Good',
+    facts: [
+      { title: 'Host',     value: host },
+      { title: 'Platform', value: platform },
+    ],
+  });
+  await send(card);
+}
+
 async function testNotification(overrideUrl) {
   const cfg = await getConfig();
   const webhookUrl = overrideUrl || cfg.webhook_url;
@@ -338,5 +374,7 @@ module.exports = {
   notifyDecommission,
   notifyReactivation,
   notifyMigrationStatus,
+  notifyHostDown,
+  notifyHostRecovered,
   testNotification,
 };
