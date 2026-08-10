@@ -1466,9 +1466,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
           </ul>
 
-          <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 8, textDecoration: 'underline' }}>
-            EXTENDED INVENTORY
-          </Typography.Title>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
             For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints, password info is received.
           </Typography.Paragraph>
