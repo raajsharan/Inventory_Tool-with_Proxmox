@@ -1379,19 +1379,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
-  // Extended Inventory ME compliance display — numerator uses the same
-  // method as MSL (Yes-sum over buckets not in the exclude list, which for
-  // Ext's default exclude list leaves exactly Auto + Manual + Other),
-  // denominator is grand total No − grand total Yes. Kept separate from
-  // meExtYes/meExtDen below, which still feed the combined MSL+Extended
-  // banner above using their original (Yes/Total-based) definition.
-  const extNumerator = meExtIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
-  const extGrandNo    = meExtRows.reduce((s, r) => s + (r.no_me  || 0), 0);
-  const extGrandYes   = meExtRows.reduce((s, r) => s + (r.yes_me || 0), 0);
-  const extComplianceDenom = extGrandNo - extGrandYes;
-  const extCompliancePct = extComplianceDenom
-    ? ((extNumerator / extComplianceDenom) * 100).toFixed(2)
-    : '0.00';
 
   const meMslYes  = meMslIncl.reduce((s, r) => s + (r.yes_me || 0), 0);
   // Denominator is the grand-total "Yes" count across ALL patching-type
@@ -1553,60 +1540,52 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           </Typography.Text>
         </Typography.Text>
 
-        {/* Overall combined ME compliance — MSL + Extended */}
+        {/* Merged ME compliance — MSL + Extended combined into one */}
         {(() => {
           const combinedYes = meMslYes + meExtYes;
           const combinedDen = meMslDen + meExtDen;
           const combinedPct = combinedDen ? ((combinedYes / combinedDen) * 100).toFixed(2) : '0.00';
+
+          const rowMap = new Map();
+          for (const r of [...meMslRows, ...meExtRows]) {
+            const cur = rowMap.get(r.bucket) || { bucket: r.bucket, no_me: 0, yes_me: 0, total: 0 };
+            cur.no_me  += r.no_me  || 0;
+            cur.yes_me += r.yes_me || 0;
+            cur.total  += r.total  || 0;
+            rowMap.set(r.bucket, cur);
+          }
+          const mergedRows = Array.from(rowMap.values());
+          const mergedExcl = Array.from(new Set([...MSL_EXCL, ...EXT_EXCL]));
+
           return (
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 20 }}
-              message={
-                <span>
-                  <strong>Overall ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
-                  <strong>{combinedYes.toLocaleString()}</strong>
-                  {' / '}
-                  <strong>{combinedDen.toLocaleString()}</strong>
-                  {' × 100 = '}
-                  <strong style={{ fontSize: 15 }}>{combinedPct}%</strong>
-                  <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
-                    (MSL: {meMslYes}/{meMslDen} · Extended: {meExtYes}/{meExtDen})
+            <>
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 20 }}
+                message={
+                  <span>
+                    <strong>ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
+                    <strong>{combinedYes.toLocaleString()}</strong>
+                    {' / '}
+                    <strong>{combinedDen.toLocaleString()}</strong>
+                    {' × 100 = '}
+                    <strong style={{ fontSize: 15 }}>{combinedPct}%</strong>
+                  </span>
+                }
+              />
+
+              <Card className="weekly-breakdown-card" bodyStyle={{ padding: 20 }}>
+                <Typography.Paragraph style={{ marginBottom: 12 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {MSL_FOOTNOTE} {EXT_FOOTNOTE}
                   </Typography.Text>
-                </span>
-              }
-            />
+                </Typography.Paragraph>
+                <MEComplianceTable rows={mergedRows} excludedBuckets={mergedExcl} isDark={isDark} />
+              </Card>
+            </>
           );
         })()}
-
-        <Card className="weekly-breakdown-card" bodyStyle={{ padding: 20 }} style={{ marginBottom: 20 }}>
-          <Typography.Paragraph style={{ marginBottom: 12 }}>
-            <Typography.Link underline strong>
-              Manage Engine compliance with MSL
-            </Typography.Link>{' '}
-            → {meMslYes.toLocaleString()}/{meMslDen.toLocaleString()} x 100 ={' '}
-            <strong>{meMslDen ? ((meMslYes / meMslDen) * 100).toFixed(2) : '0.00'}%</strong>{' '}
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {MSL_FOOTNOTE}
-            </Typography.Text>
-          </Typography.Paragraph>
-          <MEComplianceTable rows={meMslRows} excludedBuckets={MSL_EXCL} isDark={isDark} />
-        </Card>
-
-        <Card className="weekly-breakdown-card" bodyStyle={{ padding: 20 }}>
-          <Typography.Paragraph style={{ marginBottom: 12 }}>
-            <Typography.Link underline strong>
-              Manage Engine compliance with Extended Inventory
-            </Typography.Link>{' '}
-            → {extNumerator.toLocaleString()}/{extComplianceDenom.toLocaleString()} x 100 ={' '}
-            <strong>{extCompliancePct}%</strong>{' '}
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {EXT_FOOTNOTE}
-            </Typography.Text>
-          </Typography.Paragraph>
-          <MEComplianceTable rows={meExtRows} excludedBuckets={EXT_EXCL} isDark={isDark} />
-        </Card>
       </div></Wgt>
     </div>
   );
