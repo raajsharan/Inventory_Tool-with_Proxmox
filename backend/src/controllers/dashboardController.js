@@ -241,11 +241,10 @@ async function summary(_req, res, next) {
     // the same row population as mslQ (assets+beijing+physical_esxi, filtered
     // by the configurable status/EOL lists) and extComplianceQ's in_scope
     // definition, so this total lines up with mslDenominator + extComp.total.
-    // Beijing Assets is shown as a single lumped row (its own inventory,
-    // not grouped by its location field) rather than folded into the
-    // per-location breakdown, to avoid double-counting against it. Counted
-    // as raw VM-only rows (asset_type = 'vm'), not MSL-scope filtered —
-    // matches the Beijing Assets page's own total, minus non-VM rows.
+    // Beijing Assets is grouped by its own location field, same as the
+    // rest — counted as raw VM-only rows (asset_type = 'vm'), not
+    // MSL-scope filtered, matching the Beijing Assets page's own total
+    // minus non-VM rows.
     const assetExtLocationCountQ = db.query(`
       WITH inv AS (
         SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
@@ -274,20 +273,16 @@ async function summary(_req, res, next) {
              AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
            ))
       ),
-      beijing_total AS (
-        SELECT COUNT(*)::int AS c FROM beijing_assets
+      beijing_f AS (
+        SELECT location FROM beijing_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
            AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       )
-      SELECT location, count FROM (
-        SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
-          FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f) x
-         WHERE location IS NOT NULL AND location <> ''
-         GROUP BY 1
-        UNION ALL
-        SELECT 'Beijing Assets' AS location, c AS count FROM beijing_total WHERE c > 0
-      ) y
-      ORDER BY count DESC;
+      SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
+        FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f UNION ALL SELECT location FROM beijing_f) x
+       WHERE location IS NOT NULL AND location <> ''
+       GROUP BY 1
+       ORDER BY 2 DESC;
     `, [mslInclStatuses, mslExclEol]);
 
     // ---------------------------------------------------------------
