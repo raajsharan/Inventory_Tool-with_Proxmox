@@ -1469,7 +1469,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
-              Location-wise count (Assets + Ext. Assets):
+              Location-wise count (Assets + Ext. Assets + Beijing Assets):
             </Typography.Text>
             <Table
               rowKey="location"
