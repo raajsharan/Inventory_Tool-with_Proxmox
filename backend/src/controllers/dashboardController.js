@@ -241,10 +241,12 @@ async function summary(_req, res, next) {
     // the same row population as mslQ (assets+beijing+physical_esxi, filtered
     // by the configurable status/EOL lists) and extComplianceQ's in_scope
     // definition, so this total lines up with mslDenominator + extComp.total.
+    // Beijing Assets is shown as a single lumped row (its own inventory,
+    // not grouped by its location field) rather than folded into the
+    // per-location breakdown, to avoid double-counting against it.
     const assetExtLocationCountQ = db.query(`
       WITH inv AS (
         SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL SELECT location, server_status, eol_status FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL SELECT location, server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       ),
       inv_f AS (
@@ -269,12 +271,28 @@ async function summary(_req, res, next) {
              AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
              AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
            ))
+      ),
+      beijing_total AS (
+        SELECT COUNT(*)::int AS c FROM beijing_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND (
+             array_length($1::text[], 1) IS NULL
+             OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+           )
+           AND (
+             array_length($2::text[], 1) IS NULL
+             OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
+           )
       )
-      SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
-        FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f) x
-        WHERE location IS NOT NULL AND location <> ''
-        GROUP BY 1
-        ORDER BY 2 DESC;
+      SELECT location, count FROM (
+        SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
+          FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f) x
+         WHERE location IS NOT NULL AND location <> ''
+         GROUP BY 1
+        UNION ALL
+        SELECT 'Beijing Assets' AS location, c AS count FROM beijing_total WHERE c > 0
+      ) y
+      ORDER BY count DESC;
     `, [mslInclStatuses, mslExclEol]);
 
     // ---------------------------------------------------------------
