@@ -613,10 +613,14 @@ const STATEMENTS = [
       notify_asset_update     BOOLEAN NOT NULL DEFAULT TRUE,
       notify_decommission     BOOLEAN NOT NULL DEFAULT TRUE,
       notify_migration_status BOOLEAN NOT NULL DEFAULT TRUE,
-      notify_host_down        BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_host_down_vmware  BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_host_down_proxmox BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_host_down_hyperv  BOOLEAN NOT NULL DEFAULT TRUE,
       updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
-  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_vmware  BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_proxmox BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_hyperv  BOOLEAN NOT NULL DEFAULT TRUE`,
 
   // ── Microsoft Hyper-V discovery ──────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS hyperv_hosts (

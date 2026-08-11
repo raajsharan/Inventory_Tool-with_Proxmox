@@ -52,7 +52,9 @@ const DEFAULTS = {
   notify_asset_update:   true,
   notify_decommission:   true,
   notify_migration_status: true,
-  notify_host_down:      true,
+  notify_host_down_vmware:  true,
+  notify_host_down_proxmox: true,
+  notify_host_down_hyperv:  true,
 };
 
 async function getConfig() {
@@ -68,26 +70,32 @@ async function saveConfig(fields) {
     notify_new_asset      = cfg.notify_new_asset,
     notify_asset_update   = cfg.notify_asset_update,
     notify_decommission   = cfg.notify_decommission,
-    notify_migration_status = cfg.notify_migration_status,
-    notify_host_down      = cfg.notify_host_down,
+    notify_migration_status  = cfg.notify_migration_status,
+    notify_host_down_vmware  = cfg.notify_host_down_vmware,
+    notify_host_down_proxmox = cfg.notify_host_down_proxmox,
+    notify_host_down_hyperv  = cfg.notify_host_down_hyperv,
   } = fields;
 
   await db.query(
     `INSERT INTO teams_notification_config
         (webhook_url, enabled, notify_new_asset, notify_asset_update,
-         notify_decommission, notify_migration_status, notify_host_down, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+         notify_decommission, notify_migration_status,
+         notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
      ON CONFLICT (singleton) DO UPDATE SET
-        webhook_url             = EXCLUDED.webhook_url,
-        enabled                 = EXCLUDED.enabled,
-        notify_new_asset        = EXCLUDED.notify_new_asset,
-        notify_asset_update     = EXCLUDED.notify_asset_update,
-        notify_decommission     = EXCLUDED.notify_decommission,
-        notify_migration_status = EXCLUDED.notify_migration_status,
-        notify_host_down        = EXCLUDED.notify_host_down,
-        updated_at              = NOW()`,
+        webhook_url              = EXCLUDED.webhook_url,
+        enabled                  = EXCLUDED.enabled,
+        notify_new_asset         = EXCLUDED.notify_new_asset,
+        notify_asset_update      = EXCLUDED.notify_asset_update,
+        notify_decommission      = EXCLUDED.notify_decommission,
+        notify_migration_status  = EXCLUDED.notify_migration_status,
+        notify_host_down_vmware  = EXCLUDED.notify_host_down_vmware,
+        notify_host_down_proxmox = EXCLUDED.notify_host_down_proxmox,
+        notify_host_down_hyperv  = EXCLUDED.notify_host_down_hyperv,
+        updated_at               = NOW()`,
     [webhook_url, enabled, notify_new_asset, notify_asset_update,
-     notify_decommission, notify_migration_status, notify_host_down],
+     notify_decommission, notify_migration_status,
+     notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv],
   );
   return getConfig();
 }
@@ -316,9 +324,17 @@ async function notifyMigrationStatus(vmName, category, newStatus, updatedBy = nu
   await send(card);
 }
 
+// Platform name (as passed by each scheduler) -> its own config toggle.
+const HOST_DOWN_FLAG_FOR = {
+  VMware:    'notify_host_down_vmware',
+  Proxmox:   'notify_host_down_proxmox',
+  'Hyper-V': 'notify_host_down_hyperv',
+};
+
 async function notifyHostDown(platform, host, errorMessage = null) {
   const cfg = await getConfig();
-  if (!cfg.enabled || !cfg.notify_host_down || !cfg.webhook_url) return;
+  const flag = HOST_DOWN_FLAG_FOR[platform];
+  if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
 
   const card = buildCard({
     subtitle: `🔴 ${platform} Discovery`,
@@ -335,7 +351,8 @@ async function notifyHostDown(platform, host, errorMessage = null) {
 
 async function notifyHostRecovered(platform, host) {
   const cfg = await getConfig();
-  if (!cfg.enabled || !cfg.notify_host_down || !cfg.webhook_url) return;
+  const flag = HOST_DOWN_FLAG_FOR[platform];
+  if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
 
   const card = buildCard({
     subtitle: `🟢 ${platform} Discovery`,
