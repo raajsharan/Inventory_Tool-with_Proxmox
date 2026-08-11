@@ -387,6 +387,82 @@ async function getDrift() {
   return results;
 }
 
+// Day-by-day added/removed/changed counts across all hosts for the last
+// `days` days — walks every consecutive pair of successful runs per host
+// (not just the latest two, like getDrift), so a week of history survives
+// past the most recent discovery poll. Fetches only the columns needed to
+// diff (name/power_state/ips), not full rows, since a week can span many runs.
+async function getDriftHistory(days = 7) {
+  const { rows: runRows } = await db.query(
+    `SELECT host_id, id AS run_id, run_at
+       FROM vmware_discovery_runs
+      WHERE status = 'success' AND run_at >= NOW() - INTERVAL '1 day' * ($1 + 1)
+      ORDER BY host_id, run_at ASC`,
+    [days]
+  );
+
+  const vmsByRun = new Map();
+  if (runRows.length) {
+    const runIds = runRows.map(r => r.run_id);
+    const { rows: vmRows } = await db.query(
+      `SELECT run_id, name, power_state, ips FROM vmware_discovered_vms WHERE run_id = ANY($1::uuid[])`,
+      [runIds]
+    );
+    for (const v of vmRows) {
+      if (!vmsByRun.has(v.run_id)) vmsByRun.set(v.run_id, new Map());
+      vmsByRun.get(v.run_id).set(v.name, v);
+    }
+  }
+
+  const runsByHost = new Map();
+  for (const r of runRows) {
+    if (!runsByHost.has(r.host_id)) runsByHost.set(r.host_id, []);
+    runsByHost.get(r.host_id).push(r);
+  }
+
+  const cutoff = new Date(Date.now() - days * 86400000);
+  const dailyMap = new Map(); // 'YYYY-MM-DD' -> { added, removed, changed }
+
+  for (const runs of runsByHost.values()) {
+    for (let i = 1; i < runs.length; i++) {
+      const prev = runs[i - 1];
+      const curr = runs[i];
+      if (new Date(curr.run_at) < cutoff) continue; // pair's date falls outside the window
+
+      const prevVms = vmsByRun.get(prev.run_id) || new Map();
+      const currVms = vmsByRun.get(curr.run_id) || new Map();
+
+      let added = 0, removed = 0, changed = 0;
+      for (const [name, vm] of currVms) {
+        const p = prevVms.get(name);
+        if (!p) { added++; continue; }
+        if (vm.power_state !== p.power_state || JSON.stringify(vm.ips) !== JSON.stringify(p.ips)) changed++;
+      }
+      for (const name of prevVms.keys()) {
+        if (!currVms.has(name)) removed++;
+      }
+
+      const dateKey = new Date(curr.run_at).toISOString().slice(0, 10);
+      const bucket = dailyMap.get(dateKey) || { added: 0, removed: 0, changed: 0 };
+      bucket.added += added;
+      bucket.removed += removed;
+      bucket.changed += changed;
+      dailyMap.set(dateKey, bucket);
+    }
+  }
+
+  // Fill every day in the window, including days with no runs, so the chart
+  // always shows a full, evenly-spaced week rather than gaps.
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const dateKey = d.toISOString().slice(0, 10);
+    const bucket = dailyMap.get(dateKey) || { added: 0, removed: 0, changed: 0 };
+    result.push({ date: dateKey, ...bucket });
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // ESXi topology
 // ---------------------------------------------------------------------------
@@ -548,5 +624,5 @@ module.exports = {
   setHostStats, clearHostStats, setEsxiHostStats,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs, getReconciliation,
-  getDashboardStats, getDrift, getESXiTopology, getStaleVMs, getSnapshotVMs,
+  getDashboardStats, getDrift, getDriftHistory, getESXiTopology, getStaleVMs, getSnapshotVMs,
 };

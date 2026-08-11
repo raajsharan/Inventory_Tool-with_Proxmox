@@ -240,6 +240,13 @@ async function getDrift(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function getDriftHistory(req, res, next) {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+    res.json({ history: await dbSvc.getDriftHistory(days) });
+  } catch (e) { next(e); }
+}
+
 async function getESXiTopology(req, res, next) {
   try {
     res.json({ topology: await dbSvc.getESXiTopology() });
@@ -686,7 +693,7 @@ async function exportAssetEditorCSV(req, res, next) {
 module.exports = {
   listHosts, addHost, updateHost, deleteHost, testHost,
   runDiscovery, runDiscoverySync,
-  listVMs, getDashboard, getDrift, getESXiTopology, getReconciliation,
+  listVMs, getDashboard, getDrift, getDriftHistory, getESXiTopology, getReconciliation,
   getStaleVMs, getSnapshots, getRunHistory, exportCSV,
   // MAC Lookup
   listMacFiles, uploadMacFile, deleteMacFile, clearMacFiles,

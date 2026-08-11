@@ -1,9 +1,58 @@
 import { useEffect, useState } from 'react';
 import { Card, Table, Tag, Collapse, Typography, Spin, Empty, Space, Badge, Alert } from 'antd';
 import { PlusOutlined, MinusOutlined, SwapOutlined } from '@ant-design/icons';
+import { Column } from '@ant-design/plots';
 import api from '../../../api/client';
 
 const { Text } = Typography;
+
+const HISTORY_COLORS = { Added: '#52c41a', Removed: '#ff4d4f', Changed: '#fa8c16' };
+
+function DriftHistoryChart() {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/vmware/drift/history', { params: { days: 7 } })
+      .then(r => setHistory(r.data.history || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!history.length) return null;
+
+  const chartData = history.flatMap(h => ([
+    { date: h.date, type: 'Added',   value: h.added },
+    { date: h.date, type: 'Removed', value: h.removed },
+    { date: h.date, type: 'Changed', value: h.changed },
+  ]));
+  const hasAnyChange = history.some(h => h.added || h.removed || h.changed);
+
+  return (
+    <Card
+      size="small"
+      title="Change Detection — Last 7 Days"
+      style={{ marginBottom: 16 }}
+    >
+      {!hasAnyChange && (
+        <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+          No changes detected across any host in the last 7 days.
+        </Text>
+      )}
+      <Column
+        data={chartData}
+        xField="date"
+        yField="value"
+        colorField="type"
+        height={240}
+        scale={{ color: { range: Object.values(HISTORY_COLORS) } }}
+        legend={{ color: { position: 'top' } }}
+        axis={{ y: { title: false }, x: { title: false } }}
+      />
+    </Card>
+  );
+}
 
 function powerTag(state) {
   if (state === 'poweredOn')  return <Tag color="success">On</Tag>;
@@ -57,7 +106,12 @@ export default function VMDrift() {
   const noDrift = drift.every(d => !d.summary.added && !d.summary.removed && !d.summary.changed);
 
   if (!drift.length || noDrift) {
-    return <Empty description="No changes detected. At least two successful discoveries per host are required." style={{ marginTop: 80 }} />;
+    return (
+      <div>
+        <DriftHistoryChart />
+        <Empty description="No changes detected. At least two successful discoveries per host are required." style={{ marginTop: 40 }} />
+      </div>
+    );
   }
 
   const items = drift
@@ -102,5 +156,10 @@ export default function VMDrift() {
       ),
     }));
 
-  return <Collapse items={items} defaultActiveKey={[]} />;
+  return (
+    <div>
+      <DriftHistoryChart />
+      <Collapse items={items} defaultActiveKey={[]} />
+    </div>
+  );
 }

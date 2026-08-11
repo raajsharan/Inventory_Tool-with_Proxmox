@@ -28,6 +28,7 @@ router.get('/vms',                ...guard, ctrl.listVMs);
 router.get('/vms/export',         ...guard, ctrl.exportCSV);
 router.get('/dashboard',          ...guard, ctrl.getDashboard);
 router.get('/drift',              ...guard, ctrl.getDrift);
+router.get('/drift/history',      ...guard, ctrl.getDriftHistory);
 router.get('/esxi-topology',      ...guard, ctrl.getESXiTopology);
 router.get('/reconcile',          ...guard, ctrl.getReconciliation);
 router.get('/stale',              ...guard, ctrl.getStaleVMs);
