@@ -79,13 +79,25 @@ const STATEMENTS = [
       id                       SERIAL PRIMARY KEY,
       singleton                BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
       vmware_enabled           BOOLEAN NOT NULL DEFAULT TRUE,
-      vmware_interval_minutes  INT     NOT NULL DEFAULT 5,
+      vmware_interval_days     INT     NOT NULL DEFAULT 1,
+      vmware_check_time        VARCHAR(5) NOT NULL DEFAULT '09:00',
       proxmox_enabled          BOOLEAN NOT NULL DEFAULT TRUE,
-      proxmox_interval_minutes INT     NOT NULL DEFAULT 5,
+      proxmox_interval_days    INT     NOT NULL DEFAULT 1,
+      proxmox_check_time       VARCHAR(5) NOT NULL DEFAULT '09:00',
       hyperv_enabled           BOOLEAN NOT NULL DEFAULT TRUE,
-      hyperv_interval_minutes  INT     NOT NULL DEFAULT 5,
+      hyperv_interval_days     INT     NOT NULL DEFAULT 1,
+      hyperv_check_time        VARCHAR(5) NOT NULL DEFAULT '09:00',
       updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  // Day+time schedule (e.g. "every 1 day at 09:00") superseded the original
+  // minute-based interval — added via ALTER for installs where the table
+  // above already existed with only the old *_interval_minutes columns.
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_interval_days  INT NOT NULL DEFAULT 1`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_check_time     VARCHAR(5) NOT NULL DEFAULT '09:00'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_interval_days INT NOT NULL DEFAULT 1`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_check_time    VARCHAR(5) NOT NULL DEFAULT '09:00'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_interval_days  INT NOT NULL DEFAULT 1`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_check_time     VARCHAR(5) NOT NULL DEFAULT '09:00'`,
 
   // ── VMware discovery: ESXi host hardware telemetry (CPU/RAM/disk/uptime),
   // fetched via vim25 SOAP alongside each discovery run — powers the extra

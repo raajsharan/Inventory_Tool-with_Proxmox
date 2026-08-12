@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, Form, Input, InputNumber, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip, Row, Col,
+  Card, Form, Input, InputNumber, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip, Row, Col, TimePicker,
 } from 'antd';
 import {
   SendOutlined, CheckCircleOutlined, TeamOutlined, ClockCircleOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
@@ -27,7 +28,8 @@ function PingMonitorSchedule() {
         const values = {};
         for (const p of PING_PLATFORMS) {
           values[`${p.key}_enabled`] = r.data[`${p.key}_enabled`] ?? true;
-          values[`${p.key}_interval_minutes`] = r.data[`${p.key}_interval_minutes`] ?? 5;
+          values[`${p.key}_interval_days`] = r.data[`${p.key}_interval_days`] ?? 1;
+          values[`${p.key}_check_time`] = dayjs(r.data[`${p.key}_check_time`] || '09:00', 'HH:mm');
         }
         pingForm.setFieldsValue(values);
       })
@@ -38,11 +40,16 @@ function PingMonitorSchedule() {
     setPingLoading(true);
     setPingSaved(false);
     try {
-      await api.put('/ping-monitor', values);
+      const payload = { ...values };
+      for (const p of PING_PLATFORMS) {
+        const key = `${p.key}_check_time`;
+        payload[key] = values[key]?.format('HH:mm') || '09:00';
+      }
+      await api.put('/ping-monitor', payload);
       message.success('Ping monitor schedule saved.');
       setPingSaved(true);
-    } catch {
-      message.error('Failed to save ping monitor schedule.');
+    } catch (err) {
+      message.error(err?.response?.data?.error || 'Failed to save ping monitor schedule.');
     } finally {
       setPingLoading(false);
     }
@@ -56,21 +63,26 @@ function PingMonitorSchedule() {
       </Space>
       <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
         Independent of each platform's own discovery poll — pings every host on
-        the interval below. 1st consecutive failure sends a Warning alert,
-        every failure after that sends Critical, and recovery sends a Good
-        alert. Uses the connectivity toggles above.
+        the day+time schedule below. 1st consecutive failure sends a Warning
+        alert, every failure after that sends Critical, and recovery sends a
+        Good alert. Uses the connectivity toggles above.
       </Text>
       <Form form={pingForm} layout="vertical" onFinish={handlePingSave}>
         {PING_PLATFORMS.map(p => (
           <Row gutter={16} key={p.key} align="middle" style={{ marginBottom: 8 }}>
-            <Col span={8}>
+            <Col span={7}>
               <Form.Item name={`${p.key}_enabled`} valuePropName="checked" label={`${p.label} ping check`} style={{ marginBottom: 0 }}>
                 <Switch />
               </Form.Item>
             </Col>
-            <Col span={16}>
-              <Form.Item name={`${p.key}_interval_minutes`} label="Check every (minutes)" style={{ marginBottom: 0 }}>
-                <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+            <Col span={9}>
+              <Form.Item name={`${p.key}_interval_days`} label="Check every (days)" style={{ marginBottom: 0 }}>
+                <InputNumber min={1} max={365} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name={`${p.key}_check_time`} label="At time" style={{ marginBottom: 0 }}>
+                <TimePicker format="HH:mm" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
