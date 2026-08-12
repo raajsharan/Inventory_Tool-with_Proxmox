@@ -366,6 +366,64 @@ async function notifyHostRecovered(platform, host) {
   await send(card);
 }
 
+// ── Ping-based connectivity alerts — driven by pingMonitorService's scheduled
+// ICMP checks, independent of discovery-run success/failure. First
+// consecutive failure is a Warning; every failure after that is Critical
+// (re-alerts on every check while still down, by design).
+
+async function notifyPingWarning(platform, host) {
+  const cfg = await getConfig();
+  const flag = HOST_DOWN_FLAG_FOR[platform];
+  if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+
+  const card = buildCard({
+    subtitle: `🟡 ${platform} Ping Monitor`,
+    title: `Warning: ${host} is not responding to ping`,
+    color: 'Warning',
+    facts: [
+      { title: 'Host',                  value: host },
+      { title: 'Platform',              value: platform },
+      { title: 'Consecutive Failures',  value: '1' },
+    ],
+  });
+  await send(card);
+}
+
+async function notifyPingCritical(platform, host, failCount) {
+  const cfg = await getConfig();
+  const flag = HOST_DOWN_FLAG_FOR[platform];
+  if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+
+  const card = buildCard({
+    subtitle: `🔴 ${platform} Ping Monitor`,
+    title: `Critical: ${host} is unreachable`,
+    color: 'Attention',
+    facts: [
+      { title: 'Host',                  value: host },
+      { title: 'Platform',              value: platform },
+      { title: 'Consecutive Failures',  value: String(failCount) },
+    ],
+  });
+  await send(card);
+}
+
+async function notifyPingRecovered(platform, host) {
+  const cfg = await getConfig();
+  const flag = HOST_DOWN_FLAG_FOR[platform];
+  if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+
+  const card = buildCard({
+    subtitle: `🟢 ${platform} Ping Monitor`,
+    title: `Recovered: ${host} is responding to ping again`,
+    color: 'Good',
+    facts: [
+      { title: 'Host',     value: host },
+      { title: 'Platform', value: platform },
+    ],
+  });
+  await send(card);
+}
+
 async function testNotification(overrideUrl) {
   const cfg = await getConfig();
   const webhookUrl = overrideUrl || cfg.webhook_url;
@@ -393,5 +451,8 @@ module.exports = {
   notifyMigrationStatus,
   notifyHostDown,
   notifyHostRecovered,
+  notifyPingWarning,
+  notifyPingCritical,
+  notifyPingRecovered,
   testNotification,
 };

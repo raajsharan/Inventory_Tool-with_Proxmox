@@ -88,6 +88,12 @@ const PORT = process.env.PORT || 4000;
     // eslint-disable-next-line no-console
     console.error('[hyperv-scheduler] failed to start:', e);
   }
+  try {
+    await require('./src/services/pingMonitorService').initFromDb();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[ping-monitor] failed to start:', e);
+  }
   const server = http.createServer(app);
   wsHub.init(server);
   server.listen(PORT, () => {

@@ -41,6 +41,7 @@ router.use('/admin/migration-projects', authenticate, require('./migrationProjec
 router.use('/migration',                authenticate, requirePageAccess('migration_tracker'), require('./migrationRoutes'));
 router.use('/endpoint-central',         authenticate, requirePageAccess('endpoint_central'),   require('./endpointCentralRoutes'));
 router.use('/teams-notification',       require('./teamsNotificationRoutes'));
+router.use('/ping-monitor',             require('./pingMonitorRoutes'));
 router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
 router.use('/alerts',                   require('./alertsRoutes'));
 // /my-tasks is open to any authenticated user (each team member's own

@@ -61,6 +61,32 @@ const STATEMENTS = [
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
 
+  // ── Ping-based connectivity monitoring (independent of discovery runs) —
+  // a scheduled ICMP ping per host, tracked separately so Warning/Critical
+  // Teams alerts can fire on 1st/2nd+ consecutive ping failure without
+  // waiting on (or being tied to) the much slower discovery poll cycle.
+  `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
+  `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
+  `ALTER TABLE hyperv_hosts  ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
+  `ALTER TABLE hyperv_hosts  ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE hyperv_hosts  ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
+
+  `CREATE TABLE IF NOT EXISTS ping_monitor_config (
+      id                       SERIAL PRIMARY KEY,
+      singleton                BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
+      vmware_enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+      vmware_interval_minutes  INT     NOT NULL DEFAULT 5,
+      proxmox_enabled          BOOLEAN NOT NULL DEFAULT TRUE,
+      proxmox_interval_minutes INT     NOT NULL DEFAULT 5,
+      hyperv_enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+      hyperv_interval_minutes  INT     NOT NULL DEFAULT 5,
+      updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+
   // ── VMware discovery: ESXi host hardware telemetry (CPU/RAM/disk/uptime),
   // fetched via vim25 SOAP alongside each discovery run — powers the extra
   // columns on the Hosts & Credentials tab.

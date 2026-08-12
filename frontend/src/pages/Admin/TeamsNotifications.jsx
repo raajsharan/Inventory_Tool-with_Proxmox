@@ -1,14 +1,94 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, Form, Input, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip,
+  Card, Form, Input, InputNumber, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip, Row, Col,
 } from 'antd';
 import {
-  SendOutlined, CheckCircleOutlined, TeamOutlined,
+  SendOutlined, CheckCircleOutlined, TeamOutlined, ClockCircleOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const { Title, Text } = Typography;
+
+const PING_PLATFORMS = [
+  { key: 'vmware',  label: 'VMware' },
+  { key: 'proxmox', label: 'Proxmox' },
+  { key: 'hyperv',  label: 'Hyper-V' },
+];
+
+function PingMonitorSchedule() {
+  const [pingForm] = Form.useForm();
+  const [pingLoading, setPingLoading] = useState(false);
+  const [pingSaved, setPingSaved] = useState(false);
+
+  useEffect(() => {
+    api.get('/ping-monitor')
+      .then(r => {
+        const values = {};
+        for (const p of PING_PLATFORMS) {
+          values[`${p.key}_enabled`] = r.data[`${p.key}_enabled`] ?? true;
+          values[`${p.key}_interval_minutes`] = r.data[`${p.key}_interval_minutes`] ?? 5;
+        }
+        pingForm.setFieldsValue(values);
+      })
+      .catch(() => message.error('Failed to load ping monitor schedule'));
+  }, [pingForm]);
+
+  const handlePingSave = async (values) => {
+    setPingLoading(true);
+    setPingSaved(false);
+    try {
+      await api.put('/ping-monitor', values);
+      message.success('Ping monitor schedule saved.');
+      setPingSaved(true);
+    } catch {
+      message.error('Failed to save ping monitor schedule.');
+    } finally {
+      setPingLoading(false);
+    }
+  };
+
+  return (
+    <Card className="dashcard" style={{ marginTop: 20 }}>
+      <Space style={{ marginBottom: 16 }}>
+        <ClockCircleOutlined style={{ fontSize: 20, color: '#5a4fcf' }} />
+        <Title level={5} style={{ margin: 0 }}>Ping Connectivity Monitor Schedule</Title>
+      </Space>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+        Independent of each platform's own discovery poll — pings every host on
+        the interval below. 1st consecutive failure sends a Warning alert,
+        every failure after that sends Critical, and recovery sends a Good
+        alert. Uses the connectivity toggles above.
+      </Text>
+      <Form form={pingForm} layout="vertical" onFinish={handlePingSave}>
+        {PING_PLATFORMS.map(p => (
+          <Row gutter={16} key={p.key} align="middle" style={{ marginBottom: 8 }}>
+            <Col span={8}>
+              <Form.Item name={`${p.key}_enabled`} valuePropName="checked" label={`${p.label} ping check`} style={{ marginBottom: 0 }}>
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={16}>
+              <Form.Item name={`${p.key}_interval_minutes`} label="Check every (minutes)" style={{ marginBottom: 0 }}>
+                <InputNumber min={1} max={1440} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+        ))}
+        <Space style={{ marginTop: 12 }}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={pingLoading}
+            icon={pingSaved ? <CheckCircleOutlined /> : undefined}
+          >
+            Save Schedule
+          </Button>
+        </Space>
+      </Form>
+    </Card>
+  );
+}
 
 export default function TeamsNotifications() {
   const [form]    = Form.useForm();
@@ -163,6 +243,8 @@ export default function TeamsNotifications() {
           )}
         </Form>
       </Card>
+
+      <PingMonitorSchedule />
     </div>
   );
 }
