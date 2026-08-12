@@ -333,10 +333,24 @@ async function discoverVE(hostname, port, getter, verifySSL) {
           const [config, snaps, agentNet, agentHost] = await Promise.all([
             getter(`${base}/config`),
             getter(`${base}/snapshot`),
-            vm.status === 'running' ? getter(`${base}/agent/network-get-interfaces`).catch(() => null) : null,
-            // Requires QEMU guest agent running in the guest — best-effort,
-            // silently unavailable on VMs without it (matches agentNet above).
-            vm.status === 'running' ? getter(`${base}/agent/get-host-name`).catch(() => null) : null,
+            // Requires QEMU guest agent installed+enabled in the guest AND
+            // "QEMU Guest Agent" ticked in the VM's Options — best-effort,
+            // silently unavailable on VMs without it. A 500 ("agent not
+            // running") is already logged by getWithTicket/getWithToken; a
+            // thrown auth error (403 — the API user lacking VM.Monitor) was
+            // previously swallowed with no trace at all, so log it here too.
+            vm.status === 'running'
+              ? getter(`${base}/agent/network-get-interfaces`).catch(err => {
+                  console.warn(`[proxmox] agent/network-get-interfaces failed for VM ${vmid}@${node}: ${err.message}`);
+                  return null;
+                })
+              : null,
+            vm.status === 'running'
+              ? getter(`${base}/agent/get-host-name`).catch(err => {
+                  console.warn(`[proxmox] agent/get-host-name failed for VM ${vmid}@${node}: ${err.message}`);
+                  return null;
+                })
+              : null,
           ]);
           const { snapshot_count, snapshot_oldest } = processSnapshots(snaps);
           return {
