@@ -121,6 +121,9 @@ export default function TeamsNotifications() {
           notify_host_down_vmware:  r.data.notify_host_down_vmware ?? true,
           notify_host_down_proxmox: r.data.notify_host_down_proxmox ?? true,
           notify_host_down_hyperv:  r.data.notify_host_down_hyperv ?? true,
+          alert_window_enabled: r.data.alert_window_enabled ?? false,
+          alert_window_start:   dayjs(r.data.alert_window_start || '00:00', 'HH:mm'),
+          alert_window_end:     dayjs(r.data.alert_window_end   || '23:59', 'HH:mm'),
         });
       })
       .catch(() => message.error('Failed to load Teams notification config'));
@@ -130,11 +133,16 @@ export default function TeamsNotifications() {
     setLoading(true);
     setSaved(false);
     try {
-      await api.put('/teams-notification', values);
+      const payload = {
+        ...values,
+        alert_window_start: values.alert_window_start?.format('HH:mm') || '00:00',
+        alert_window_end:   values.alert_window_end?.format('HH:mm') || '23:59',
+      };
+      await api.put('/teams-notification', payload);
       message.success('Configuration saved.');
       setSaved(true);
-    } catch {
-      message.error('Failed to save configuration.');
+    } catch (err) {
+      message.error(err?.response?.data?.error || 'Failed to save configuration.');
     } finally {
       setLoading(false);
     }
@@ -225,6 +233,33 @@ export default function TeamsNotifications() {
           <Form.Item name="notify_host_down_hyperv" valuePropName="checked" label="Hyper-V Discovery host lost / regained connectivity">
             <Switch />
           </Form.Item>
+
+          <Divider>Connectivity Alert Time Window</Divider>
+
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            Restricts when the connectivity alerts above (host-down / recovered,
+            ping warning / critical / recovered) are allowed to send. Outside
+            this window they're dropped silently — the next check inside the
+            window will re-alert if the problem is still real. Other alert
+            types above are unaffected.
+          </Text>
+
+          <Form.Item name="alert_window_enabled" valuePropName="checked" label="Restrict connectivity alerts to a time window">
+            <Switch />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="alert_window_start" label="Start time">
+                <TimePicker format="HH:mm" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="alert_window_end" label="End time">
+                <TimePicker format="HH:mm" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Divider />
 

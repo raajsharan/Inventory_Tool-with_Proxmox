@@ -55,7 +55,12 @@ const DEFAULTS = {
   notify_host_down_vmware:  true,
   notify_host_down_proxmox: true,
   notify_host_down_hyperv:  true,
+  alert_window_enabled:  false,
+  alert_window_start:    '00:00',
+  alert_window_end:      '23:59',
 };
+
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 async function getConfig() {
   const { rows } = await db.query('SELECT * FROM teams_notification_config LIMIT 1');
@@ -74,14 +79,24 @@ async function saveConfig(fields) {
     notify_host_down_vmware  = cfg.notify_host_down_vmware,
     notify_host_down_proxmox = cfg.notify_host_down_proxmox,
     notify_host_down_hyperv  = cfg.notify_host_down_hyperv,
+    alert_window_enabled     = cfg.alert_window_enabled,
+    alert_window_start       = cfg.alert_window_start,
+    alert_window_end         = cfg.alert_window_end,
   } = fields;
+
+  if (alert_window_enabled) {
+    for (const t of [alert_window_start, alert_window_end]) {
+      if (!TIME_RE.test(String(t))) throw new Error(`Invalid alert window time "${t}" — expected HH:MM (24-hour)`);
+    }
+  }
 
   await db.query(
     `INSERT INTO teams_notification_config
         (webhook_url, enabled, notify_new_asset, notify_asset_update,
          notify_decommission, notify_migration_status,
-         notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+         notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv,
+         alert_window_enabled, alert_window_start, alert_window_end, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
      ON CONFLICT (singleton) DO UPDATE SET
         webhook_url              = EXCLUDED.webhook_url,
         enabled                  = EXCLUDED.enabled,
@@ -92,10 +107,14 @@ async function saveConfig(fields) {
         notify_host_down_vmware  = EXCLUDED.notify_host_down_vmware,
         notify_host_down_proxmox = EXCLUDED.notify_host_down_proxmox,
         notify_host_down_hyperv  = EXCLUDED.notify_host_down_hyperv,
+        alert_window_enabled     = EXCLUDED.alert_window_enabled,
+        alert_window_start       = EXCLUDED.alert_window_start,
+        alert_window_end         = EXCLUDED.alert_window_end,
         updated_at               = NOW()`,
     [webhook_url, enabled, notify_new_asset, notify_asset_update,
      notify_decommission, notify_migration_status,
-     notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv],
+     notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv,
+     alert_window_enabled, alert_window_start, alert_window_end],
   );
   return getConfig();
 }
@@ -331,10 +350,32 @@ const HOST_DOWN_FLAG_FOR = {
   'Hyper-V': 'notify_host_down_hyperv',
 };
 
+// Active-hours gate for connectivity alerts only (host-down/recovered, ping
+// warning/critical/recovered) — every other alert type always sends.
+// Outside the window the alert is dropped silently, not queued; the next
+// check inside the window will re-alert if the problem is still real.
+// Supports an overnight window (e.g. start 22:00, end 06:00).
+function isWithinAlertWindow(cfg) {
+  if (!cfg.alert_window_enabled) return true;
+  const start = cfg.alert_window_start || '00:00';
+  const end   = cfg.alert_window_end   || '23:59';
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins   = eh * 60 + em;
+
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  if (startMins <= endMins) return nowMins >= startMins && nowMins <= endMins;
+  return nowMins >= startMins || nowMins <= endMins; // wraps past midnight
+}
+
 async function notifyHostDown(platform, host, errorMessage = null) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+  if (!isWithinAlertWindow(cfg)) return;
 
   const card = buildCard({
     subtitle: `🔴 ${platform} Discovery`,
@@ -353,6 +394,7 @@ async function notifyHostRecovered(platform, host) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+  if (!isWithinAlertWindow(cfg)) return;
 
   const card = buildCard({
     subtitle: `🟢 ${platform} Discovery`,
@@ -375,6 +417,7 @@ async function notifyPingWarning(platform, host) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+  if (!isWithinAlertWindow(cfg)) return;
 
   const card = buildCard({
     subtitle: `🟡 ${platform} Ping Monitor`,
@@ -393,6 +436,7 @@ async function notifyPingCritical(platform, host, failCount) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+  if (!isWithinAlertWindow(cfg)) return;
 
   const card = buildCard({
     subtitle: `🔴 ${platform} Ping Monitor`,
@@ -411,6 +455,7 @@ async function notifyPingRecovered(platform, host) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
+  if (!isWithinAlertWindow(cfg)) return;
 
   const card = buildCard({
     subtitle: `🟢 ${platform} Ping Monitor`,

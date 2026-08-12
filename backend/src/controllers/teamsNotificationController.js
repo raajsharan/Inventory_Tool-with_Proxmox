@@ -5,7 +5,12 @@ async function getConfig(req, res, next) {
 }
 
 async function saveConfig(req, res, next) {
-  try { res.json(await svc.saveConfig(req.body)); } catch (e) { next(e); }
+  try {
+    res.json(await svc.saveConfig(req.body));
+  } catch (e) {
+    if (/Invalid alert window time/.test(e.message)) return res.status(400).json({ error: e.message });
+    next(e);
+  }
 }
 
 async function testNotification(req, res, next) {

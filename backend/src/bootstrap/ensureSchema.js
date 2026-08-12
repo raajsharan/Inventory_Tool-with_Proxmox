@@ -654,11 +654,20 @@ const STATEMENTS = [
       notify_host_down_vmware  BOOLEAN NOT NULL DEFAULT TRUE,
       notify_host_down_proxmox BOOLEAN NOT NULL DEFAULT TRUE,
       notify_host_down_hyperv  BOOLEAN NOT NULL DEFAULT TRUE,
+      alert_window_enabled    BOOLEAN NOT NULL DEFAULT FALSE,
+      alert_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00',
+      alert_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59',
       updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_vmware  BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_proxmox BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_hyperv  BOOLEAN NOT NULL DEFAULT TRUE`,
+  // Active-hours window gating connectivity alerts only (host-down/recovered,
+  // ping warning/critical/recovered) — other alert types always send.
+  // Supports overnight windows (e.g. start 22:00, end 06:00).
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_window_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_window_start    VARCHAR(5) NOT NULL DEFAULT '00:00'`,
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_window_end      VARCHAR(5) NOT NULL DEFAULT '23:59'`,
 
   // ── Microsoft Hyper-V discovery ──────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS hyperv_hosts (
