@@ -72,13 +72,11 @@ async function runDiscovery(host) {
     // eslint-disable-next-line no-console
     console.error(`[vmware-scheduler] ${host} failed:`, err.message);
     if (runId) await dbSvc.failRun(runId, err.message);
-    await dbSvc.setLastDiscoveryFailed(record.id, err.message);
+    const failCount = await dbSvc.setLastDiscoveryFailed(record.id, err.message);
 
-    // Notify immediately, but only on the up -> down transition, so a host
-    // that's already known to be down doesn't re-alert on every poll.
-    if (record.last_status !== 'error') {
-      teams.notifyHostDown('VMware', host, err.message).catch(() => {});
-    }
+    // Notify on every failed attempt — tiered by consecutive-failure count
+    // (1st = Warning, 2nd+ = Critical), not just the up -> down transition.
+    teams.notifyHostDown('VMware', host, err.message, failCount).catch(() => {});
   } finally {
     running.delete(host);
   }

@@ -14,7 +14,9 @@ router.post('/hosts/:id/run',     ...guard, admin, ctrl.triggerRun);
 
 router.get('/vms',        ...guard, ctrl.listVMs);
 router.get('/dashboard',  ...guard, ctrl.getDashboard);
-router.get('/drift',      ...guard, ctrl.getDrift);
+router.get('/drift',          ...guard, ctrl.getDrift);
+router.get('/drift/history',  ...guard, ctrl.getDriftHistory);
+router.get('/drift/activity', ...guard, ctrl.getDriftActivity);
 router.get('/stale',      ...guard, ctrl.getStale);
 router.get('/snapshots',  ...guard, ctrl.getSnapshots);
 router.get('/mac-lookup',        ...guard, ctrl.getMacLookup);

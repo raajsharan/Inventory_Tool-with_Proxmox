@@ -92,6 +92,20 @@ async function getDrift(req, res, next) {
   try { res.json(await db.getDrift()); } catch (e) { next(e); }
 }
 
+async function getDriftHistory(req, res, next) {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+    res.json({ history: await db.getDriftHistory(days) });
+  } catch (e) { next(e); }
+}
+
+async function getDriftActivity(req, res, next) {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+    res.json({ activity: await db.getDriftActivity(days) });
+  } catch (e) { next(e); }
+}
+
 async function getStale(req, res, next) {
   try { res.json(await db.getStaleVMs()); } catch (e) { next(e); }
 }
@@ -230,6 +244,6 @@ async function exportMacLookupCSV(req, res, next) {
 
 module.exports = {
   listHosts, addHost, updateHost, removeHost, testHost, triggerRun,
-  listVMs, getDashboard, getDrift, getStale, getSnapshots, getRuns,
+  listVMs, getDashboard, getDrift, getDriftHistory, getDriftActivity, getStale, getSnapshots, getRuns,
   getMacLookup, exportMacLookupCSV,
 };

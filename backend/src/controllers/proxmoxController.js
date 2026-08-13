@@ -198,6 +198,18 @@ async function listNodes(req, res) {
 
 async function getDashboard(req, res)    { res.json(await db.getDashboardStats()); }
 async function getDrift(req, res)        { res.json(await db.getDrift()); }
+async function getDriftHistory(req, res, next) {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+    res.json({ history: await db.getDriftHistory(days) });
+  } catch (e) { next(e); }
+}
+async function getDriftActivity(req, res, next) {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+    res.json({ activity: await db.getDriftActivity(days) });
+  } catch (e) { next(e); }
+}
 async function getNodeTopology(req, res) { res.json(await db.getNodeTopology()); }
 async function getStaleVMs(req, res)     { res.json(await db.getStaleVMs()); }
 async function getSnapshots(req, res)    { res.json(await db.getSnapshotVMs()); }
@@ -351,6 +363,6 @@ module.exports = {
   listHosts, addHost, updateHost, deleteHost, testHost,
   runDiscovery, runDiscoverySync,
   listVMs, exportCSV, listNodes,
-  getDashboard, getDrift, getNodeTopology, getStaleVMs, getSnapshots, getRunHistory,
+  getDashboard, getDrift, getDriftHistory, getDriftActivity, getNodeTopology, getStaleVMs, getSnapshots, getRunHistory,
   getMacLookup, exportMacLookupCSV,
 };

@@ -93,22 +93,27 @@ async function setLastDiscovery(id, vmCount) {
     `UPDATE hyperv_hosts
         SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE,
             last_status = 'success', last_error = NULL, last_attempt_at = NOW(),
-            updated_at = NOW()
+            discovery_fail_count = 0, updated_at = NOW()
       WHERE id = $1`,
     [id, vmCount]
   );
   wsHub.broadcastAlertsChanged();
 }
 
+// Returns the new consecutive-failure count, so the caller can tier the
+// Teams alert (1st = Warning, 2nd+ = Critical).
 async function setLastDiscoveryFailed(id, errorMessage) {
-  await db.query(
+  const { rows } = await db.query(
     `UPDATE hyperv_hosts
         SET is_running = FALSE, last_status = 'error', last_error = $2,
-            last_attempt_at = NOW(), updated_at = NOW()
-      WHERE id = $1`,
+            last_attempt_at = NOW(), discovery_fail_count = discovery_fail_count + 1,
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING discovery_fail_count`,
     [id, errorMessage]
   );
   wsHub.broadcastAlertsChanged();
+  return rows[0]?.discovery_fail_count || 1;
 }
 
 function getDecryptedPassword(host) {
@@ -330,6 +335,144 @@ async function getDrift() {
   return results;
 }
 
+// Full VM-level added/removed/changed detail for every consecutive pair of
+// successful runs per host within the last `days` days — not just the
+// latest pair, like getDrift. Mirrors vmwareDbService's getDriftActivity.
+async function getDriftActivity(days = 7) {
+  const { rows: runRows } = await db.query(
+    `SELECT host_id, id AS run_id, run_at
+       FROM hyperv_discovery_runs
+      WHERE status = 'success' AND run_at >= NOW() - INTERVAL '1 day' * ($1 + 1)
+      ORDER BY host_id, run_at ASC`,
+    [days]
+  );
+  if (!runRows.length) return [];
+
+  const runIds = runRows.map(r => r.run_id);
+  const { rows: allVms } = await db.query(
+    'SELECT * FROM hyperv_discovered_vms WHERE run_id = ANY($1::int[])', [runIds]
+  );
+  const vmsByRun = new Map();
+  for (const vm of allVms) {
+    if (!vmsByRun.has(vm.run_id)) vmsByRun.set(vm.run_id, []);
+    vmsByRun.get(vm.run_id).push(vm);
+  }
+
+  const runsByHost = new Map();
+  for (const r of runRows) {
+    if (!runsByHost.has(r.host_id)) runsByHost.set(r.host_id, []);
+    runsByHost.get(r.host_id).push(r);
+  }
+
+  const key = v => v.vm_id || v.name;
+  const cutoff = new Date(Date.now() - days * 86400000);
+  const results = [];
+
+  for (const runs of runsByHost.values()) {
+    for (let i = 1; i < runs.length; i++) {
+      const prev = runs[i - 1];
+      const curr = runs[i];
+      if (new Date(curr.run_at) < cutoff) continue;
+
+      const currVms = vmsByRun.get(curr.run_id) || [];
+      const prevVms = vmsByRun.get(prev.run_id) || [];
+      const currByKey = Object.fromEntries(currVms.map(v => [key(v), v]));
+      const prevByKey = Object.fromEntries(prevVms.map(v => [key(v), v]));
+
+      const added   = currVms.filter(v => !prevByKey[key(v)]);
+      const removed = prevVms.filter(v => !currByKey[key(v)]);
+      const changed = currVms.filter(v => {
+        const p = prevByKey[key(v)];
+        return p && (v.state !== p.state || JSON.stringify(v.ips) !== JSON.stringify(p.ips));
+      }).map(v => ({ ...v, prev_state: prevByKey[key(v)].state, prev_ips: prevByKey[key(v)].ips }));
+
+      if (!added.length && !removed.length && !changed.length) continue;
+
+      results.push({
+        host:       currVms[0]?.source_host || prevVms[0]?.source_host || String(curr.host_id),
+        current_at: curr.run_at,
+        added, removed, changed,
+        summary: { added: added.length, removed: removed.length, changed: changed.length },
+      });
+    }
+  }
+
+  results.sort((a, b) => new Date(b.current_at) - new Date(a.current_at));
+  return results;
+}
+
+// Day-by-day added/removed/changed counts across all hosts for the last
+// `days` days, zero-filled for days with no runs. Mirrors vmwareDbService's
+// getDriftHistory.
+async function getDriftHistory(days = 7) {
+  const { rows: runRows } = await db.query(
+    `SELECT host_id, id AS run_id, run_at
+       FROM hyperv_discovery_runs
+      WHERE status = 'success' AND run_at >= NOW() - INTERVAL '1 day' * ($1 + 1)
+      ORDER BY host_id, run_at ASC`,
+    [days]
+  );
+
+  const vmsByRun = new Map();
+  if (runRows.length) {
+    const runIds = runRows.map(r => r.run_id);
+    const { rows: vmRows } = await db.query(
+      'SELECT run_id, vm_id, name, state, ips FROM hyperv_discovered_vms WHERE run_id = ANY($1::int[])',
+      [runIds]
+    );
+    for (const v of vmRows) {
+      if (!vmsByRun.has(v.run_id)) vmsByRun.set(v.run_id, new Map());
+      vmsByRun.get(v.run_id).set(v.vm_id || v.name, v);
+    }
+  }
+
+  const runsByHost = new Map();
+  for (const r of runRows) {
+    if (!runsByHost.has(r.host_id)) runsByHost.set(r.host_id, []);
+    runsByHost.get(r.host_id).push(r);
+  }
+
+  const cutoff = new Date(Date.now() - days * 86400000);
+  const dailyMap = new Map();
+
+  for (const runs of runsByHost.values()) {
+    for (let i = 1; i < runs.length; i++) {
+      const prev = runs[i - 1];
+      const curr = runs[i];
+      if (new Date(curr.run_at) < cutoff) continue;
+
+      const prevVms = vmsByRun.get(prev.run_id) || new Map();
+      const currVms = vmsByRun.get(curr.run_id) || new Map();
+
+      let added = 0, removed = 0, changed = 0;
+      for (const [key, vm] of currVms) {
+        const p = prevVms.get(key);
+        if (!p) { added++; continue; }
+        if (vm.state !== p.state || JSON.stringify(vm.ips) !== JSON.stringify(p.ips)) changed++;
+      }
+      for (const key of prevVms.keys()) {
+        if (!currVms.has(key)) removed++;
+      }
+
+      const dateKey = new Date(curr.run_at).toISOString().slice(0, 10);
+      const bucket = dailyMap.get(dateKey) || { added: 0, removed: 0, changed: 0 };
+      bucket.added += added;
+      bucket.removed += removed;
+      bucket.changed += changed;
+      dailyMap.set(dateKey, bucket);
+    }
+  }
+
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const dateKey = d.toISOString().slice(0, 10);
+    const bucket = dailyMap.get(dateKey) || { added: 0, removed: 0, changed: 0 };
+    result.push({ date: dateKey, ...bucket });
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Stale VMs
 // ---------------------------------------------------------------------------
@@ -368,5 +511,5 @@ module.exports = {
   setHostRunning, setLastDiscovery, setLastDiscoveryFailed, setHostStats, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
-  getDashboardStats, getDrift, getStaleVMs, getSnapshotVMs,
+  getDashboardStats, getDrift, getDriftActivity, getDriftHistory, getStaleVMs, getSnapshotVMs,
 };

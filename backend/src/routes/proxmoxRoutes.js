@@ -22,6 +22,8 @@ router.get('/nodes',         ...guard, ctrl.listNodes);
 router.get('/vms/export',    ...guard, ctrl.exportCSV);
 router.get('/dashboard',     ...guard, ctrl.getDashboard);
 router.get('/drift',         ...guard, ctrl.getDrift);
+router.get('/drift/history', ...guard, ctrl.getDriftHistory);
+router.get('/drift/activity',...guard, ctrl.getDriftActivity);
 router.get('/node-topology', ...guard, ctrl.getNodeTopology);
 router.get('/stale',         ...guard, ctrl.getStaleVMs);
 router.get('/snapshots',     ...guard, ctrl.getSnapshots);

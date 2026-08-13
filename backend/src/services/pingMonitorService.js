@@ -3,11 +3,12 @@
  * ----------------------
  * Scheduled ICMP connectivity check, independent of each platform's own
  * discovery poll — VMware/Proxmox/Hyper-V hosts each get pinged on their
- * own configurable day+time schedule (e.g. "every 1 day at 09:00").
- * Consecutive ping failures drive tiered Teams alerts (1st = Warning,
- * 2nd+ = Critical, re-alerting every check while still down, recovery =
- * Good) via teamsNotificationService, reusing that service's existing
- * per-platform notify_host_down_* toggles.
+ * own configurable minute interval, restricted to an optional active
+ * window (Start Time - End Time; a check tick outside the window is
+ * skipped entirely). Consecutive ping failures drive tiered Teams alerts
+ * (1st = Warning, 2nd+ = Critical, re-alerting every check while still
+ * down, recovery = Good) via teamsNotificationService, reusing that
+ * service's existing per-platform notify_host_down_* toggles.
  */
 
 let cron;
@@ -23,16 +24,26 @@ const TABLES = {
   'Hyper-V': 'hyperv_hosts',
 };
 
+// Platform -> its config field names for the active window.
+const WINDOW_FIELDS = {
+  VMware:    ['vmware_window_start',  'vmware_window_end'],
+  Proxmox:   ['proxmox_window_start', 'proxmox_window_end'],
+  'Hyper-V': ['hyperv_window_start',  'hyperv_window_end'],
+};
+
 const DEFAULTS = {
-  vmware_enabled:        true,
-  vmware_interval_days:  1,
-  vmware_check_time:     '09:00',
-  proxmox_enabled:       true,
-  proxmox_interval_days: 1,
-  proxmox_check_time:    '09:00',
-  hyperv_enabled:        true,
-  hyperv_interval_days:  1,
-  hyperv_check_time:     '09:00',
+  vmware_enabled:         true,
+  vmware_interval_minutes: 5,
+  vmware_window_start:    '00:00',
+  vmware_window_end:      '23:59',
+  proxmox_enabled:        true,
+  proxmox_interval_minutes: 5,
+  proxmox_window_start:   '00:00',
+  proxmox_window_end:     '23:59',
+  hyperv_enabled:         true,
+  hyperv_interval_minutes: 5,
+  hyperv_window_start:    '00:00',
+  hyperv_window_end:      '23:59',
 };
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -45,41 +56,48 @@ async function getConfig() {
 async function saveConfig(fields) {
   const cfg = await getConfig();
   const {
-    vmware_enabled        = cfg.vmware_enabled,
-    vmware_interval_days  = cfg.vmware_interval_days,
-    vmware_check_time     = cfg.vmware_check_time,
-    proxmox_enabled       = cfg.proxmox_enabled,
-    proxmox_interval_days = cfg.proxmox_interval_days,
-    proxmox_check_time    = cfg.proxmox_check_time,
-    hyperv_enabled        = cfg.hyperv_enabled,
-    hyperv_interval_days  = cfg.hyperv_interval_days,
-    hyperv_check_time     = cfg.hyperv_check_time,
+    vmware_enabled          = cfg.vmware_enabled,
+    vmware_interval_minutes = cfg.vmware_interval_minutes,
+    vmware_window_start     = cfg.vmware_window_start,
+    vmware_window_end       = cfg.vmware_window_end,
+    proxmox_enabled          = cfg.proxmox_enabled,
+    proxmox_interval_minutes = cfg.proxmox_interval_minutes,
+    proxmox_window_start     = cfg.proxmox_window_start,
+    proxmox_window_end       = cfg.proxmox_window_end,
+    hyperv_enabled          = cfg.hyperv_enabled,
+    hyperv_interval_minutes = cfg.hyperv_interval_minutes,
+    hyperv_window_start     = cfg.hyperv_window_start,
+    hyperv_window_end       = cfg.hyperv_window_end,
   } = fields;
 
-  for (const t of [vmware_check_time, proxmox_check_time, hyperv_check_time]) {
-    if (!TIME_RE.test(String(t))) throw new Error(`Invalid check time "${t}" — expected HH:MM (24-hour)`);
+  for (const t of [vmware_window_start, vmware_window_end, proxmox_window_start, proxmox_window_end,
+                    hyperv_window_start, hyperv_window_end]) {
+    if (!TIME_RE.test(String(t))) throw new Error(`Invalid window time "${t}" — expected HH:MM (24-hour)`);
   }
 
   await db.query(
     `INSERT INTO ping_monitor_config
-        (vmware_enabled, vmware_interval_days, vmware_check_time,
-         proxmox_enabled, proxmox_interval_days, proxmox_check_time,
-         hyperv_enabled, hyperv_interval_days, hyperv_check_time, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+        (vmware_enabled, vmware_interval_minutes, vmware_window_start, vmware_window_end,
+         proxmox_enabled, proxmox_interval_minutes, proxmox_window_start, proxmox_window_end,
+         hyperv_enabled, hyperv_interval_minutes, hyperv_window_start, hyperv_window_end, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
      ON CONFLICT (singleton) DO UPDATE SET
-        vmware_enabled        = EXCLUDED.vmware_enabled,
-        vmware_interval_days  = EXCLUDED.vmware_interval_days,
-        vmware_check_time     = EXCLUDED.vmware_check_time,
-        proxmox_enabled       = EXCLUDED.proxmox_enabled,
-        proxmox_interval_days = EXCLUDED.proxmox_interval_days,
-        proxmox_check_time    = EXCLUDED.proxmox_check_time,
-        hyperv_enabled        = EXCLUDED.hyperv_enabled,
-        hyperv_interval_days  = EXCLUDED.hyperv_interval_days,
-        hyperv_check_time     = EXCLUDED.hyperv_check_time,
-        updated_at            = NOW()`,
-    [vmware_enabled, vmware_interval_days, vmware_check_time,
-     proxmox_enabled, proxmox_interval_days, proxmox_check_time,
-     hyperv_enabled, hyperv_interval_days, hyperv_check_time],
+        vmware_enabled          = EXCLUDED.vmware_enabled,
+        vmware_interval_minutes = EXCLUDED.vmware_interval_minutes,
+        vmware_window_start     = EXCLUDED.vmware_window_start,
+        vmware_window_end       = EXCLUDED.vmware_window_end,
+        proxmox_enabled          = EXCLUDED.proxmox_enabled,
+        proxmox_interval_minutes = EXCLUDED.proxmox_interval_minutes,
+        proxmox_window_start     = EXCLUDED.proxmox_window_start,
+        proxmox_window_end       = EXCLUDED.proxmox_window_end,
+        hyperv_enabled          = EXCLUDED.hyperv_enabled,
+        hyperv_interval_minutes = EXCLUDED.hyperv_interval_minutes,
+        hyperv_window_start     = EXCLUDED.hyperv_window_start,
+        hyperv_window_end       = EXCLUDED.hyperv_window_end,
+        updated_at              = NOW()`,
+    [vmware_enabled, vmware_interval_minutes, vmware_window_start, vmware_window_end,
+     proxmox_enabled, proxmox_interval_minutes, proxmox_window_start, proxmox_window_end,
+     hyperv_enabled, hyperv_interval_minutes, hyperv_window_start, hyperv_window_end],
   );
 
   const updated = await getConfig();
@@ -87,19 +105,34 @@ async function saveConfig(fields) {
   return updated;
 }
 
-// "Every N days at HH:MM" — day-of-month step for N>1 (resets each month
-// boundary, a well-known cron limitation for "every N days", accepted here
-// since a monitor waking a day early/late once a month is harmless).
-function scheduleToCron(intervalDays, checkTime) {
-  const [hh, mm] = String(checkTime || '09:00').split(':').map(n => parseInt(n, 10) || 0);
-  const days = Math.max(1, Math.round(intervalDays) || 1);
-  const dom = days === 1 ? '*' : `*/${days}`;
-  return `${mm} ${hh} ${dom} * *`;
+function intervalToCron(minutes) {
+  const m = Math.max(1, Math.round(minutes) || 5);
+  if (m < 60) return `*/${m} * * * *`;
+  const h = Math.floor(m / 60);
+  return `0 */${h} * * *`;
+}
+
+// Supports an overnight window (e.g. start 22:00, end 06:00).
+function isWithinWindow(start, end) {
+  const [sh, sm] = String(start || '00:00').split(':').map(Number);
+  const [eh, em] = String(end   || '23:59').split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins   = eh * 60 + em;
+
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  if (startMins <= endMins) return nowMins >= startMins && nowMins <= endMins;
+  return nowMins >= startMins || nowMins <= endMins;
 }
 
 async function checkPlatform(platform) {
   const table = TABLES[platform];
   if (!table) return;
+
+  const cfg = await getConfig();
+  const [startKey, endKey] = WINDOW_FIELDS[platform] || [];
+  if (startKey && !isWithinWindow(cfg[startKey], cfg[endKey])) return; // outside this platform's active window
 
   const { rows: hosts } = await db.query(
     `SELECT id, host, ping_status, ping_fail_count FROM ${table}`
@@ -140,7 +173,7 @@ async function checkPlatform(platform) {
 
 const jobs = {}; // platform -> cron.Task
 
-function schedulePlatform(platform, enabled, intervalDays, checkTime) {
+function schedulePlatform(platform, enabled, intervalMinutes, windowStart, windowEnd) {
   if (!cron) return;
   if (jobs[platform]) {
     try { jobs[platform].stop(); } catch { /* ignore */ }
@@ -148,7 +181,7 @@ function schedulePlatform(platform, enabled, intervalDays, checkTime) {
   }
   if (!enabled) return;
 
-  const expr = scheduleToCron(intervalDays, checkTime);
+  const expr = intervalToCron(intervalMinutes);
   if (!cron.validate(expr)) {
     // eslint-disable-next-line no-console
     console.warn(`[ping-monitor] invalid cron expr for ${platform}: ${expr}`);
@@ -161,13 +194,13 @@ function schedulePlatform(platform, enabled, intervalDays, checkTime) {
     )
   );
   // eslint-disable-next-line no-console
-  console.log(`[ping-monitor] scheduled ${platform} — ${expr} (every ${intervalDays} day(s) at ${checkTime})`);
+  console.log(`[ping-monitor] scheduled ${platform} — ${expr} (every ${intervalMinutes}min, active ${windowStart}-${windowEnd})`);
 }
 
 function rescheduleAll(cfg) {
-  schedulePlatform('VMware',   cfg.vmware_enabled,  cfg.vmware_interval_days,  cfg.vmware_check_time);
-  schedulePlatform('Proxmox',  cfg.proxmox_enabled, cfg.proxmox_interval_days, cfg.proxmox_check_time);
-  schedulePlatform('Hyper-V',  cfg.hyperv_enabled,  cfg.hyperv_interval_days,  cfg.hyperv_check_time);
+  schedulePlatform('VMware',  cfg.vmware_enabled,  cfg.vmware_interval_minutes,  cfg.vmware_window_start,  cfg.vmware_window_end);
+  schedulePlatform('Proxmox', cfg.proxmox_enabled, cfg.proxmox_interval_minutes, cfg.proxmox_window_start, cfg.proxmox_window_end);
+  schedulePlatform('Hyper-V', cfg.hyperv_enabled,  cfg.hyperv_interval_minutes,  cfg.hyperv_window_start,  cfg.hyperv_window_end);
 }
 
 async function initFromDb() {

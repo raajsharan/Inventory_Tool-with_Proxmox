@@ -94,8 +94,8 @@ export default function VMDrift() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get('/vmware/drift')
-      .then(r => setDrift(r.data.drift || []))
+    api.get('/vmware/drift/activity', { params: { days: 7 } })
+      .then(r => setDrift(r.data.activity || []))
       .catch(e => setError(e?.response?.data?.error || e.message || 'Failed to load change detection.'))
       .finally(() => setLoading(false));
   }, []);
@@ -109,7 +109,7 @@ export default function VMDrift() {
     return (
       <div>
         <DriftHistoryChart />
-        <Empty description="No changes detected. At least two successful discoveries per host are required." style={{ marginTop: 40 }} />
+        <Empty description="No changes detected in the last 7 days. At least two successful discoveries per host are required." style={{ marginTop: 40 }} />
       </div>
     );
   }
@@ -121,6 +121,7 @@ export default function VMDrift() {
       label: (
         <Space>
           <Text strong>{d.host}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{new Date(d.current_at).toLocaleString()}</Text>
           {d.summary.added   > 0 && <Badge count={`+${d.summary.added}`}   color="green" />}
           {d.summary.removed > 0 && <Badge count={`-${d.summary.removed}`} color="red" />}
           {d.summary.changed > 0 && <Badge count={`~${d.summary.changed}`} color="orange" />}

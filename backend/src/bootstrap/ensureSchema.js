@@ -61,43 +61,59 @@ const STATEMENTS = [
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
 
+  // Consecutive discovery-run failure counter — 1st failure alerts as
+  // Warning, 2nd and every one after that alerts as Critical, reset to 0
+  // on the next successful run. Mirrors ping_fail_count's tiering.
+  // (hyperv_hosts's own copy of this column lives further down, right after
+  // that table's CREATE TABLE — this file's hyperv_hosts is created by
+  // ensureSchema itself, unlike vmware_hosts/proxmox_hosts which are
+  // pre-existing tables from the manually-applied db/*_schema.sql files, so
+  // an ALTER on it up here would run before the table exists yet.)
+  `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS discovery_fail_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS discovery_fail_count INT NOT NULL DEFAULT 0`,
+
   // ── Ping-based connectivity monitoring (independent of discovery runs) —
   // a scheduled ICMP ping per host, tracked separately so Warning/Critical
   // Teams alerts can fire on 1st/2nd+ consecutive ping failure without
   // waiting on (or being tied to) the much slower discovery poll cycle.
+  // (hyperv_hosts's copy lives further down for the same reason as above.)
   `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
   `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
   `ALTER TABLE vmware_hosts  ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
-  `ALTER TABLE hyperv_hosts  ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
-  `ALTER TABLE hyperv_hosts  ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
-  `ALTER TABLE hyperv_hosts  ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
 
   `CREATE TABLE IF NOT EXISTS ping_monitor_config (
       id                       SERIAL PRIMARY KEY,
       singleton                BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
       vmware_enabled           BOOLEAN NOT NULL DEFAULT TRUE,
-      vmware_interval_days     INT     NOT NULL DEFAULT 1,
-      vmware_check_time        VARCHAR(5) NOT NULL DEFAULT '09:00',
+      vmware_interval_minutes  INT     NOT NULL DEFAULT 5,
+      vmware_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00',
+      vmware_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59',
       proxmox_enabled          BOOLEAN NOT NULL DEFAULT TRUE,
-      proxmox_interval_days    INT     NOT NULL DEFAULT 1,
-      proxmox_check_time       VARCHAR(5) NOT NULL DEFAULT '09:00',
+      proxmox_interval_minutes INT     NOT NULL DEFAULT 5,
+      proxmox_window_start     VARCHAR(5) NOT NULL DEFAULT '00:00',
+      proxmox_window_end       VARCHAR(5) NOT NULL DEFAULT '23:59',
       hyperv_enabled           BOOLEAN NOT NULL DEFAULT TRUE,
-      hyperv_interval_days     INT     NOT NULL DEFAULT 1,
-      hyperv_check_time        VARCHAR(5) NOT NULL DEFAULT '09:00',
+      hyperv_interval_minutes  INT     NOT NULL DEFAULT 5,
+      hyperv_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00',
+      hyperv_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59',
       updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
-  // Day+time schedule (e.g. "every 1 day at 09:00") superseded the original
-  // minute-based interval — added via ALTER for installs where the table
-  // above already existed with only the old *_interval_minutes columns.
-  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_interval_days  INT NOT NULL DEFAULT 1`,
-  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_check_time     VARCHAR(5) NOT NULL DEFAULT '09:00'`,
-  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_interval_days INT NOT NULL DEFAULT 1`,
-  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_check_time    VARCHAR(5) NOT NULL DEFAULT '09:00'`,
-  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_interval_days  INT NOT NULL DEFAULT 1`,
-  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_check_time     VARCHAR(5) NOT NULL DEFAULT '09:00'`,
+  // Minute interval + Start/End active window superseded the original
+  // day+time-of-day schedule — added via ALTER for installs where the
+  // table above already existed with only the old *_interval_days /
+  // *_check_time columns.
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_interval_minutes  INT NOT NULL DEFAULT 5`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_interval_minutes INT NOT NULL DEFAULT 5`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_window_start     VARCHAR(5) NOT NULL DEFAULT '00:00'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_window_end       VARCHAR(5) NOT NULL DEFAULT '23:59'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_interval_minutes  INT NOT NULL DEFAULT 5`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00'`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59'`,
 
   // ── VMware discovery: ESXi host hardware telemetry (CPU/RAM/disk/uptime),
   // fetched via vim25 SOAP alongside each discovery run — powers the extra
@@ -694,6 +710,10 @@ const STATEMENTS = [
   `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_status VARCHAR(20)`,
   `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_error  TEXT`,
   `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS discovery_fail_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS ping_status VARCHAR(10)`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE hyperv_hosts ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
 
   // ── Hyper-V discovery: host hardware telemetry (CPU/RAM/disk/uptime) via
   // CIM/WMI, collected alongside each discovery run — same Hosts &

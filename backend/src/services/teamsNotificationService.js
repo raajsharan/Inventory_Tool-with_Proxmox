@@ -371,20 +371,25 @@ function isWithinAlertWindow(cfg) {
   return nowMins >= startMins || nowMins <= endMins; // wraps past midnight
 }
 
-async function notifyHostDown(platform, host, errorMessage = null) {
+// failCount ties the alert's severity to how many consecutive discovery
+// attempts have failed — 1st failure is a Warning, every one after that is
+// Critical (re-alerts every attempt while still down, by design).
+async function notifyHostDown(platform, host, errorMessage = null, failCount = 1) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
   if (!isWithinAlertWindow(cfg)) return;
 
+  const isCritical = failCount >= 2;
   const card = buildCard({
-    subtitle: `🔴 ${platform} Discovery`,
-    title: `Host Unreachable: ${host}`,
-    color: 'Attention',
+    subtitle: `${isCritical ? '🔴' : '🟡'} ${platform} Discovery`,
+    title: `${isCritical ? 'Critical' : 'Warning'}: ${host} is unreachable`,
+    color: isCritical ? 'Attention' : 'Warning',
     facts: [
-      { title: 'Host',     value: host },
-      { title: 'Platform', value: platform },
-      { title: 'Error',    value: errorMessage },
+      { title: 'Host',                 value: host },
+      { title: 'Platform',             value: platform },
+      { title: 'Consecutive Failures', value: String(failCount) },
+      { title: 'Error',                value: errorMessage },
     ],
   });
   await send(card);

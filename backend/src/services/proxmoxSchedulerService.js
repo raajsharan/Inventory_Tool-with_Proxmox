@@ -52,13 +52,11 @@ async function runDiscovery(hostId) {
   } catch (err) {
     console.error(`[proxmox-scheduler] discovery failed for ${host.host}: ${err.message}`);
     await db.failRun(runId, err.message);
-    await db.setLastDiscoveryFailed(hostId, err.message);
+    const failCount = await db.setLastDiscoveryFailed(hostId, err.message);
 
-    // Notify immediately, but only on the up -> down transition, so a host
-    // that's already known to be down doesn't re-alert on every poll.
-    if (host.last_status !== 'error') {
-      teams.notifyHostDown('Proxmox', host.host, err.message).catch(() => {});
-    }
+    // Notify on every failed attempt — tiered by consecutive-failure count
+    // (1st = Warning, 2nd+ = Critical), not just the up -> down transition.
+    teams.notifyHostDown('Proxmox', host.host, err.message, failCount).catch(() => {});
   } finally {
     running.delete(hostId);
   }

@@ -75,7 +75,8 @@ async function setLastDiscovery(id, vmCount) {
   await db.query(
     `UPDATE vmware_hosts
         SET last_discovery_at = NOW(), last_vm_count = $2, is_running = FALSE,
-            last_status = 'success', last_error = NULL, last_attempt_at = NOW()
+            last_status = 'success', last_error = NULL, last_attempt_at = NOW(),
+            discovery_fail_count = 0
       WHERE id = $1`,
     [id, vmCount]
   );
@@ -84,14 +85,19 @@ async function setLastDiscovery(id, vmCount) {
   wsHub.broadcastAlertsChanged();
 }
 
+// Returns the new consecutive-failure count, so the caller can tier the
+// Teams alert (1st = Warning, 2nd+ = Critical).
 async function setLastDiscoveryFailed(id, errorMessage) {
-  await db.query(
+  const { rows } = await db.query(
     `UPDATE vmware_hosts
-        SET is_running = FALSE, last_status = 'error', last_error = $2, last_attempt_at = NOW()
-      WHERE id = $1`,
+        SET is_running = FALSE, last_status = 'error', last_error = $2, last_attempt_at = NOW(),
+            discovery_fail_count = discovery_fail_count + 1
+      WHERE id = $1
+      RETURNING discovery_fail_count`,
     [id, errorMessage]
   );
   wsHub.broadcastAlertsChanged();
+  return rows[0]?.discovery_fail_count || 1;
 }
 
 // Best-effort hardware telemetry — called alongside a successful discovery
@@ -387,6 +393,78 @@ async function getDrift() {
   return results;
 }
 
+// Full VM-level added/removed/changed detail for every consecutive pair of
+// successful runs per host within the last `days` days — not just the
+// latest pair, like getDrift. Powers the Change Detection detail list
+// underneath the 7-day chart, so a change from earlier in the week stays
+// visible even after a same-day no-op poll would otherwise blank it out.
+async function getDriftActivity(days = 7) {
+  const { rows: runRows } = await db.query(
+    `SELECT host_id, id AS run_id, run_at
+       FROM vmware_discovery_runs
+      WHERE status = 'success' AND run_at >= NOW() - INTERVAL '1 day' * ($1 + 1)
+      ORDER BY host_id, run_at ASC`,
+    [days]
+  );
+  if (!runRows.length) return [];
+
+  const runIds = runRows.map(r => r.run_id);
+  const { rows: allVms } = await db.query(
+    `SELECT * FROM vmware_discovered_vms WHERE run_id = ANY($1::uuid[])`, [runIds]
+  );
+  const vmsByRun = new Map();
+  for (const vm of allVms) {
+    if (!vmsByRun.has(vm.run_id)) vmsByRun.set(vm.run_id, []);
+    vmsByRun.get(vm.run_id).push(vm);
+  }
+
+  const runsByHost = new Map();
+  for (const r of runRows) {
+    if (!runsByHost.has(r.host_id)) runsByHost.set(r.host_id, []);
+    runsByHost.get(r.host_id).push(r);
+  }
+
+  const cutoff = new Date(Date.now() - days * 86400000);
+  const results = [];
+
+  for (const runs of runsByHost.values()) {
+    for (let i = 1; i < runs.length; i++) {
+      const prev = runs[i - 1];
+      const curr = runs[i];
+      if (new Date(curr.run_at) < cutoff) continue;
+
+      const currVms = vmsByRun.get(curr.run_id) || [];
+      const prevVms = vmsByRun.get(prev.run_id) || [];
+      const currByName = Object.fromEntries(currVms.map(v => [v.name, v]));
+      const prevByName = Object.fromEntries(prevVms.map(v => [v.name, v]));
+
+      const added   = currVms.filter(v => !prevByName[v.name]);
+      const removed = prevVms.filter(v => !currByName[v.name]);
+      const changed = currVms.filter((v) => {
+        const p = prevByName[v.name];
+        if (!p) return false;
+        return v.power_state !== p.power_state || JSON.stringify(v.ips) !== JSON.stringify(p.ips);
+      }).map((v) => ({
+        ...v,
+        prev_power_state: prevByName[v.name].power_state,
+        prev_ips:         prevByName[v.name].ips,
+      }));
+
+      if (!added.length && !removed.length && !changed.length) continue;
+
+      results.push({
+        host:       currVms[0]?.source_host || prevVms[0]?.source_host || curr.host_id,
+        current_at: curr.run_at,
+        added, removed, changed,
+        summary: { added: added.length, removed: removed.length, changed: changed.length },
+      });
+    }
+  }
+
+  results.sort((a, b) => new Date(b.current_at) - new Date(a.current_at));
+  return results;
+}
+
 // Day-by-day added/removed/changed counts across all hosts for the last
 // `days` days — walks every consecutive pair of successful runs per host
 // (not just the latest two, like getDrift), so a week of history survives
@@ -624,5 +702,5 @@ module.exports = {
   setHostStats, clearHostStats, setEsxiHostStats,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs, getReconciliation,
-  getDashboardStats, getDrift, getDriftHistory, getESXiTopology, getStaleVMs, getSnapshotVMs,
+  getDashboardStats, getDrift, getDriftActivity, getDriftHistory, getESXiTopology, getStaleVMs, getSnapshotVMs,
 };
