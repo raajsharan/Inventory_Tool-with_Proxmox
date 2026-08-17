@@ -143,7 +143,6 @@ async function summary(_req, res, next) {
     const mslQ = db.query(`
       WITH inv AS (
         SELECT server_status, eol_status, asset_password_encrypted FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL SELECT server_status, eol_status, asset_password_encrypted FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL SELECT server_status, NULL::text AS eol_status, asset_password_encrypted FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
       )
       SELECT
@@ -164,14 +163,15 @@ async function summary(_req, res, next) {
        AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
     `, [mslInclStatuses, mslExclEol]);
 
-    // Beijing Assets' raw VM count (asset_type = 'vm', not MSL-status-filtered
-    // like mslQ's own small Beijing subset above) — added on top of
-    // combinedNumerator/combinedDenominator only, so the "Overall Asset
-    // Inventory" figure reflects the full Beijing inventory. Deliberately
-    // NOT removed from mslQ's union, so the standalone MSL Compliance
-    // figures elsewhere (Executive Overview, Weekly Report masthead) are
-    // unaffected — this does mean Beijing's small MSL-eligible subset is
-    // counted twice across the two paths, which is an accepted trade-off.
+    // Beijing Assets' raw VM count (asset_type = 'vm') — this is now Beijing's
+    // ONLY contribution to combinedNumerator/combinedDenominator; it was
+    // removed from mslQ's union above so Beijing is counted exactly once
+    // across the Weekly Report's totals (Combined Inventory Count, the
+    // Nessus line, and the Location-wise table all now agree). This does
+    // mean the standalone MSL Compliance figures elsewhere (Executive
+    // Overview, Weekly Report masthead) lose Beijing's small MSL-eligible
+    // slice that used to be baked into mslQ — an accepted, deliberate
+    // side effect of standardizing on one Beijing count everywhere.
     const beijingRawQ = db.query(`
       SELECT
         COUNT(*)::int AS total,
@@ -260,13 +260,13 @@ async function summary(_req, res, next) {
 
     // Location-wise count for Asset Inventory + Ext. Assets combined
     // (shown in the Weekly Report's merged Asset Inventory section). Mirrors
-    // the same row population as mslQ (assets+beijing+physical_esxi, filtered
-    // by the configurable status/EOL lists) and extComplianceQ's in_scope
-    // definition, so this total lines up with mslDenominator + extComp.total.
-    // Beijing Assets is grouped by its own location field, same as the
-    // rest — counted as raw VM-only rows (asset_type = 'vm'), not
-    // MSL-scope filtered, matching the Beijing Assets page's own total
-    // minus non-VM rows.
+    // the same row population as mslQ (assets+physical_esxi, filtered by the
+    // configurable status/EOL lists), extComplianceQ's in_scope definition,
+    // and beijingRawQ's raw VM-only filter — so this Grand Total lines up
+    // exactly with combinedDenominator (mslDenominator + extComp.total +
+    // beijingRaw.total). Rows with no location value are bucketed under
+    // "Unassigned" rather than dropped, so nothing silently vanishes from
+    // the total.
     const assetExtLocationCountQ = db.query(`
       WITH inv AS (
         SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
@@ -302,9 +302,8 @@ async function summary(_req, res, next) {
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
            AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       )
-      SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
+      SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unassigned') AS location, COUNT(*)::int AS count
         FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f UNION ALL SELECT location FROM beijing_f) x
-       WHERE location IS NOT NULL AND location <> ''
        GROUP BY 1
        ORDER BY 2 DESC;
     `, [mslInclStatuses, mslExclEol]);
@@ -422,28 +421,54 @@ async function summary(_req, res, next) {
       FROM vm;
     `);
 
-    // Weekly Report: raw Nessus install count across the whole inventory —
-    // deliberately NOT excluding appliances/hypervisors/EOL-unsupported OS
-    // like the Nessus Agent Status page's own compliance % does, since this
-    // line is meant to show against the full inventory with that fact
-    // called out as a footnote, not the agent-eligible subset.
+    // Weekly Report: Nessus install count using the EXACT same population as
+    // combinedDenominator (mslQ's status-eligible Asset+Physical rows,
+    // extComplianceQ's in-scope Ext rows, beijingRawQ's raw-VM Beijing rows)
+    // so this line's total agrees with the Combined Inventory Count and the
+    // Location-wise Grand Total. Still includes appliances/hypervisors/
+    // EOL-unsupported OS (there's no os_type filter here), hence the
+    // footnote — it just now also excludes ineligible-status/decommissioned
+    // rows the same way the other totals do.
     const weeklyNessusQ = db.query(`
       WITH all_vms AS (
-        SELECT tenable_installed FROM assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+        SELECT tenable_installed, server_status, eol_status FROM assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL
-        SELECT tenable_installed FROM beijing_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
-        UNION ALL
+        SELECT false AS tenable_installed, server_status, NULL::text AS eol_status FROM physical_esxi_servers
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+      ),
+      msl_f AS (
+        SELECT tenable_installed FROM all_vms
+         WHERE (
+           array_length($1::text[], 1) IS NULL
+           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+         )
+         AND (
+           array_length($2::text[], 1) IS NULL
+           OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
+         )
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+      ),
+      ext_f AS (
         SELECT tenable_installed FROM ext_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
-        UNION ALL
-        SELECT false AS tenable_installed FROM physical_esxi_servers
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+         WHERE deleted_at IS NULL
+           AND decommissioned_at IS NULL
+           AND (server_status IS NULL OR (
+                 server_status NOT ILIKE 'Decom%'
+             AND server_status NOT ILIKE 'Not Applic%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
+           ))
+      ),
+      beijing_f AS (
+        SELECT tenable_installed FROM beijing_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+           AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       )
       SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE tenable_installed)::int AS installed
-      FROM all_vms
-    `);
+        FROM (SELECT tenable_installed FROM msl_f UNION ALL SELECT tenable_installed FROM ext_f UNION ALL SELECT tenable_installed FROM beijing_f) x
+    `, [mslInclStatuses, mslExclEol]);
 
     // ---------------------------------------------------------------
     // Weekly Report extras: location-wise + department-wise patching
