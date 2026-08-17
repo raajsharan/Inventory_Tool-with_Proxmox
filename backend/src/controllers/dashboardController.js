@@ -160,6 +160,23 @@ async function summary(_req, res, next) {
        )
     `, [mslInclStatuses, mslExclEol]);
 
+    // Beijing Assets' raw VM count (asset_type = 'vm', not MSL-status-filtered
+    // like mslQ's own small Beijing subset above) — added on top of
+    // combinedNumerator/combinedDenominator only, so the "Overall Asset
+    // Inventory" figure reflects the full Beijing inventory. Deliberately
+    // NOT removed from mslQ's union, so the standalone MSL Compliance
+    // figures elsewhere (Executive Overview, Weekly Report masthead) are
+    // unaffected — this does mean Beijing's small MSL-eligible subset is
+    // counted twice across the two paths, which is an accepted trade-off.
+    const beijingRawQ = db.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE asset_password_encrypted IS NOT NULL)::int AS with_password
+        FROM beijing_assets
+       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
+    `);
+
     // "in_scope" = countable endpoint: not deleted, not decommissioned
     // (flag or status), and status is not Not Applicable / Not in Scope.
     const extComplianceQ = db.query(`
@@ -398,6 +415,25 @@ async function summary(_req, res, next) {
       FROM vm;
     `);
 
+    // Weekly Report: raw Nessus install count across the whole inventory —
+    // deliberately NOT excluding appliances/hypervisors/EOL-unsupported OS
+    // like the Nessus Agent Status page's own compliance % does, since this
+    // line is meant to show against the full inventory with that fact
+    // called out as a footnote, not the agent-eligible subset.
+    const weeklyNessusQ = db.query(`
+      WITH all_vms AS (
+        SELECT tenable_installed FROM assets              WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL
+        SELECT tenable_installed FROM beijing_assets       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL
+        SELECT tenable_installed FROM ext_assets           WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL
+        SELECT false AS tenable_installed FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+      )
+      SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE tenable_installed)::int AS installed
+      FROM all_vms
+    `);
+
     // ---------------------------------------------------------------
     // Weekly Report extras: location-wise + department-wise patching
     // breakdown across the three VM-side tables. Beijing IT column =
@@ -595,13 +631,13 @@ async function summary(_req, res, next) {
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
-           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount] = await Promise.all([
+           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw, weeklyNessus] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
-      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ,
+      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ, beijingRawQ, weeklyNessusQ,
     ]);
 
     const i = inv.rows[0];
@@ -664,8 +700,8 @@ async function summary(_req, res, next) {
         mslDenominator: mslRow.rows[0].msl_denominator,
         extNumerator:   extComp.rows[0].with_password,
         extDenominator: extComp.rows[0].total,
-        combinedNumerator:   mslRow.rows[0].msl_numerator + extComp.rows[0].with_password,
-        combinedDenominator: mslRow.rows[0].msl_denominator + extComp.rows[0].total,
+        combinedNumerator:   mslRow.rows[0].msl_numerator + extComp.rows[0].with_password + beijingRaw.rows[0].with_password,
+        combinedDenominator: mslRow.rows[0].msl_denominator + extComp.rows[0].total + beijingRaw.rows[0].total,
         locations: locationCount.rows,
         assetExtLocations: assetExtLocationCount.rows,
       },
@@ -688,6 +724,7 @@ async function summary(_req, res, next) {
       vmCountByLocation: vmLocation.rows,
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
+      weeklyNessus: weeklyNessus.rows[0],
       weeklyLocationPatching:   weeklyLocationPatching.rows,
       weeklyDepartmentPatching: weeklyDepartmentPatching.rows,
       meMslBreakdown:  meMslBreakdown.rows,

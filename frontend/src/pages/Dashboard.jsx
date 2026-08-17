@@ -1338,6 +1338,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
+  const nessus = data.weeklyNessus || {};
   const assetPatching = data.assetInventoryPatchingStatus || {};
   const extPatching   = data.extInventoryPatchingStatus || {};
   const locRows  = data.weeklyLocationPatching || [];
@@ -1452,6 +1453,13 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
             <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
           </ul>
+
+          <Typography.Paragraph style={{ marginBottom: 16 }}>
+            → So far Nessus is installed on around <strong>{(nessus.installed ?? 0).toLocaleString()} / {(nessus.total ?? 0).toLocaleString()}</strong> = <strong>{pct(nessus.installed, nessus.total)}%</strong>{' '}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              **Includes appliances, hypervisors, EOL not supported OS VMs which are not applicable.
+            </Typography.Text>
+          </Typography.Paragraph>
 
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
