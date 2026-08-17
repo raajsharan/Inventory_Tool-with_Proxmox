@@ -158,6 +158,10 @@ async function summary(_req, res, next) {
          array_length($2::text[], 1) IS NULL
          OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
        )
+       -- Unconditional: decommissioned/deleted never count toward inventory
+       -- totals, even if the configured include-status list would otherwise
+       -- allow a textual "Decommissioned" status through.
+       AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
     `, [mslInclStatuses, mslExclEol]);
 
     // Beijing Assets' raw VM count (asset_type = 'vm', not MSL-status-filtered
@@ -174,6 +178,7 @@ async function summary(_req, res, next) {
         COUNT(*) FILTER (WHERE asset_password_encrypted IS NOT NULL)::int AS with_password
         FROM beijing_assets
        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
          AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
     `);
 
@@ -277,6 +282,7 @@ async function summary(_req, res, next) {
            array_length($2::text[], 1) IS NULL
            OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
          )
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
       ),
       ext_f AS (
         SELECT location
@@ -293,6 +299,7 @@ async function summary(_req, res, next) {
       beijing_f AS (
         SELECT location FROM beijing_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
            AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       )
       SELECT COALESCE(location, 'Unassigned') AS location, COUNT(*)::int AS count
@@ -422,13 +429,17 @@ async function summary(_req, res, next) {
     // called out as a footnote, not the agent-eligible subset.
     const weeklyNessusQ = db.query(`
       WITH all_vms AS (
-        SELECT tenable_installed FROM assets              WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        SELECT tenable_installed FROM assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
-        SELECT tenable_installed FROM beijing_assets       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        SELECT tenable_installed FROM beijing_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
-        SELECT tenable_installed FROM ext_assets           WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        SELECT tenable_installed FROM ext_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
-        SELECT false AS tenable_installed FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        SELECT false AS tenable_installed FROM physical_esxi_servers
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
       )
       SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE tenable_installed)::int AS installed
       FROM all_vms
