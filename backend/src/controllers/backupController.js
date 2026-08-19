@@ -50,11 +50,11 @@ async function runPgNow(req, res, next) {
 
 async function runCsvNow(req, res, next) {
   try {
-    const targets = Array.isArray(req.body?.targets) ? req.body.targets : undefined;
-    const { files } = await svc.runCsvExport({
+    const reqTargets = Array.isArray(req.body?.targets) ? req.body.targets : undefined;
+    const { files, targets } = await svc.runCsvExport({
       trigger: 'manual',
       userId: req.user.id,
-      targets,
+      targets: reqTargets,
     });
     await audit.log({ user: req.user, action: 'EXPORT', entityType: 'csv', details: { files: files.map(f => path.basename(f.file)) }, ipAddress: req.ip });
 
@@ -64,7 +64,16 @@ async function runCsvNow(req, res, next) {
       fs.createReadStream(files[0].file).pipe(res);
       return;
     }
-    res.json({ files: files.map(f => ({ name: path.basename(f.file), rows: f.count })) });
+
+    // Multiple tables — the per-table CSVs above still land in the server's
+    // export directory (so the run history / restore-by-date flow keeps
+    // working), but what the user actually gets back here is a single
+    // downloadable .xlsx with one sheet per table.
+    const buffer = await svc.buildXlsxExport(targets);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="inventory_export_${stamp}.xlsx"`);
+    res.send(buffer);
   } catch (e) { next(e); }
 }
 

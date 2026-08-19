@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const ExcelJS = require('exceljs');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const { encrypt, decryptSafe } = require('../utils/crypto');
@@ -237,12 +238,16 @@ function encryptPasswordColumnsForRestore(row) {
   return out;
 }
 
-async function dumpTableToCsv(table, dir) {
+async function fetchTableRows(table) {
   const safe = INVENTORY_TABLES.includes(table) ? table : null;
   if (!safe) throw new ApiError(400, `CSV export not allowed for table: ${table}`);
   const { rows: rawRows } = await db.query(`SELECT * FROM ${safe} ORDER BY created_at`);
-  const rows = rawRows.map(decryptPasswordColumns);
-  const file = path.join(dir, `${safe}_${nowStamp()}.csv`);
+  return rawRows.map(decryptPasswordColumns);
+}
+
+async function dumpTableToCsv(table, dir) {
+  const rows = await fetchTableRows(table);
+  const file = path.join(dir, `${table}_${nowStamp()}.csv`);
   if (!rows.length) {
     await fsp.writeFile(file, '');
     return { file, count: 0 };
@@ -254,6 +259,42 @@ async function dumpTableToCsv(table, dir) {
   }
   await fsp.writeFile(file, lines.join('\n'), 'utf8');
   return { file, count: rows.length };
+}
+
+// Friendly sheet titles for the multi-table XLSX export — Excel sheet names
+// are capped at 31 chars and can't contain : \ / ? * [ ], so these are also
+// kept short and plain for safety.
+const SHEET_LABELS = {
+  assets:                'Asset Inventory',
+  ext_assets:            'Extended Inventory',
+  beijing_assets:        'Beijing Asset List',
+  physical_esxi_servers: 'Physical & ESXi',
+};
+
+// Builds a single .xlsx workbook with one worksheet per selected table, for
+// the "Export Selected CSVs Now" button when more than one table is picked
+// — a real download the browser can save, instead of the previous behavior
+// of silently writing files to the server's export directory with no way
+// to actually get them.
+async function buildXlsxExport(targets) {
+  const workbook = new ExcelJS.Workbook();
+  for (const table of targets) {
+    const rows = await fetchTableRows(table);
+    const sheet = workbook.addWorksheet(SHEET_LABELS[table] || table);
+    if (!rows.length) continue;
+    const headers = Object.keys(rows[0]);
+    sheet.columns = headers.map(h => ({ header: h, key: h, width: 18 }));
+    for (const r of rows) {
+      const flat = {};
+      for (const h of headers) {
+        const v = r[h];
+        flat[h] = v !== null && typeof v === 'object' ? JSON.stringify(v) : v;
+      }
+      sheet.addRow(flat);
+    }
+    sheet.getRow(1).font = { bold: true };
+  }
+  return workbook.xlsx.writeBuffer();
 }
 
 async function runCsvExport({ trigger, userId, targets }) {
@@ -275,7 +316,7 @@ async function runCsvExport({ trigger, userId, targets }) {
       filePath: exported.map(e => path.basename(e.file)).join('; '),
       fileSize: totalBytes, triggeredBy: userId, startedAt,
     });
-    return { files: exported };
+    return { files: exported, targets: list };
   } catch (e) {
     await recordRun({
       kind: 'csv', trigger, status: 'error',
@@ -469,4 +510,5 @@ module.exports = {
   getSettings, updateSettings, listRuns,
   runPgBackup, runCsvExport, restoreFromDump,
   listCsvFiles, restoreTableFromCsv, restoreTableFromHistoricalFile,
+  buildXlsxExport,
 };

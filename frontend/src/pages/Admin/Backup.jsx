@@ -316,22 +316,23 @@ function CsvExportTab() {
     if (!selected.length) { message.warning('Pick at least one table'); return; }
     setRunning(true);
     try {
-      const res = await api.post('/backup/csv/run', { targets: selected }, {
-        responseType: selected.length === 1 ? 'blob' : 'json',
-      });
-      if (selected.length === 1) {
-        const cd = res.headers['content-disposition'] || '';
-        const m = /filename="([^"]+)"/.exec(cd);
-        const fname = m ? m[1] : `${selected[0]}.csv`;
-        const url = URL.createObjectURL(new Blob([res.data]));
-        const a = document.createElement('a'); a.href = url; a.download = fname; a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        message.success(`Exported ${res.data.files.length} file(s) to server export directory`);
-      }
+      const res = await api.post('/backup/csv/run', { targets: selected }, { responseType: 'blob' });
+      const cd = res.headers['content-disposition'] || '';
+      const m = /filename="([^"]+)"/.exec(cd);
+      const fname = m ? m[1] : (selected.length === 1 ? `${selected[0]}.csv` : 'inventory_export.xlsx');
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a'); a.href = url; a.download = fname; a.click();
+      URL.revokeObjectURL(url);
+      message.success(selected.length === 1 ? 'CSV downloaded.' : 'XLSX downloaded — one sheet per selected table.');
       load();
     } catch (e) {
-      message.error(e.response?.data?.error || 'CSV export failed');
+      let msg = 'CSV export failed';
+      if (e.response?.data instanceof Blob) {
+        try { msg = JSON.parse(await e.response.data.text())?.error || msg; } catch { /* not JSON */ }
+      } else {
+        msg = e.response?.data?.error || msg;
+      }
+      message.error(msg);
     } finally { setRunning(false); }
   }
 
@@ -340,7 +341,7 @@ function CsvExportTab() {
       <Alert
         type="info" showIcon
         message="CSV Export"
-        description="Export inventory tables to CSV. Single-table exports download immediately. Multi-table exports write to the server's export directory and appear in run history."
+        description="Export inventory tables to CSV. Selecting one table downloads a .csv; selecting more than one downloads a single .xlsx workbook with one sheet per table. Every export also writes to the server's export directory and appears in run history."
         style={{ marginBottom: 16 }}
       />
 
