@@ -1336,7 +1336,6 @@ function isoWeek(d) {
 
 function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
-  const ec  = data.extEndpointCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
   const nessus = data.weeklyNessus || {};
   const assetPatching = data.assetInventoryPatchingStatus || {};
@@ -1436,22 +1435,22 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           </Typography.Title>
           <Typography.Paragraph style={{ marginBottom: 6 }}><strong>Total Inventory Compliances:</strong></Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 16 }}>
-            Overall Asset Inventory: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
+            Overall Asset Inventory <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text>: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
           </Typography.Paragraph>
 
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total Combined Inventory Count (Asset + Extended) is <strong>{combDen.toLocaleString()}</strong> (decommissioned excluded)
+            Total Combined Inventory Assets Count <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text> is <strong>{combDen.toLocaleString()}</strong> (decommissioned excluded)
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total decommissioned (Asset + Extended): <strong>{((vmGaps.decommissioned ?? 0) + (ec.decommissioned ?? 0)).toLocaleString()}</strong>
+            Total decommissioned <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text>: <strong>{(vmGaps.decommissioned ?? 0).toLocaleString()}</strong>
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>
             From active inventory, pending/follow-ups:
           </Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 16 }}>
-            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets do not have password info.</li>
-            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
-            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
+            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text> do not have password info.</li>
+            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets)</Typography.Text> are missing hosted/hypervisor details.</li>
+            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets)</Typography.Text> currently have name conflicts from OS Hostname.</li>
           </ul>
 
           <Typography.Paragraph style={{ marginBottom: 16 }}>
@@ -1464,7 +1463,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
-              Location-wise count (Assets + Ext. Assets + Beijing Assets):
+              Location-wise count (MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets):
             </Typography.Text>
             <Table
               rowKey="location"

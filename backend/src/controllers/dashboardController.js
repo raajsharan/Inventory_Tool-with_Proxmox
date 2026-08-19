@@ -383,42 +383,55 @@ async function summary(_req, res, next) {
     // ---------------------------------------------------------------
     // Weekly Report: VM-side "gaps" (no password / missing hosted_ip /
     // OS-hostname collisions) and the Ext patching-status row.
+    // total/decommissioned/no_password span all four inventories (MSL
+    // Assets, Beijing Assets, Ext. Assets, Physical & ESXi). no_hosted_ip
+    // and name_conflicts deliberately exclude Physical & ESXi — a physical
+    // host doesn't have a "hosted on" hypervisor, and its hostname isn't
+    // meaningfully comparable against VM hostnames for collision purposes.
     // ---------------------------------------------------------------
     const weeklyVmGapsQ = db.query(`
-      WITH vm AS (
-        SELECT asset_password_encrypted, hosted_ip, os_hostname,
-               server_status, eol_status
+      WITH vm4 AS (
+        SELECT asset_password_encrypted, server_status
           FROM assets               WHERE deleted_at IS NULL
         UNION ALL
-        SELECT asset_password_encrypted, hosted_ip, os_hostname,
-               server_status, eol_status
+        SELECT asset_password_encrypted, server_status
           FROM beijing_assets       WHERE deleted_at IS NULL
         UNION ALL
-        SELECT asset_password_encrypted, hosted_ip, os_hostname,
-               server_status, NULL::text AS eol_status
+        SELECT asset_password_encrypted, server_status
+          FROM ext_assets           WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT asset_password_encrypted, server_status
           FROM physical_esxi_servers WHERE deleted_at IS NULL
+      ), vm3 AS (
+        SELECT hosted_ip, os_hostname, server_status
+          FROM assets         WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT hosted_ip, os_hostname, server_status
+          FROM beijing_assets WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT hosted_ip, os_hostname, server_status
+          FROM ext_assets     WHERE deleted_at IS NULL
       ), dup_hostnames AS (
-        SELECT os_hostname FROM vm
+        SELECT os_hostname FROM vm3
          WHERE os_hostname IS NOT NULL AND os_hostname <> ''
         GROUP BY 1 HAVING COUNT(*) > 1
       )
       SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (
+        (SELECT COUNT(*)::int FROM vm4)::int AS total,
+        (SELECT COUNT(*) FILTER (
           WHERE server_status = 'Decommissioned' OR server_status ILIKE 'Decom%'
-        )::int AS decommissioned,
-        COUNT(*) FILTER (
+        )::int FROM vm4) AS decommissioned,
+        (SELECT COUNT(*) FILTER (
           WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%')
             AND asset_password_encrypted IS NULL
-        )::int AS no_password,
-        COUNT(*) FILTER (
+        )::int FROM vm4) AS no_password,
+        (SELECT COUNT(*) FILTER (
           WHERE (server_status = 'Active' OR server_status ILIKE 'Alive%')
             AND (hosted_ip IS NULL OR hosted_ip = '')
-        )::int AS no_hosted_ip,
-        (SELECT COUNT(*)::int FROM vm
+        )::int FROM vm3) AS no_hosted_ip,
+        (SELECT COUNT(*)::int FROM vm3
            WHERE os_hostname IN (SELECT os_hostname FROM dup_hostnames)
-        ) AS name_conflicts
-      FROM vm;
+        ) AS name_conflicts;
     `);
 
     // Weekly Report: Nessus install count using the EXACT same population as
