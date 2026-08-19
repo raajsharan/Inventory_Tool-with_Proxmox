@@ -13,7 +13,7 @@ import {
   CloseCircleOutlined, BlockOutlined,
   BarChartOutlined, CalendarOutlined, FundOutlined, RiseOutlined,
   EnvironmentOutlined, ApartmentOutlined, ClusterOutlined, PlayCircleOutlined,
-  SyncOutlined,
+  SyncOutlined, InfoCircleOutlined,
 } from '@ant-design/icons';
 import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
@@ -1338,10 +1338,17 @@ function isoWeek(d) {
 // figure, without permanently cluttering the line with the full list.
 const COMPOSITION_4 = 'MSL Assets + Beijing Assets + Ext. Assets + Physical & ESXi Assets';
 const COMPOSITION_3 = 'MSL Assets + Beijing Assets + Ext. Assets';
-function CompositionNote({ text }) {
+function CompositionNote({ text, symbol }) {
+  if (symbol === 'arrow') {
+    return (
+      <Tooltip title={text}>
+        <a style={{ marginLeft: 4, marginRight: 4 }}>→</a>
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip title={text}>
-      <a style={{ marginLeft: 4, marginRight: 4 }}>→</a>
+      <InfoCircleOutlined style={{ marginLeft: 4, marginRight: 4, color: '#1677ff', cursor: 'pointer' }} />
     </Tooltip>
   );
 }
@@ -1475,7 +1482,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
-              Location-wise count<CompositionNote text={COMPOSITION_4} />:
+              Location-wise count<CompositionNote text={COMPOSITION_4} symbol="arrow" />:
             </Typography.Text>
             <Table
               rowKey="location"
