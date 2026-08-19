@@ -1334,6 +1334,18 @@ function isoWeek(d) {
   return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
 }
 
+// Small hover-link marker that reveals which inventories feed a given
+// figure, without permanently cluttering the line with the full list.
+const COMPOSITION_4 = 'MSL Assets + Beijing Assets + Ext. Assets + Physical & ESXi Assets';
+const COMPOSITION_3 = 'MSL Assets + Beijing Assets + Ext. Assets';
+function CompositionNote({ text }) {
+  return (
+    <Tooltip title={text}>
+      <a style={{ marginLeft: 4, marginRight: 4 }}>→</a>
+    </Tooltip>
+  );
+}
+
 function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
@@ -1435,22 +1447,22 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           </Typography.Title>
           <Typography.Paragraph style={{ marginBottom: 6 }}><strong>Total Inventory Compliances:</strong></Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 16 }}>
-            Overall Asset Inventory <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text>: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
+            Overall Asset Inventory<CompositionNote text={COMPOSITION_4} />: <strong>{combNum.toLocaleString()}</strong> out of <strong>{combDen.toLocaleString()}</strong> X 100 = <strong>{pct(combNum, combDen)}%</strong>
           </Typography.Paragraph>
 
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total Combined Inventory Assets Count <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text> is <strong>{combDen.toLocaleString()}</strong> (decommissioned excluded)
+            Total Combined Inventory Assets Count<CompositionNote text={COMPOSITION_4} />is <strong>{combDen.toLocaleString()}</strong> (decommissioned excluded)
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 4 }}>
-            Total decommissioned <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text>: <strong>{(vmGaps.decommissioned ?? 0).toLocaleString()}</strong>
+            Total decommissioned<CompositionNote text={COMPOSITION_4} />: <strong>{(vmGaps.decommissioned ?? 0).toLocaleString()}</strong>
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 4, marginTop: 8 }}>
             From active inventory, pending/follow-ups:
           </Typography.Paragraph>
           <ul style={{ paddingLeft: 18, marginBottom: 16 }}>
-            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets)</Typography.Text> do not have password info.</li>
-            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets)</Typography.Text> are missing hosted/hypervisor details.</li>
-            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints <Typography.Text type="secondary" style={{ fontSize: 12 }}>(MSL Assets + Beijing Assets + Ext. Assets)</Typography.Text> currently have name conflicts from OS Hostname.</li>
+            <li><strong>{(vmGaps.no_password ?? 0).toLocaleString()}</strong> assets<CompositionNote text={COMPOSITION_4} />do not have password info.</li>
+            <li>Around <strong>{(vmGaps.no_hosted_ip ?? 0).toLocaleString()}</strong> active assets<CompositionNote text={COMPOSITION_3} />are missing hosted/hypervisor details.</li>
+            <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints<CompositionNote text={COMPOSITION_3} />currently have name conflicts from OS Hostname.</li>
           </ul>
 
           <Typography.Paragraph style={{ marginBottom: 16 }}>
@@ -1463,7 +1475,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
-              Location-wise count (MSL Assets + Beijing Assets + Ext. Assets + Physical &amp; ESXi Assets):
+              Location-wise count<CompositionNote text={COMPOSITION_4} />:
             </Typography.Text>
             <Table
               rowKey="location"
