@@ -889,6 +889,10 @@ function normalizeAdded(platform, host, added) {
     os_type:     v.os_type || null,
     os_version:  platform === 'Hyper-V' ? (v.os_name || null) : (v.os_version || null),
     ip_address:  (Array.isArray(v.ips) ? v.ips.filter(ip => ip && ip !== 'Not Available') : []).join(', ') || null,
+    // ESXi host IP only exists for VMware (esxi_host_ip column); Proxmox's
+    // "node" is a hostname, not an IP, and Hyper-V's source_host already IS
+    // the hypervisor — nothing meaningful to show for those platforms.
+    esxi_host_ip: platform === 'VMware' ? (v.esxi_host_ip || null) : null,
     source_host: v.source_host || null,
     mac_address: (Array.isArray(v.macs) ? v.macs : Array.isArray(v.mac_addresses) ? v.mac_addresses : [])
       .filter(m => m && m !== 'Not Available').join(', ') || null,
@@ -896,10 +900,15 @@ function normalizeAdded(platform, host, added) {
   }));
 }
 
+// Last 7 days of newly-added VMs across all three discovery platforms —
+// reuses each platform's getDriftActivity(7) (the same 7-day rolling
+// activity feed backing the Change Detection tabs) instead of getDrift()'s
+// single latest-poll diff, so a VM added earlier in the week stays visible
+// here even after a later no-op poll would otherwise blank it out.
 async function getNewVMs(_req, res, next) {
   try {
     const [vmwareDrift, proxmoxDrift, hypervDrift] = await Promise.all([
-      vmwareDb.getDrift(), proxmoxDb.getDrift(), hypervDb.getDrift(),
+      vmwareDb.getDriftActivity(7), proxmoxDb.getDriftActivity(7), hypervDb.getDriftActivity(7),
     ]);
 
     const flatten = (platform, drift) => drift.flatMap(d =>
