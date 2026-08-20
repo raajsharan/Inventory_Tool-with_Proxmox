@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, Form, Input, InputNumber, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip, Row, Col, TimePicker,
+  Card, Form, Input, InputNumber, Switch, Button, Divider, Alert, Space, Typography, message, Tooltip, Row, Col, TimePicker, Tag,
 } from 'antd';
 import {
   SendOutlined, CheckCircleOutlined, TeamOutlined, ClockCircleOutlined,
@@ -16,6 +16,135 @@ const PING_PLATFORMS = [
   { key: 'proxmox', label: 'Proxmox' },
   { key: 'hyperv',  label: 'Hyper-V' },
 ];
+
+// ── Shared schedule-visualization helpers ───────────────────────────────────
+
+const HOUR_MARKS = [0, 4, 8, 12, 16, 20, 24];
+
+function timeToPct(d) {
+  if (!d) return 0;
+  return ((d.hour() * 60 + d.minute()) / 1440) * 100;
+}
+
+// A 24h strip showing the active window as a highlighted band (handles an
+// overnight window, e.g. 21:00-06:00, by splitting into two segments), plus
+// a "now" marker so it's obvious at a glance whether the window is currently
+// open. Read-only preview — the actual editing happens via the TimePickers.
+function TimeWindowBar({ start, end, active }) {
+  const startPct = timeToPct(start);
+  const endPct   = timeToPct(end);
+  const nowPct   = timeToPct(dayjs());
+  const wraps    = start && end && endPct < startPct;
+
+  const segments = !start || !end ? [] : wraps
+    ? [{ left: startPct, width: 100 - startPct }, { left: 0, width: endPct }]
+    : [{ left: startPct, width: Math.max(0, endPct - startPct) }];
+
+  return (
+    <div style={{ marginTop: 6, marginBottom: 2 }}>
+      <div style={{
+        position: 'relative', height: 20,
+        background: 'var(--ant-color-fill-tertiary, #f0f0f0)',
+        borderRadius: 6, overflow: 'hidden',
+      }}>
+        {active && segments.map((s, i) => (
+          <div key={i} style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: `${s.left}%`, width: `${s.width}%`,
+            background: '#1677ff', opacity: 0.4,
+          }} />
+        ))}
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, left: `${nowPct}%`,
+          width: 2, background: '#f5222d',
+        }} title="Now" />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#8c8c8c', marginTop: 2 }}>
+        {HOUR_MARKS.map(h => <span key={h}>{String(h).padStart(2, '0')}</span>)}
+      </div>
+    </div>
+  );
+}
+
+const INTERVAL_PRESETS = [1, 5, 15, 30, 60];
+
+// Quick-select buttons for the common intervals, falling back to a plain
+// number input for anything else — exposes the same value/onChange contract
+// Form.Item gives its child, so it drops straight into the existing form
+// field with no change to what gets saved.
+function IntervalQuickPicker({ value, onChange }) {
+  const isPreset = INTERVAL_PRESETS.includes(value);
+  return (
+    <Space wrap size={6}>
+      {INTERVAL_PRESETS.map(m => (
+        <Button
+          key={m} size="small"
+          type={value === m ? 'primary' : 'default'}
+          onClick={() => onChange(m)}
+        >
+          {m < 60 ? `${m}m` : '1h'}
+        </Button>
+      ))}
+      <InputNumber
+        size="small" min={1} max={1440} style={{ width: 90 }}
+        placeholder="Custom"
+        value={isPreset ? undefined : value}
+        onChange={v => onChange(v || 1)}
+      />
+    </Space>
+  );
+}
+
+function PlatformScheduleCard({ platform, form }) {
+  const { key, label } = platform;
+  const enabled  = Form.useWatch(`${key}_enabled`, form);
+  const interval = Form.useWatch(`${key}_interval_minutes`, form);
+  const start    = Form.useWatch(`${key}_window_start`, form);
+  const end      = Form.useWatch(`${key}_window_end`, form);
+
+  return (
+    <div style={{
+      border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+      borderRadius: 10, padding: 16, marginBottom: 12,
+    }}>
+      <Space align="center" style={{ width: '100%', justifyContent: 'space-between', marginBottom: 12 }}>
+        <Space>
+          <Form.Item name={`${key}_enabled`} valuePropName="checked" noStyle>
+            <Switch />
+          </Form.Item>
+          <Text strong>{label} ping check</Text>
+        </Space>
+        <Tag color={enabled ? 'success' : 'default'}>{enabled ? 'ACTIVE' : 'DISABLED'}</Tag>
+      </Space>
+
+      <Row gutter={16}>
+        <Col xs={24} md={8}>
+          <Form.Item name={`${key}_interval_minutes`} label="Check every" style={{ marginBottom: 8 }}>
+            <IntervalQuickPicker />
+          </Form.Item>
+        </Col>
+        <Col xs={12} md={8}>
+          <Form.Item name={`${key}_window_start`} label="Start Time" style={{ marginBottom: 8 }}>
+            <TimePicker format="HH:mm" style={{ width: '100%' }} />
+          </Form.Item>
+        </Col>
+        <Col xs={12} md={8}>
+          <Form.Item name={`${key}_window_end`} label="End Time" style={{ marginBottom: 8 }}>
+            <TimePicker format="HH:mm" style={{ width: '100%' }} />
+          </Form.Item>
+        </Col>
+      </Row>
+
+      <TimeWindowBar start={start} end={end} active={!!enabled} />
+
+      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+        {enabled
+          ? `Checking every ${interval || 5}m, active ${start ? start.format('HH:mm') : '00:00'}–${end ? end.format('HH:mm') : '23:59'}.`
+          : `${label} ping check is disabled.`}
+      </Text>
+    </div>
+  );
+}
 
 function PingMonitorSchedule() {
   const [pingForm] = Form.useForm();
@@ -72,28 +201,7 @@ function PingMonitorSchedule() {
       </Text>
       <Form form={pingForm} layout="vertical" onFinish={handlePingSave}>
         {PING_PLATFORMS.map(p => (
-          <Row gutter={16} key={p.key} align="middle" style={{ marginBottom: 8 }}>
-            <Col span={6}>
-              <Form.Item name={`${p.key}_enabled`} valuePropName="checked" label={`${p.label} ping check`} style={{ marginBottom: 0 }}>
-                <Switch />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name={`${p.key}_interval_minutes`} label="Check every (minutes)" style={{ marginBottom: 0 }}>
-                <InputNumber min={1} max={1440} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name={`${p.key}_window_start`} label="Start Time" style={{ marginBottom: 0 }}>
-                <TimePicker format="HH:mm" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name={`${p.key}_window_end`} label="End Time" style={{ marginBottom: 0 }}>
-                <TimePicker format="HH:mm" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
+          <PlatformScheduleCard key={p.key} platform={p} form={pingForm} />
         ))}
         <Space style={{ marginTop: 12 }}>
           <Button
@@ -115,6 +223,9 @@ export default function TeamsNotifications() {
   const [loading, setLoading]   = useState(false);
   const [testing, setTesting]   = useState(false);
   const [saved,   setSaved]     = useState(false);
+  const windowEnabled = Form.useWatch('alert_window_enabled', form);
+  const windowStart   = Form.useWatch('alert_window_start', form);
+  const windowEnd     = Form.useWatch('alert_window_end', form);
 
   useEffect(() => {
     api.get('/teams-notification')
@@ -242,7 +353,14 @@ export default function TeamsNotifications() {
             <Switch />
           </Form.Item>
 
-          <Divider>Connectivity Alert Time Window</Divider>
+          <Divider>
+            <Space>
+              Connectivity Alert Time Window
+              <Tag color={windowEnabled ? 'processing' : 'default'} style={{ margin: 0 }}>
+                {windowEnabled ? 'RESTRICTED' : 'UNRESTRICTED'}
+              </Tag>
+            </Space>
+          </Divider>
 
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
             Restricts when the connectivity alerts above (host-down / recovered,
@@ -268,6 +386,14 @@ export default function TeamsNotifications() {
               </Form.Item>
             </Col>
           </Row>
+
+          <TimeWindowBar start={windowStart} end={windowEnd} active={!!windowEnabled} />
+
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6, marginBottom: 8 }}>
+            {windowEnabled
+              ? `Connectivity alerts are only allowed from ${windowStart ? windowStart.format('HH:mm') : '00:00'} to ${windowEnd ? windowEnd.format('HH:mm') : '23:59'}.`
+              : 'Connectivity alerts are allowed to send at any time.'}
+          </Text>
 
           <Divider />
 
