@@ -100,6 +100,7 @@ export default function PhysicalEsxiForm({ mode }) {
           osVersion:       d.os_version,
           assetUsername:   d.asset_username,
           serverStatus:    d.server_status,
+          patchingType:    d.patching_type,
           assetTag:        d.asset_tag,
           assignedUser:    d.assigned_user,
           idracUsername:   d.idrac_username,
@@ -193,6 +194,7 @@ export default function PhysicalEsxiForm({ mode }) {
         assignedUser:      values.assignedUser,
         idracUsername:     values.idracUsername,
         ...(values.serverStatus !== undefined ? { serverStatus: values.serverStatus } : {}),
+        ...(values.patchingType !== undefined ? { patchingType: values.patchingType } : {}),
         ...(values.serverStatus && /^decom/i.test(values.serverStatus) ? { decommissionReason: values.decommissionReason } : {}),
         ...(values.assetPassword ? { assetPassword: values.assetPassword } : {}),
         ...(values.idracPassword ? { idracPassword: values.idracPassword } : {}),
@@ -385,6 +387,12 @@ export default function PhysicalEsxiForm({ mode }) {
               </Form.Item>
             )}
           </>
+        );
+      case 'patching_type':
+        return wrap(
+          <Form.Item name="patchingType" label={labelOf('patching_type', 'Patching Type')}>
+            <Select allowClear options={opts('patching_type')} />
+          </Form.Item>
         );
       case 'server_model':
         return wrap(

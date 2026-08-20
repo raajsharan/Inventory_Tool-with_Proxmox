@@ -633,9 +633,13 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS tenable_installed`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS eol_status`,
-  `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_type`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS server_patch_type`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS patching_schedule`,
+
+  // ── Patching Type re-added to Physical & ESXi Servers (dropdown, like
+  //    Asset/Ext./Beijing Inventory), so a physical server can be explicitly
+  //    tagged e.g. "Not Applicable" instead of having no field at all.
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS patching_type VARCHAR(64)`,
 
   // ── soft-delete (cleared before migration) column on all migration VM/host tables
   `ALTER TABLE migration_bomgar_vms      ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,

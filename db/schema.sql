@@ -275,6 +275,7 @@ CREATE TABLE IF NOT EXISTS physical_esxi_servers (
     asset_password_encrypted TEXT,
     additional_remarks       TEXT,
     idrac_enabled            BOOLEAN NOT NULL DEFAULT FALSE,
+    patching_type            VARCHAR(64),
     -- Physical server hardware / rack fields
     server_model             VARCHAR(255),
     cpu_cores                INTEGER NOT NULL DEFAULT 0,
@@ -287,8 +288,8 @@ CREATE TABLE IF NOT EXISTS physical_esxi_servers (
     created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
     -- NOTE: manage_engine_installed, tenable_installed, eol_status,
-    --       patching_type, server_patch_type, patching_schedule are
-    --       intentionally omitted — not applicable to physical servers.
+    --       server_patch_type, patching_schedule are intentionally
+    --       omitted — not applicable to physical servers.
 );
 CREATE INDEX IF NOT EXISTS idx_phx_vm_name    ON physical_esxi_servers(vm_name);
 CREATE INDEX IF NOT EXISTS idx_phx_ip         ON physical_esxi_servers(ip_address);

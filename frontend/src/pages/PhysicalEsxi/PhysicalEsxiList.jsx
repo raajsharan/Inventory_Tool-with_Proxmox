@@ -291,6 +291,10 @@ export default function PhysicalEsxiList() {
       title: labelOf('server_status', 'Status'), render: statusTag,
     },
     {
+      key: 'patching_type', dataIndex: 'patching_type', width: 140,
+      title: labelOf('patching_type', 'Patching Type'), render: dash,
+    },
+    {
       key: 'department', dataIndex: 'department', width: 140,
       title: labelOf('department', 'Department'), render: dash,
     },

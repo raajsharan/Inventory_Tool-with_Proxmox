@@ -3,7 +3,7 @@ import AssetImport from '../Assets/AssetImport.jsx';
 const HINT = (
   <span>
     Import compares incoming headers with template fields using flexible matching (spacing, casing, and common aliases).
-    Columns accepted: <b>Device Name</b>, <b>Hosted IP</b>, <b>Server Status</b>, <b>Department</b>, <b>Location</b>,{' '}
+    Columns accepted: <b>Device Name</b>, <b>Hosted IP</b>, <b>Server Status</b>, <b>Patching Type</b>, <b>Department</b>, <b>Location</b>,{' '}
     <b>Server Model</b>, <b>Serial Number</b>, <b>Asset Type</b>, <b>OS Type</b>, <b>OS Version</b>,{' '}
     <b>Asset Username</b>, <b>Asset Password</b>,{' '}
     <b>CPU Cores</b>, <b>RAM (GB)</b>, <b>Total Disks</b>,{' '}
