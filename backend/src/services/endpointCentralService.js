@@ -475,6 +475,16 @@ function mapInstallStatus(v) {
   return n === 22 ? 1 : 0;
 }
 
+// scan_status, documented on /inventory/scancomputers: -1 = Not done,
+// 0 = failed, 1 = In progress, 2 = success. Distinct from live_status
+// (is the agent reachable right now) and installation_status (is the
+// agent installed) — this is "did the last inventory scan itself succeed".
+function rawScanStatus(c) {
+  const v = c.scan_status ?? c.SCAN_STATUS ?? c.scanstatus ?? c.SCANSTATUS;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function normalizeComputer(c) {
   const installStatusRaw = rawInstallStatus(c);
   const installStatusNum = Number(installStatusRaw);
@@ -502,6 +512,8 @@ function normalizeComputer(c) {
     // documented live_status field (scancomputers API) over older guessed names.
     agent_status:   mapLiveStatus(c.live_status ?? c.LIVE_STATUS ?? c.livestatus)
                   ?? c.agent_status ?? c.AGENT_STATUS ?? c.agentstatus ?? 1,
+    // scan_status: -1 = Not done, 0 = failed, 1 = In progress, 2 = success.
+    scan_status:    rawScanStatus(c),
     last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
                  ?? c.last_contact   ?? c.LAST_CONTACT   ?? c.last_scan_time ?? c.LAST_SCAN_TIME
                  ?? c.lastscantime   ?? c.last_successful_scan ?? null,

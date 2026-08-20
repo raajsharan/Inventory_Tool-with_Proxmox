@@ -66,6 +66,21 @@ function InstallStatusTag({ status }) {
   return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
 }
 
+// scan_status (documented on /inventory/scancomputers): -1/0/1/2. Distinct
+// from agent_status (is the agent reachable now) and managed_status (is it
+// installed) — this is "did the last inventory scan itself succeed".
+const SCAN_STATUS = {
+  '-1': { label: 'Not Done',     color: 'default' },
+  0:    { label: 'Failed',       color: 'error'   },
+  1:    { label: 'In Progress',  color: 'processing' },
+  2:    { label: 'Success',      color: 'success' },
+};
+
+function ScanStatusTag({ status }) {
+  const meta = SCAN_STATUS[status] ?? { label: 'Unknown', color: 'default' };
+  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
+}
+
 function OsTag({ osName }) {
   if (!osName || osName === '—') return <Text type="secondary">—</Text>;
   const lower = osName.toLowerCase();
@@ -676,6 +691,7 @@ export default function EndpointCentral() {
   const [statusFilter, setStatusFilter] = useState(null);
   const [osFilter,     setOsFilter]     = useState(null);
   const [managedFilt,  setManagedFilt]  = useState(null);
+  const [scanFilter,   setScanFilter]   = useState(null);
   const [stagedFilt,   setStagedFilt]   = useState(null); // null | 'staged' | 'active'
 
   // Software filters
@@ -768,6 +784,7 @@ export default function EndpointCentral() {
   const filteredAgents = agents.filter(a => {
     if (statusFilter !== null && a.agent_status !== statusFilter) return false;
     if (managedFilt  !== null && a.managed_status !== managedFilt) return false;
+    if (scanFilter   !== null && a.scan_status !== scanFilter) return false;
     if (osFilter && osFamily(a.os_name) !== osFilter) return false;
     if (stagedFilt === 'staged' && !isStaged(a)) return false;
     if (stagedFilt === 'active' && isStaged(a)) return false;
@@ -821,6 +838,10 @@ export default function EndpointCentral() {
     {
       title: 'Managed', dataIndex: 'managed_status', key: 'managed_status', width: 120,
       render: v => <ManagedTag status={v} />,
+    },
+    {
+      title: 'Scan Status', dataIndex: 'scan_status', key: 'scan_status', width: 120,
+      render: v => <ScanStatusTag status={v} />,
     },
     {
       title: 'IP Address', dataIndex: 'ip_address', key: 'ip_address', width: 140,
@@ -934,6 +955,10 @@ export default function EndpointCentral() {
       render: v => <AgentStatusBadge status={v} />,
     },
     {
+      title: 'Scan Status', dataIndex: 'scan_status', key: 'scan_status', width: 120,
+      render: v => <ScanStatusTag status={v} />,
+    },
+    {
       title: 'Last Sync', dataIndex: 'last_sync', key: 'last_sync', width: 160,
       render: v => {
         if (!v || v === '—') return <Text type="secondary">—</Text>;
@@ -1019,6 +1044,18 @@ export default function EndpointCentral() {
                     options={[
                       { value: 1, label: 'Managed'     },
                       { value: 0, label: 'Not Managed'  },
+                    ]}
+                  />
+                  <Select
+                    allowClear placeholder="Scan Status"
+                    style={{ width: 150 }}
+                    value={scanFilter}
+                    onChange={v => setScanFilter(v ?? null)}
+                    options={[
+                      { value: 2,  label: 'Success'     },
+                      { value: 1,  label: 'In Progress' },
+                      { value: 0,  label: 'Failed'      },
+                      { value: -1, label: 'Not Done'    },
                     ]}
                   />
                   <Select
