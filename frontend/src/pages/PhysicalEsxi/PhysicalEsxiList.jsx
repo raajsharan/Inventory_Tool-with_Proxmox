@@ -57,6 +57,7 @@ export default function PhysicalEsxiList() {
   // ── State for inline actions ─────────────────────────────────────────────
   const [hiddenSet, setHiddenSet] = useState(new Set());
   const [fieldLabels, setFieldLabels] = useState({});
+  const [extraFields, setExtraFields] = useState([]); // admin-added custom fields (is_extra), stored per-record in `extras`
   const labelOf = (k, fallback) => fieldLabels[k] || fallback;
 
   const [revealed, setRevealed]   = useState({});
@@ -105,6 +106,7 @@ export default function PhysicalEsxiList() {
         const m = {};
         for (const f of r.data.fields || []) m[f.field_key] = f.label;
         setFieldLabels(m);
+        setExtraFields((r.data.fields || []).filter(f => f.is_extra));
       }).catch(() => {});
   }, []);
 
@@ -390,6 +392,20 @@ export default function PhysicalEsxiList() {
     { key: 'updated_by_name', dataIndex: 'updated_by_name', width: 160, title: 'Modified By', render: dash },
     { key: 'updated_at', dataIndex: 'updated_at', width: 170, title: 'Modified',
       render: v => v ? new Date(v).toLocaleString() : dash(v) },
+
+    // ── Admin-added custom fields (Inventory Fields → "Custom") ────────────
+    // Stored per-record under `extras`, never on the row itself, so these
+    // are appended dynamically rather than hardcoded like the columns above.
+    ...extraFields.map(f => ({
+      key: f.field_key, dataIndex: ['extras', f.field_key], width: 160, ellipsis: true,
+      title: labelOf(f.field_key, f.label),
+      render: (v) => {
+        if (v === null || v === undefined || v === '') return dash(v);
+        if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+        if (Array.isArray(v)) return v.length ? v.join(', ') : dash(v);
+        return String(v);
+      },
+    })),
 
     // ── Fixed: Actions ──────────────────────────────────────────────────────
     {

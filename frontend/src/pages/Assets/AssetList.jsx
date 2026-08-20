@@ -63,6 +63,7 @@ export default function AssetList({
   const [hiddenSet, setHiddenSet] = useState(new Set());
   const isHidden = (k) => hiddenSet.has(k);
   const [fieldLabels, setFieldLabels] = useState({});
+  const [extraFields, setExtraFields] = useState([]); // admin-added custom fields (is_extra), stored per-record in `extras`
   const labelOf = (k, fallback) => fieldLabels[k] || fallback;
   const [revealed, setRevealed] = useState({}); // id -> decrypted password
   const [revealing, setRevealing] = useState({}); // id -> bool
@@ -135,6 +136,7 @@ export default function AssetList({
         const m = {};
         for (const f of r.data.fields || []) m[f.field_key] = f.label;
         setFieldLabels(m);
+        setExtraFields((r.data.fields || []).filter(f => f.is_extra));
       })
       .catch(() => {});
   }, [pageKey]);
@@ -330,6 +332,21 @@ export default function AssetList({
     { key: 'additional_remarks', dataIndex: 'additional_remarks', width: 220,
       title: labelOf('additional_remarks', 'Additional Remarks'), ellipsis: true,
       render: v => v ? <Tooltip title={v}>{v}</Tooltip> : cell(v) },
+
+    // ── Admin-added custom fields (Inventory Fields → "Custom") ────────────
+    // Stored per-record under `extras`, never on the row itself, so these
+    // are appended dynamically rather than hardcoded like the columns above.
+    ...extraFields.map(f => ({
+      key: f.field_key, dataIndex: ['extras', f.field_key], width: 160, ellipsis: true,
+      title: labelOf(f.field_key, f.label),
+      render: (v) => {
+        if (v === null || v === undefined || v === '') return cell(v);
+        if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+        if (Array.isArray(v)) return v.length ? v.join(', ') : cell(v);
+        return String(v);
+      },
+    })),
+
     {
       key: '__actions__', title: 'Actions', fixed: 'right', width: 110,
       render: (_, r) => (
