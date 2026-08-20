@@ -18,7 +18,7 @@ const WINDOWS_CONFIG = {
 const NESSUS_LINUX_CONFIG = {
   platform:    'linux',
   serviceName: 'nessusagent',
-  binaryPath:  '/opt/nessus_agent/sbin/nessus-agent',
+  binaryPath:  '/opt/nessus_agent/sbin/nessus-service',
 };
 
 const NESSUS_WINDOWS_CONFIG = {
