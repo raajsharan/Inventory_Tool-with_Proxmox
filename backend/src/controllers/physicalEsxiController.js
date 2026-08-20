@@ -20,6 +20,7 @@ const COLUMNS = [
   { key: 'vm_name',            header: 'Device Name *',      width: 22 },
   { key: 'ip_address',         header: 'Hosted IP *',         width: 18 },
   { key: 'server_status',      header: 'Server Status',       width: 16 },
+  { key: 'patching_type',      header: 'Patching Type',       width: 16 },
   { key: 'department',         header: 'Department',          width: 16 },
   { key: 'assigned_user',      header: 'Owner',               width: 18 },
   { key: 'location',           header: 'Location',            width: 16 },
@@ -156,7 +157,7 @@ async function downloadTemplate(_req, res, next) {
 
     ws.addRow({
       vm_name: `${EXAMPLE_PREFIX}-EX-01`, ip_address: '10.40.1.99',
-      server_status: 'Active', department: 'IT Team', assigned_user: 'Jane Doe', location: EXAMPLE_LOCATION,
+      server_status: 'Active', patching_type: 'Not Applicable', department: 'IT Team', assigned_user: 'Jane Doe', location: EXAMPLE_LOCATION,
       server_model: 'Dell PowerEdge R750', serial_number: `${EXAMPLE_PREFIX}-001`,
       asset_type: 'Physical Server', os_type: 'Linux', os_version: 'Ubuntu 22.04',
       asset_username: 'svc_admin', asset_password: 'secret',
