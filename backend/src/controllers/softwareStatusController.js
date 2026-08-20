@@ -19,6 +19,32 @@ function appendLog(logFilePath, ip, level, message) {
   } catch {}
 }
 
+// Many Linux agent installers (ManageEngine's UEMS_LinuxAgent.bin included)
+// unpack themselves with `tar` internally and fail with an unhelpful
+// "tar: command not found" deep in their own output on minimal/hardened
+// distros that don't ship it by default. Best-effort: check for tar first
+// and try to install it via whichever package manager is present before
+// running the real installer, so the common case self-heals instead of
+// wasting a full upload+run cycle on a doomed attempt. Never throws —
+// if this fails (no sudo, no package manager, offline mirror, etc.) the
+// real install still proceeds and surfaces its own error as before.
+async function ensureTarInstalled({ host, port, username, password }) {
+  const probe = [
+    'if command -v tar >/dev/null 2>&1; then echo TAR_ALREADY_PRESENT; exit 0; fi',
+    'if command -v apt-get >/dev/null 2>&1; then sudo -n apt-get install -y tar; exit $?; fi',
+    'if command -v dnf >/dev/null 2>&1; then sudo -n dnf install -y tar; exit $?; fi',
+    'if command -v yum >/dev/null 2>&1; then sudo -n yum install -y tar; exit $?; fi',
+    'if command -v zypper >/dev/null 2>&1; then sudo -n zypper install -y tar; exit $?; fi',
+    'if command -v apk >/dev/null 2>&1; then sudo -n apk add tar; exit $?; fi',
+    'echo NO_SUPPORTED_PACKAGE_MANAGER_FOUND; exit 1',
+  ].join('\n');
+  try {
+    return await sshRunCommand({ host, port, username, password, command: probe, timeout: 60000 });
+  } catch (e) {
+    return { connected: false, exitCode: null, error: e.message, output: '' };
+  }
+}
+
 const SOURCE_TABLE = {
   'MSL Assets':      'assets',
   'Beijing Assets':  'beijing_assets',
@@ -530,6 +556,17 @@ async function install(req, res, next) {
     if (binPath  && !fs.existsSync(binPath))  throw new ApiError(422, `Linux installer not found: ${binPath}`);
     if (infoPath && !fs.existsSync(infoPath)) throw new ApiError(422, `serverinfo.json not found: ${infoPath}`);
     if (!binPath && !cmd.trim())              throw new ApiError(422, 'No Linux installer configured.');
+
+    if (binPath) {
+      const tarCheck = await ensureTarInstalled({ host: ip_address, port, username, password });
+      if (/TAR_ALREADY_PRESENT/.test(tarCheck.output || '')) {
+        appendLog(logFile, ip_address, 'INFO', 'tar already present');
+      } else if (tarCheck.exitCode === 0) {
+        appendLog(logFile, ip_address, 'INFO', 'tar was missing — installed it automatically before running the agent installer');
+      } else {
+        appendLog(logFile, ip_address, 'WARN', `Could not confirm/install tar (${tarCheck.error || tarCheck.output || 'unknown reason'}) — proceeding with install anyway`);
+      }
+    }
 
     let result;
     if (binPath) {
