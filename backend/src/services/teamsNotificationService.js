@@ -427,7 +427,19 @@ async function notifyHostRecovered(platform, host) {
 // consecutive failure is a Warning; every failure after that is Critical
 // (re-alerts on every check while still down, by design).
 
-async function notifyPingWarning(platform, host) {
+// Renders each check's pass/fail state for the alert card. `checks.ssh` is
+// null when SSH wasn't applicable/attempted (Hyper-V, or ping succeeded so
+// SSH was never consulted) and is simply omitted rather than shown as N/A.
+function checkFacts(checks) {
+  if (!checks) return [];
+  const facts = [{ title: 'Ping Check', value: checks.ping ? 'OK' : 'Failed' }];
+  if (checks.ssh !== null && checks.ssh !== undefined) {
+    facts.push({ title: 'SSH Check', value: checks.ssh ? 'OK' : 'Failed' });
+  }
+  return facts;
+}
+
+async function notifyPingWarning(platform, host, checks = null) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
@@ -435,18 +447,19 @@ async function notifyPingWarning(platform, host) {
 
   const card = buildCard({
     subtitle: `🟡 ${platform} Ping Monitor`,
-    title: `Warning: ${host} is not responding to ping`,
+    title: `Warning: ${host} is not responding`,
     color: 'Warning',
     facts: [
       { title: 'Host',                  value: host },
       { title: 'Platform',              value: platform },
+      ...checkFacts(checks),
       { title: 'Consecutive Failures',  value: '1' },
     ],
   });
   await send(card);
 }
 
-async function notifyPingCritical(platform, host, failCount) {
+async function notifyPingCritical(platform, host, failCount, checks = null) {
   const cfg = await getConfig();
   const flag = HOST_DOWN_FLAG_FOR[platform];
   if (!cfg.enabled || !flag || !cfg[flag] || !cfg.webhook_url) return;
@@ -459,6 +472,7 @@ async function notifyPingCritical(platform, host, failCount) {
     facts: [
       { title: 'Host',                  value: host },
       { title: 'Platform',              value: platform },
+      ...checkFacts(checks),
       { title: 'Consecutive Failures',  value: String(failCount) },
     ],
   });

@@ -99,6 +99,9 @@ const STATEMENTS = [
       hyperv_interval_minutes  INT     NOT NULL DEFAULT 5,
       hyperv_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00',
       hyperv_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59',
+      vmware_active_days       INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6],
+      proxmox_active_days      INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6],
+      hyperv_active_days       INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6],
       updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   // Minute interval + Start/End active window superseded the original
@@ -114,6 +117,12 @@ const STATEMENTS = [
   `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_interval_minutes  INT NOT NULL DEFAULT 5`,
   `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00'`,
   `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59'`,
+  // Day-of-week gate per platform (0=Sunday..6=Saturday) — a check tick is
+  // skipped entirely on a day left unchecked here, same as being outside
+  // the time window above.
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS vmware_active_days  INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6]`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS proxmox_active_days INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6]`,
+  `ALTER TABLE ping_monitor_config ADD COLUMN IF NOT EXISTS hyperv_active_days  INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6]`,
 
   // ── VMware discovery: ESXi host hardware telemetry (CPU/RAM/disk/uptime),
   // fetched via vim25 SOAP alongside each discovery run — powers the extra

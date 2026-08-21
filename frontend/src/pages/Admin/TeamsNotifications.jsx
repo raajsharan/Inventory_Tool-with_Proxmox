@@ -170,6 +170,10 @@ function PlatformScheduleCard({ platform, form }) {
 
       <TimeWindowBar start={start} end={end} active={!!enabled} />
 
+      <Form.Item name={`${key}_active_days`} label="Active days" style={{ marginTop: 12, marginBottom: 4 }}>
+        <ActiveDaysPicker />
+      </Form.Item>
+
       <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
         {enabled
           ? `Checking every ${interval || 5}m, active ${start ? start.format('HH:mm') : '00:00'}–${end ? end.format('HH:mm') : '23:59'}.`
@@ -193,6 +197,7 @@ function PingMonitorSchedule() {
           values[`${p.key}_interval_minutes`] = r.data[`${p.key}_interval_minutes`] ?? 5;
           values[`${p.key}_window_start`] = dayjs(r.data[`${p.key}_window_start`] || '00:00', 'HH:mm');
           values[`${p.key}_window_end`]   = dayjs(r.data[`${p.key}_window_end`]   || '23:59', 'HH:mm');
+          values[`${p.key}_active_days`]  = r.data[`${p.key}_active_days`] ?? [0, 1, 2, 3, 4, 5, 6];
         }
         pingForm.setFieldsValue(values);
       })

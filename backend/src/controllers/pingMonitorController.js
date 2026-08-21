@@ -8,7 +8,7 @@ async function saveConfig(req, res, next) {
   try {
     res.json(await svc.saveConfig(req.body));
   } catch (e) {
-    if (/Invalid window time/.test(e.message)) return res.status(400).json({ error: e.message });
+    if (/Invalid window time|Invalid active days/.test(e.message)) return res.status(400).json({ error: e.message });
     next(e);
   }
 }
