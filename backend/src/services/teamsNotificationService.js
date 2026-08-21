@@ -58,6 +58,7 @@ const DEFAULTS = {
   alert_window_enabled:  false,
   alert_window_start:    '00:00',
   alert_window_end:      '23:59',
+  alert_active_days:     [0, 1, 2, 3, 4, 5, 6],
 };
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -82,6 +83,7 @@ async function saveConfig(fields) {
     alert_window_enabled     = cfg.alert_window_enabled,
     alert_window_start       = cfg.alert_window_start,
     alert_window_end         = cfg.alert_window_end,
+    alert_active_days        = cfg.alert_active_days,
   } = fields;
 
   if (alert_window_enabled) {
@@ -89,14 +91,17 @@ async function saveConfig(fields) {
       if (!TIME_RE.test(String(t))) throw new Error(`Invalid alert window time "${t}" — expected HH:MM (24-hour)`);
     }
   }
+  if (!Array.isArray(alert_active_days) || alert_active_days.some(d => !Number.isInteger(d) || d < 0 || d > 6)) {
+    throw new Error('Invalid alert_active_days — expected an array of integers 0-6 (Sunday-Saturday)');
+  }
 
   await db.query(
     `INSERT INTO teams_notification_config
         (webhook_url, enabled, notify_new_asset, notify_asset_update,
          notify_decommission, notify_migration_status,
          notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv,
-         alert_window_enabled, alert_window_start, alert_window_end, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+         alert_window_enabled, alert_window_start, alert_window_end, alert_active_days, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
      ON CONFLICT (singleton) DO UPDATE SET
         webhook_url              = EXCLUDED.webhook_url,
         enabled                  = EXCLUDED.enabled,
@@ -110,11 +115,12 @@ async function saveConfig(fields) {
         alert_window_enabled     = EXCLUDED.alert_window_enabled,
         alert_window_start       = EXCLUDED.alert_window_start,
         alert_window_end         = EXCLUDED.alert_window_end,
+        alert_active_days        = EXCLUDED.alert_active_days,
         updated_at               = NOW()`,
     [webhook_url, enabled, notify_new_asset, notify_asset_update,
      notify_decommission, notify_migration_status,
      notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv,
-     alert_window_enabled, alert_window_start, alert_window_end],
+     alert_window_enabled, alert_window_start, alert_window_end, alert_active_days],
   );
   return getConfig();
 }
@@ -356,6 +362,9 @@ const HOST_DOWN_FLAG_FOR = {
 // check inside the window will re-alert if the problem is still real.
 // Supports an overnight window (e.g. start 22:00, end 06:00).
 function isWithinAlertWindow(cfg) {
+  const activeDays = cfg.alert_active_days || [0, 1, 2, 3, 4, 5, 6];
+  if (!activeDays.includes(new Date().getDay())) return false;
+
   if (!cfg.alert_window_enabled) return true;
   const start = cfg.alert_window_start || '00:00';
   const end   = cfg.alert_window_end   || '23:59';

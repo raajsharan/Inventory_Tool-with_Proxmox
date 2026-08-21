@@ -677,6 +677,7 @@ const STATEMENTS = [
       alert_window_enabled    BOOLEAN NOT NULL DEFAULT FALSE,
       alert_window_start      VARCHAR(5) NOT NULL DEFAULT '00:00',
       alert_window_end        VARCHAR(5) NOT NULL DEFAULT '23:59',
+      alert_active_days       INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6],
       updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_host_down_vmware  BOOLEAN NOT NULL DEFAULT TRUE`,
@@ -688,6 +689,10 @@ const STATEMENTS = [
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_window_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_window_start    VARCHAR(5) NOT NULL DEFAULT '00:00'`,
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_window_end      VARCHAR(5) NOT NULL DEFAULT '23:59'`,
+  // Day-of-week gate for the same connectivity alerts (0=Sunday..6=Saturday).
+  // Applies regardless of alert_window_enabled — a day left unchecked here
+  // drops connectivity alerts entirely for that day.
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_active_days INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6]`,
 
   // ── Microsoft Hyper-V discovery ──────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS hyperv_hosts (

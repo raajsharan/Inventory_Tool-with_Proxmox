@@ -66,6 +66,39 @@ function TimeWindowBar({ start, end, active }) {
   );
 }
 
+const WEEKDAYS = [
+  { day: 0, label: 'S' }, { day: 1, label: 'M' }, { day: 2, label: 'T' },
+  { day: 3, label: 'W' }, { day: 4, label: 'T' }, { day: 5, label: 'F' },
+  { day: 6, label: 'S' },
+];
+
+// Toggle-button day-of-week picker — value/onChange contract matches what
+// Form.Item passes its child, so it drops straight into a form field.
+function ActiveDaysPicker({ value = [], onChange }) {
+  const toggle = (day) => {
+    const next = value.includes(day) ? value.filter(d => d !== day) : [...value, day].sort();
+    onChange?.(next);
+  };
+  return (
+    <Space size={6}>
+      {WEEKDAYS.map(({ day, label }) => {
+        const active = value.includes(day);
+        return (
+          <Button
+            key={day}
+            shape="circle"
+            size="small"
+            onClick={() => toggle(day)}
+            style={active ? { background: '#d84315', borderColor: '#d84315', color: '#fff' } : undefined}
+          >
+            {label}
+          </Button>
+        );
+      })}
+    </Space>
+  );
+}
+
 const INTERVAL_PRESETS = [1, 5, 15, 30, 60];
 
 // Quick-select buttons for the common intervals, falling back to a plain
@@ -243,6 +276,7 @@ export default function TeamsNotifications() {
           alert_window_enabled: r.data.alert_window_enabled ?? false,
           alert_window_start:   dayjs(r.data.alert_window_start || '00:00', 'HH:mm'),
           alert_window_end:     dayjs(r.data.alert_window_end   || '23:59', 'HH:mm'),
+          alert_active_days:    r.data.alert_active_days ?? [0, 1, 2, 3, 4, 5, 6],
         });
       })
       .catch(() => message.error('Failed to load Teams notification config'));
@@ -388,6 +422,14 @@ export default function TeamsNotifications() {
           </Row>
 
           <TimeWindowBar start={windowStart} end={windowEnd} active={!!windowEnabled} />
+
+          <Form.Item name="alert_active_days" label="Active days" style={{ marginTop: 12 }}>
+            <ActiveDaysPicker />
+          </Form.Item>
+
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: -8, marginBottom: 8 }}>
+            Connectivity alerts are dropped entirely on unselected days, regardless of the time window above.
+          </Text>
 
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6, marginBottom: 8 }}>
             {windowEnabled
