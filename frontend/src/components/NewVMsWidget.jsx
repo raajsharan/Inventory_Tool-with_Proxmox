@@ -19,10 +19,15 @@ export default function NewVMsWidget() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [partialErrors, setPartialErrors] = useState([]);
 
   function load() {
     api.get('/dashboard/new-vms')
-      .then(r => { setItems(r.data.items || []); setErr(''); })
+      .then(r => {
+        setItems(r.data.items || []);
+        setPartialErrors(r.data.errors || []);
+        setErr('');
+      })
       .catch(e => setErr(e.response?.data?.error || 'Failed to load newly discovered VMs.'))
       .finally(() => setLoading(false));
   }
@@ -65,6 +70,14 @@ export default function NewVMsWidget() {
       extra={<Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={load}>Refresh</Button>}
     >
       {err && <Alert type="error" showIcon message={err} style={{ marginBottom: 12 }} />}
+      {!err && partialErrors.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message={`Couldn't load data from: ${partialErrors.join(', ')}. Showing results from the other platform(s).`}
+          style={{ marginBottom: 12 }}
+        />
+      )}
       {!err && !items.length && !loading && (
         <Typography.Text type="secondary">No new VMs discovered in the last 7 days.</Typography.Text>
       )}

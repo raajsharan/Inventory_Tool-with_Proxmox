@@ -438,7 +438,22 @@ async function getDriftActivity(days = 7) {
   );
   if (!runRows.length) return [];
 
-  const runIds = runRows.map(r => r.run_id);
+  // Cap runs considered per host — each run stores a full VM snapshot (not
+  // a delta), so a host polled far more often than the default interval
+  // could otherwise balloon the fetch below into hundreds of thousands of
+  // rows and exhaust memory. Runs are already ordered oldest-first, so
+  // slicing keeps the most recent ones.
+  const MAX_RUNS_PER_HOST = 200;
+  const runsByHost = new Map();
+  for (const r of runRows) {
+    if (!runsByHost.has(r.host_id)) runsByHost.set(r.host_id, []);
+    runsByHost.get(r.host_id).push(r);
+  }
+  for (const [hostId, runs] of runsByHost) {
+    if (runs.length > MAX_RUNS_PER_HOST) runsByHost.set(hostId, runs.slice(-MAX_RUNS_PER_HOST));
+  }
+
+  const runIds = [...runsByHost.values()].flat().map(r => r.run_id);
   const { rows: allVms } = await db.query(
     'SELECT * FROM proxmox_discovered_vms WHERE run_id = ANY($1::int[])', [runIds]
   );
@@ -446,12 +461,6 @@ async function getDriftActivity(days = 7) {
   for (const vm of allVms) {
     if (!vmsByRun.has(vm.run_id)) vmsByRun.set(vm.run_id, []);
     vmsByRun.get(vm.run_id).push(vm);
-  }
-
-  const runsByHost = new Map();
-  for (const r of runRows) {
-    if (!runsByHost.has(r.host_id)) runsByHost.set(r.host_id, []);
-    runsByHost.get(r.host_id).push(r);
   }
 
   const key = v => `${v.node}/${v.vmid}`;

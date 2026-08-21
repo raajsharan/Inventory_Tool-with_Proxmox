@@ -1,4 +1,19 @@
 require('dotenv').config();
+
+// Without these, an unhandled rejection/exception can crash the process
+// silently (journalctl shows only the systemd restart, not why) — log the
+// cause before exiting so a real crash is diagnosable, then let systemd's
+// Restart=on-failure bring it back up.
+process.on('unhandledRejection', (reason) => {
+  // eslint-disable-next-line no-console
+  console.error('[fatal] Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('[fatal] Uncaught Exception:', err);
+  process.exit(1);
+});
+
 const http = require('http');
 const express = require('express');
 const cors = require('cors');

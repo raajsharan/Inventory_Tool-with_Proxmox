@@ -907,21 +907,37 @@ function normalizeAdded(platform, host, added) {
 // here even after a later no-op poll would otherwise blank it out.
 async function getNewVMs(_req, res, next) {
   try {
-    const [vmwareDrift, proxmoxDrift, hypervDrift] = await Promise.all([
-      vmwareDb.getDriftActivity(7), proxmoxDb.getDriftActivity(7), hypervDb.getDriftActivity(7),
-    ]);
+    // Each platform's drift query is isolated — a failure on one (e.g. its
+    // schema not yet migrated on this deployment) shouldn't blank the whole
+    // widget for the other two, which may have nothing wrong with them.
+    const platformQueries = [
+      { platform: 'VMware',   run: () => vmwareDb.getDriftActivity(7) },
+      { platform: 'Proxmox',  run: () => proxmoxDb.getDriftActivity(7) },
+      { platform: 'Hyper-V',  run: () => hypervDb.getDriftActivity(7) },
+    ];
+
+    const results = await Promise.allSettled(platformQueries.map(p => p.run()));
 
     const flatten = (platform, drift) => drift.flatMap(d =>
       normalizeAdded(platform, d.host, d.added).map(v => ({ ...v, discovered_at: d.current_at }))
     );
 
-    const items = [
-      ...flatten('VMware', vmwareDrift),
-      ...flatten('Proxmox', proxmoxDrift),
-      ...flatten('Hyper-V', hypervDrift),
-    ].sort((a, b) => new Date(b.discovered_at) - new Date(a.discovered_at));
+    const items = [];
+    const errors = [];
+    results.forEach((result, i) => {
+      const { platform } = platformQueries[i];
+      if (result.status === 'fulfilled') {
+        items.push(...flatten(platform, result.value));
+      } else {
+        // eslint-disable-next-line no-console
+        console.error(`[dashboard] getNewVMs: ${platform} drift query failed:`, result.reason?.message || result.reason);
+        errors.push(platform);
+      }
+    });
 
-    res.json({ items, total: items.length });
+    items.sort((a, b) => new Date(b.discovered_at) - new Date(a.discovered_at));
+
+    res.json({ items, total: items.length, errors });
   } catch (e) { next(e); }
 }
 
