@@ -196,9 +196,15 @@ async function get(pageKey) {
     };
   });
 
-  // Admin-added extra fields.
+  // Admin-added extra fields. A field_key that now collides with a real
+  // built-in column (e.g. patching_type was added to physical_esxi_servers'
+  // schema after some admin already created a like-named custom field —
+  // createExtra only blocks this collision going forward, not retroactively)
+  // is dropped here so the real column always wins instead of silently
+  // shadowing it with an always-empty extras JSONB value.
+  const builtInKeys = new Set(Object.keys(FIELD_DEFAULTS));
   const extras = overrideRows
-    .filter(r => r.is_extra)
+    .filter(r => r.is_extra && !builtInKeys.has(r.field_key))
     .map(r => ({
       field_key: r.field_key,
       is_extra: true,
