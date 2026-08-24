@@ -488,10 +488,13 @@ async function summary(_req, res, next) {
     // that total. Grouped by source too, so the report can show which
     // inventory (MSL Assets / Ext. Assets / Beijing Assets / Physical
     // Servers) each bucket's count comes from. Applicable = Windows (any
-    // version) or Linux (any distro) other than CentOS; Not Applicable is
-    // the complement (CentOS, appliances, EVE-NG, MAC, Cisco, VMware
-    // ESXi/vCenter, Proxmox, unknown/blank OS, etc.) so the buckets always
-    // sum to the total.
+    // version) or Linux (any distro) other than CentOS, Proxmox, or
+    // vCenter/ESXi/VMware (these are excluded even if os_type happens to
+    // also contain a Linux-sounding substring, e.g. a VCSA appliance
+    // reporting a Photon/Linux base). Not Applicable is the complement
+    // (CentOS, Appliances, EVE-NG, MacOS, Cisco, VMware ESXi/vCenter,
+    // Proxmox, unknown/blank OS, etc.) so the buckets always sum to the
+    // total.
     const weeklyNessusApplicabilityQ = db.query(`
       WITH pop AS (
         SELECT server_status, os_type, 'MSL Assets'::text AS source
@@ -535,7 +538,6 @@ async function summary(_req, res, next) {
       classified AS (
         SELECT source,
           (os_type ILIKE '%windows%') AS is_windows,
-          (os_type ILIKE '%centos%')  AS is_centos,
           (
             os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
             OR os_type ILIKE '%centos%'    OR os_type ILIKE '%rhel%'
@@ -544,11 +546,22 @@ async function summary(_req, res, next) {
             OR os_type ILIKE '%fedora%'    OR os_type ILIKE '%rocky%'
             OR os_type ILIKE '%alma%'      OR os_type ILIKE '%oracle linux%'
             OR os_type ILIKE '%amazon linux%'
-          ) AS is_linux
+          ) AS is_linux,
+          -- excluded even when combined with a Linux-sounding os_type
+          (
+            os_type ILIKE '%centos%'
+            OR os_type ILIKE '%proxmox%'
+            OR os_type ILIKE '%vcenter%'  OR os_type ILIKE '%vmware%' OR os_type ILIKE '%esxi%'
+            OR os_type ILIKE '%appliance%'
+            OR os_type ILIKE '%cisco%'
+            OR os_type ILIKE '%mac%'
+            OR REPLACE(REPLACE(os_type, '-', ''), ' ', '') ILIKE '%eveng%'
+          ) AS is_not_applicable_override
         FROM pop
       )
       SELECT
-        CASE WHEN is_windows OR (is_linux AND NOT is_centos) THEN 'applicable' ELSE 'not_applicable' END AS bucket,
+        CASE WHEN (is_windows OR is_linux) AND NOT is_not_applicable_override
+             THEN 'applicable' ELSE 'not_applicable' END AS bucket,
         source,
         COUNT(*)::int AS count
       FROM classified

@@ -1530,8 +1530,8 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                 How this is calculated<CompositionNote text={COMPOSITION_4} />(same eligible population as the Nessus install figure above — decommissioned, on-hold, and out-of-scope records excluded):
               </Typography.Text>
               <ul style={{ paddingLeft: 18, marginBottom: 0, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' }}>
-                <li><strong>Nessus Applicable</strong> — Windows (any version) or Linux (any distro) other than CentOS.</li>
-                <li><strong>Nessus Not Applicable</strong> — everything else in that population: CentOS, Appliances, EVE-NG, MAC, Cisco, VMware ESXi/vCenter, Proxmox, and any unknown/blank OS.</li>
+                <li><strong>Nessus Applicable</strong> — Windows (any version) or Linux (any distro) other than CentOS, Proxmox, vCenter.</li>
+                <li><strong>Nessus Not Applicable</strong> — everything else in that population: CentOS, Appliances, EVE-NG, MacOS, Cisco, VMware ESXi/vCenter, Proxmox, and any unknown/blank OS.</li>
               </ul>
             </div>
           </div>
