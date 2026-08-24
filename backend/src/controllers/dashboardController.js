@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const ApiError = require('../utils/ApiError');
 const { DEFAULT_CONFIG: COMPLIANCE_DEFAULTS } = require('./complianceConfigController');
 const vmwareDb  = require('../services/vmwareDbService');
 const proxmoxDb = require('../services/proxmoxDbService');
@@ -6,6 +7,113 @@ const hypervDb  = require('../services/hypervDbService');
 
 // Fields allowed in name-conflict cross-table JOINs (whitelist, never interpolate user input).
 const VALID_CONFLICT_FIELDS = new Set(['vm_name', 'os_hostname', 'asset_name', 'ip_address', 'mac_address']);
+
+// Shared population + OS-applicability classification for the Weekly Report
+// Nessus Applicability table: same eligible VM/Physical/Ext/Beijing rows as
+// weeklyNessusQ (bound to $1 = mslInclStatuses, $2 = mslExclEol), plus a
+// `bucket` column ('applicable' | 'not_applicable'). Used by both the
+// summary counts query and the record-detail endpoint below so the two
+// never drift apart. Applicable = Windows (any version) or Linux (any
+// distro) other than CentOS; Not Applicable is the complement (CentOS,
+// appliances, EVE-NG, MAC, Cisco, VMware ESXi/vCenter, Proxmox,
+// unknown/blank OS, etc.) so the buckets always sum to the total.
+function nessusApplicabilityCTE() {
+  return `
+    WITH pop AS (
+      SELECT vm_name, os_hostname, ip_address::text AS ip_address, location, server_status, os_type, 'MSL Assets'::text AS source
+        FROM assets
+       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         AND (
+           array_length($1::text[], 1) IS NULL
+           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+         )
+         AND (
+           array_length($2::text[], 1) IS NULL
+           OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
+         )
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+      UNION ALL
+      SELECT vm_name, os_hostname, ip_address::text, location, server_status, os_type, 'Physical Servers'
+        FROM physical_esxi_servers
+       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         AND (
+           array_length($1::text[], 1) IS NULL
+           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+         )
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+      UNION ALL
+      SELECT vm_name, os_hostname, ip_address::text, location, server_status, os_type, 'Ext. Assets'
+        FROM ext_assets
+       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         AND (server_status IS NULL OR (
+               server_status NOT ILIKE 'Decom%'
+           AND server_status NOT ILIKE 'Not Applic%'
+           AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
+           AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
+         ))
+      UNION ALL
+      SELECT vm_name, os_hostname, ip_address::text, location, server_status, os_type, 'Beijing Assets'
+        FROM beijing_assets
+       WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+         AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
+    ),
+    classified AS (
+      SELECT *,
+        (os_type ILIKE '%windows%') AS is_windows,
+        (os_type ILIKE '%centos%')  AS is_centos,
+        (
+          os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
+          OR os_type ILIKE '%centos%'    OR os_type ILIKE '%rhel%'
+          OR os_type ILIKE '%red hat%'   OR os_type ILIKE '%redhat%'
+          OR os_type ILIKE '%debian%'    OR os_type ILIKE '%suse%'
+          OR os_type ILIKE '%fedora%'    OR os_type ILIKE '%rocky%'
+          OR os_type ILIKE '%alma%'      OR os_type ILIKE '%oracle linux%'
+          OR os_type ILIKE '%amazon linux%'
+        ) AS is_linux
+      FROM pop
+    ),
+    bucketed AS (
+      SELECT *, CASE WHEN is_windows OR (is_linux AND NOT is_centos) THEN 'applicable' ELSE 'not_applicable' END AS bucket
+      FROM classified
+    )
+  `;
+}
+
+// GET /dashboard/weekly-nessus-applicability?bucket=applicable|not_applicable
+// Record-level detail behind the Weekly Report Nessus Applicability table.
+// Deliberately its own endpoint rather than folded into `summary` — summary
+// is fetched eagerly on every dashboard load (all tabs), and this list can
+// run into the thousands, so it's only fetched lazily when a row expands
+// (same reasoning as the getNewVMs drift-activity cap: keep unbounded
+// per-record data out of the eager summary payload).
+async function getWeeklyNessusApplicabilityDetail(req, res, next) {
+  try {
+    const bucket = req.query.bucket;
+    if (bucket !== 'applicable' && bucket !== 'not_applicable') {
+      throw new ApiError(400, "bucket must be 'applicable' or 'not_applicable'");
+    }
+    let compCfg;
+    try {
+      const { rows } = await db.query('SELECT config FROM compliance_config WHERE id = 1');
+      compCfg = (rows[0]?.config && Object.keys(rows[0].config).length) ? rows[0].config : COMPLIANCE_DEFAULTS;
+    } catch (_) {
+      compCfg = COMPLIANCE_DEFAULTS;
+    }
+    const mslInclStatuses = compCfg.msl?.include_server_statuses || COMPLIANCE_DEFAULTS.msl.include_server_statuses;
+    const mslExclEol      = compCfg.msl?.exclude_eol_statuses    || COMPLIANCE_DEFAULTS.msl.exclude_eol_statuses;
+
+    const { rows } = await db.query(`
+      ${nessusApplicabilityCTE()}
+      SELECT vm_name, os_hostname, ip_address, location, server_status, os_type, source
+        FROM bucketed
+       WHERE bucket = $3
+       ORDER BY vm_name
+    `, [mslInclStatuses, mslExclEol, bucket]);
+
+    res.json({ bucket, total: rows.length, records: rows });
+  } catch (e) { next(e); }
+}
 
 // VM-like inventories rolled up: assets + beijing_assets + physical_esxi_servers.
 // ext_assets is reported separately.
@@ -485,73 +593,16 @@ async function summary(_req, res, next) {
 
     // Weekly Report: Nessus applicability breakdown — same population as
     // weeklyNessusQ above, so Applicable + Not Applicable reconciles with
-    // that total. Applicable = Windows (any version) or Linux (any distro)
-    // other than CentOS. Not Applicable = everything else in that
-    // population (CentOS, appliances, EVE-NG, MAC, Cisco, VMware
-    // ESXi/vCenter, Proxmox, unknown/blank OS, etc.) — a complement rather
-    // than an explicit list, so the two rows always sum to the total.
+    // that total. Bucket definition lives in nessusApplicabilityCTE() so
+    // this count and the /weekly-nessus-applicability detail endpoint
+    // never drift apart.
     const weeklyNessusApplicabilityQ = db.query(`
-      WITH all_vms AS (
-        SELECT os_type, server_status, eol_status FROM assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL
-        SELECT os_type, server_status, NULL::text AS eol_status FROM physical_esxi_servers
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-      ),
-      msl_f AS (
-        SELECT os_type FROM all_vms
-         WHERE (
-           array_length($1::text[], 1) IS NULL
-           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
-         )
-         AND (
-           array_length($2::text[], 1) IS NULL
-           OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
-         )
-         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
-      ),
-      ext_f AS (
-        SELECT os_type FROM ext_assets
-         WHERE deleted_at IS NULL
-           AND decommissioned_at IS NULL
-           AND (server_status IS NULL OR (
-                 server_status NOT ILIKE 'Decom%'
-             AND server_status NOT ILIKE 'Not Applic%'
-             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
-             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
-           ))
-      ),
-      beijing_f AS (
-        SELECT os_type FROM beijing_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
-           AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
-      ),
-      pop AS (
-        SELECT os_type FROM msl_f
-        UNION ALL SELECT os_type FROM ext_f
-        UNION ALL SELECT os_type FROM beijing_f
-      ),
-      classified AS (
-        SELECT
-          (os_type ILIKE '%windows%') AS is_windows,
-          (os_type ILIKE '%centos%')  AS is_centos,
-          (
-            os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
-            OR os_type ILIKE '%centos%'    OR os_type ILIKE '%rhel%'
-            OR os_type ILIKE '%red hat%'   OR os_type ILIKE '%redhat%'
-            OR os_type ILIKE '%debian%'    OR os_type ILIKE '%suse%'
-            OR os_type ILIKE '%fedora%'    OR os_type ILIKE '%rocky%'
-            OR os_type ILIKE '%alma%'      OR os_type ILIKE '%oracle linux%'
-            OR os_type ILIKE '%amazon linux%'
-          ) AS is_linux
-        FROM pop
-      )
+      ${nessusApplicabilityCTE()}
       SELECT
-        COUNT(*) FILTER (WHERE is_windows OR (is_linux AND NOT is_centos))::int         AS applicable,
-        COUNT(*) FILTER (WHERE NOT (is_windows OR (is_linux AND NOT is_centos)))::int   AS not_applicable,
-        COUNT(*)::int                                                                   AS total
-      FROM classified
+        COUNT(*) FILTER (WHERE bucket = 'applicable')::int     AS applicable,
+        COUNT(*) FILTER (WHERE bucket = 'not_applicable')::int AS not_applicable,
+        COUNT(*)::int                                          AS total
+      FROM bucketed
     `, [mslInclStatuses, mslExclEol]);
 
     // ---------------------------------------------------------------
@@ -1015,4 +1066,4 @@ async function getNewVMs(_req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { summary, getConfig, saveConfig, widgetData, getNewVMs };
+module.exports = { summary, getConfig, saveConfig, widgetData, getNewVMs, getWeeklyNessusApplicabilityDetail };
