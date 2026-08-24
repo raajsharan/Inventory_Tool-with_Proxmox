@@ -593,16 +593,16 @@ async function summary(_req, res, next) {
 
     // Weekly Report: Nessus applicability breakdown — same population as
     // weeklyNessusQ above, so Applicable + Not Applicable reconciles with
-    // that total. Bucket definition lives in nessusApplicabilityCTE() so
-    // this count and the /weekly-nessus-applicability detail endpoint
-    // never drift apart.
+    // that total. Grouped by source too, so the report can show which
+    // inventory (MSL Assets / Ext. Assets / Beijing Assets / Physical
+    // Servers) each bucket's count comes from. Bucket definition lives in
+    // nessusApplicabilityCTE() so this and the /weekly-nessus-applicability
+    // detail endpoint never drift apart.
     const weeklyNessusApplicabilityQ = db.query(`
       ${nessusApplicabilityCTE()}
-      SELECT
-        COUNT(*) FILTER (WHERE bucket = 'applicable')::int     AS applicable,
-        COUNT(*) FILTER (WHERE bucket = 'not_applicable')::int AS not_applicable,
-        COUNT(*)::int                                          AS total
+      SELECT bucket, source, COUNT(*)::int AS count
       FROM bucketed
+      GROUP BY bucket, source
     `, [mslInclStatuses, mslExclEol]);
 
     // ---------------------------------------------------------------
@@ -821,6 +821,20 @@ async function summary(_req, res, next) {
     const readinessPct   = total ? ((total - pending) / total) * 100 : 0;
     const healthScore    = Math.round(0.6 * compliancePct + 0.4 * readinessPct);
 
+    // Reshape weeklyNessusApplicabilityQ's (bucket, source, count) rows into
+    // { applicable: { total, mslAssets, extAssets, beijingAssets, physicalEsxi }, not_applicable: {...}, total }
+    // so the Weekly Report table can show which inventory each count comes from.
+    const NESSUS_APPLICABILITY_SOURCE_KEYS = {
+      'MSL Assets': 'mslAssets', 'Ext. Assets': 'extAssets',
+      'Beijing Assets': 'beijingAssets', 'Physical Servers': 'physicalEsxi',
+    };
+    const nessusApplicabilityByBucket = { applicable: { total: 0 }, not_applicable: { total: 0 } };
+    for (const r of weeklyNessusApplicability.rows) {
+      const key = NESSUS_APPLICABILITY_SOURCE_KEYS[r.source] || r.source;
+      nessusApplicabilityByBucket[r.bucket][key] = r.count;
+      nessusApplicabilityByBucket[r.bucket].total += r.count;
+    }
+
     res.json({
       headline: {
         totalInventory: total + (ext.rows[0].total || 0),
@@ -898,7 +912,11 @@ async function summary(_req, res, next) {
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
       weeklyNessus: weeklyNessus.rows[0],
-      weeklyNessusApplicability: weeklyNessusApplicability.rows[0],
+      weeklyNessusApplicability: {
+        applicable:     nessusApplicabilityByBucket.applicable,
+        not_applicable: nessusApplicabilityByBucket.not_applicable,
+        total: nessusApplicabilityByBucket.applicable.total + nessusApplicabilityByBucket.not_applicable.total,
+      },
       weeklyLocationPatching:   weeklyLocationPatching.rows,
       weeklyDepartmentPatching: weeklyDepartmentPatching.rows,
       meMslBreakdown:  meMslBreakdown.rows,

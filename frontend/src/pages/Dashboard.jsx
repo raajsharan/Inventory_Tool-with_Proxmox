@@ -1500,7 +1500,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
           </Typography.Paragraph>
 
           {/* Nessus Applicability breakdown — same population as the install line above */}
-          <div className="weekly-breakdown-card" style={{ maxWidth: 900, marginTop: 12, marginBottom: 16 }}>
+          <div className="weekly-breakdown-card" style={{ maxWidth: 1050, marginTop: 12, marginBottom: 16 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
               Nessus Applicability<CompositionNote text={COMPOSITION_4} symbol="arrow" />:
             </Typography.Text>
@@ -1511,8 +1511,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               rowKey="key"
               size="small"
               dataSource={[
-                { key: 'applicable', slNo: 1, description: 'Nessus Applicable', count: nessusApplicability.applicable ?? 0 },
-                { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', count: nessusApplicability.not_applicable ?? 0 },
+                { key: 'applicable', slNo: 1, description: 'Nessus Applicable', ...nessusApplicability.applicable,
+                  count: nessusApplicability.applicable?.total ?? 0 },
+                { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', ...nessusApplicability.not_applicable,
+                  count: nessusApplicability.not_applicable?.total ?? 0 },
               ]}
               pagination={false}
               tableLayout="fixed"
@@ -1550,18 +1552,30 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                 },
               }}
               columns={[
-                { title: 'Sl. No', dataIndex: 'slNo', width: 70 },
+                { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
                 { title: 'Description', dataIndex: 'description' },
-                { title: 'Count', dataIndex: 'count', align: 'right',
+                { title: 'Assets Inventory', dataIndex: 'mslAssets', align: 'right', width: 130,
+                  render: v => (v ?? 0).toLocaleString() },
+                { title: 'Ext. Inventory', dataIndex: 'extAssets', align: 'right', width: 120,
+                  render: v => (v ?? 0).toLocaleString() },
+                { title: 'Beijing Inventory', dataIndex: 'beijingAssets', align: 'right', width: 130,
+                  render: v => (v ?? 0).toLocaleString() },
+                { title: 'Physical & ESXi Inventory', dataIndex: 'physicalEsxi', align: 'right', width: 150,
+                  render: v => (v ?? 0).toLocaleString() },
+                { title: 'Total Count', dataIndex: 'count', align: 'right', width: 110,
                   render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
               ]}
               summary={(rows) => {
                 if (!rows.length) return null;
-                const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+                const sum = (key) => rows.reduce((s, r) => s + (r[key] ?? 0), 0);
                 return (
                   <Table.Summary.Row style={{ fontWeight: 700 }}>
                     <Table.Summary.Cell index={0} colSpan={2}><strong>Total</strong></Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} align="right"><strong>{grand.toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right"><strong>{sum('mslAssets').toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right"><strong>{sum('extAssets').toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} align="right"><strong>{sum('beijingAssets').toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="right"><strong>{sum('physicalEsxi').toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="right"><strong>{sum('count').toLocaleString()}</strong></Table.Summary.Cell>
                   </Table.Summary.Row>
                 );
               }}
