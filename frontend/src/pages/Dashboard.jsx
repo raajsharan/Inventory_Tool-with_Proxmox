@@ -1525,6 +1525,15 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                 );
               }}
             />
+            <div style={{ marginTop: 10 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                How this is calculated<CompositionNote text={COMPOSITION_4} />(same eligible population as the Nessus install figure above — decommissioned, on-hold, and out-of-scope records excluded):
+              </Typography.Text>
+              <ul style={{ paddingLeft: 18, marginBottom: 0, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' }}>
+                <li><strong>Nessus Applicable</strong> — Windows (any version) or Linux (any distro) other than CentOS.</li>
+                <li><strong>Nessus Not Applicable</strong> — everything else in that population: CentOS, Appliances, EVE-NG, MAC, Cisco, VMware ESXi/vCenter, Proxmox, and any unknown/blank OS.</li>
+              </ul>
+            </div>
           </div>
 
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
