@@ -434,58 +434,11 @@ async function summary(_req, res, next) {
         ) AS name_conflicts;
     `);
 
-    // Weekly Report: Nessus install count using the EXACT same population as
-    // combinedDenominator (mslQ's status-eligible Asset+Physical rows,
-    // extComplianceQ's in-scope Ext rows, beijingRawQ's raw-VM Beijing rows)
-    // so this line's total agrees with the Combined Inventory Count and the
-    // Location-wise Grand Total. Still includes appliances/hypervisors/
-    // EOL-unsupported OS (there's no os_type filter here), hence the
-    // footnote — it just now also excludes ineligible-status/decommissioned
-    // rows the same way the other totals do.
-    const weeklyNessusQ = db.query(`
-      WITH all_vms AS (
-        SELECT tenable_installed, server_status, eol_status FROM assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL
-        SELECT false AS tenable_installed, server_status, NULL::text AS eol_status FROM physical_esxi_servers
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-      ),
-      msl_f AS (
-        SELECT tenable_installed FROM all_vms
-         WHERE (
-           array_length($1::text[], 1) IS NULL
-           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
-         )
-         AND (
-           array_length($2::text[], 1) IS NULL
-           OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
-         )
-         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
-      ),
-      ext_f AS (
-        SELECT tenable_installed FROM ext_assets
-         WHERE deleted_at IS NULL
-           AND decommissioned_at IS NULL
-           AND (server_status IS NULL OR (
-                 server_status NOT ILIKE 'Decom%'
-             AND server_status NOT ILIKE 'Not Applic%'
-             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
-             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
-           ))
-      ),
-      beijing_f AS (
-        SELECT tenable_installed FROM beijing_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
-           AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
-      )
-      SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE tenable_installed)::int AS installed
-        FROM (SELECT tenable_installed FROM msl_f UNION ALL SELECT tenable_installed FROM ext_f UNION ALL SELECT tenable_installed FROM beijing_f) x
-    `, [mslInclStatuses, mslExclEol]);
-
-    // Weekly Report: Nessus applicability breakdown — same population as
-    // weeklyNessusQ above, so Applicable + Not Applicable reconciles with
-    // that total. Grouped by source too, so the report can show which
+    // Weekly Report: Nessus applicability breakdown — same status-eligible
+    // Asset+Physical/Ext/Beijing population as combinedDenominator (mslQ,
+    // extComplianceQ, beijingRawQ), so Applicable + Not Applicable
+    // reconciles with the Combined Inventory Count and the Location-wise
+    // Grand Total. Grouped by source too, so the report can show which
     // inventory (MSL Assets / Ext. Assets / Beijing Assets / Physical
     // Servers) each bucket's count comes from. Applicable = Windows (any
     // version) or Linux (any distro) other than CentOS, Proxmox, or
@@ -766,14 +719,14 @@ async function summary(_req, res, next) {
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
-           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw, weeklyNessus,
+           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw,
            weeklyNessusApplicability] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
-      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ, beijingRawQ, weeklyNessusQ,
+      meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ, beijingRawQ,
       weeklyNessusApplicabilityQ,
     ]);
 
@@ -881,7 +834,6 @@ async function summary(_req, res, next) {
       vmCountByLocation: vmLocation.rows,
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
-      weeklyNessus: weeklyNessus.rows[0],
       weeklyNessusApplicability: {
         applicable:     nessusApplicabilityByBucket.applicable,
         not_applicable: nessusApplicabilityByBucket.not_applicable,

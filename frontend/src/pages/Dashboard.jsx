@@ -1356,7 +1356,6 @@ function CompositionNote({ text, symbol }) {
 function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
-  const nessus = data.weeklyNessus || {};
   const nessusApplicability = data.weeklyNessusApplicability || {};
   const assetPatching = data.assetInventoryPatchingStatus || {};
   const extPatching   = data.extInventoryPatchingStatus || {};
@@ -1473,14 +1472,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <li><strong>{(vmGaps.name_conflicts ?? 0).toLocaleString()}</strong> endpoints<CompositionNote text={COMPOSITION_3} />currently have name conflicts from OS Hostname.</li>
           </ul>
 
-          <Typography.Paragraph style={{ marginBottom: 16 }}>
-            → So far Nessus is installed on around <strong>{(nessus.installed ?? 0).toLocaleString()} / {(nessus.total ?? 0).toLocaleString()}</strong> = <strong>{pct(nessus.installed, nessus.total)}%</strong>{' '}
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              **Includes appliances, hypervisors, EOL not supported OS VMs which are not applicable.
-            </Typography.Text>
-          </Typography.Paragraph>
-
-          {/* Nessus Applicability breakdown — same population as the install line above */}
+          {/* Nessus Applicability breakdown */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 1050, marginTop: 12, marginBottom: 16 }}>
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
               Nessus Applicability<CompositionNote text={COMPOSITION_4} symbol="arrow" />:
@@ -1526,7 +1518,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               }}
             />
             <Typography.Paragraph style={{ marginTop: 10, marginBottom: 0 }}>
-              <strong>% = Nessus Installed / Nessus Applicable × 100</strong> ={' '}
+              <strong>Nessus Compliance Percentage = Nessus Installed / Nessus Applicable × 100</strong> ={' '}
               <strong>{(nessusApplicability.applicable?.installed ?? 0).toLocaleString()}</strong> /{' '}
               <strong>{(nessusApplicability.applicable?.total ?? 0).toLocaleString()}</strong> ={' '}
               <strong>{pct(nessusApplicability.applicable?.installed, nessusApplicability.applicable?.total)}%</strong>
