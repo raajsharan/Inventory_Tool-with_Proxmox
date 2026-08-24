@@ -1353,30 +1353,11 @@ function CompositionNote({ text, symbol }) {
   );
 }
 
-const NESSUS_APPLICABILITY_SOURCE_COLOR = {
-  'MSL Assets':       'blue',
-  'Beijing Assets':   'purple',
-  'Ext. Assets':      'cyan',
-  'Physical Servers': 'orange',
-};
-
 function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
   const nessus = data.weeklyNessus || {};
   const nessusApplicability = data.weeklyNessusApplicability || {};
-
-  // Record-level detail behind the two Nessus Applicability rows, fetched
-  // lazily on expand — the record list can run into the thousands, so it's
-  // kept out of the eager /dashboard/summary payload (its own endpoint).
-  const [applicabilityExpanded, setApplicabilityExpanded] = useState([]);
-  const [applicabilityDetail, setApplicabilityDetail] = useState({});
-  function loadApplicabilityDetail(bucket) {
-    setApplicabilityDetail(prev => ({ ...prev, [bucket]: { loading: true, records: prev[bucket]?.records || [] } }));
-    api.get('/dashboard/weekly-nessus-applicability', { params: { bucket } })
-      .then(r => setApplicabilityDetail(prev => ({ ...prev, [bucket]: { loading: false, records: r.data.records || [] } })))
-      .catch(() => setApplicabilityDetail(prev => ({ ...prev, [bucket]: { loading: false, records: [], error: true } })));
-  }
   const assetPatching = data.assetInventoryPatchingStatus || {};
   const extPatching   = data.extInventoryPatchingStatus || {};
   const locRows  = data.weeklyLocationPatching || [];
@@ -1504,9 +1485,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
             <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
               Nessus Applicability<CompositionNote text={COMPOSITION_4} symbol="arrow" />:
             </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-              Expand a row (▸) to view the underlying record list.
-            </Typography.Text>
             <Table
               rowKey="key"
               size="small"
@@ -1518,39 +1496,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               ]}
               pagination={false}
               tableLayout="fixed"
-              expandable={{
-                expandedRowKeys: applicabilityExpanded,
-                onExpand: (open, row) => {
-                  setApplicabilityExpanded(open ? [row.key] : []);
-                  if (open && !applicabilityDetail[row.key]) loadApplicabilityDetail(row.key);
-                },
-                expandedRowRender: (row) => {
-                  const detail = applicabilityDetail[row.key] || {};
-                  if (detail.loading) return <Spin size="small" />;
-                  if (detail.error) return <Typography.Text type="danger">Failed to load records.</Typography.Text>;
-                  const records = detail.records || [];
-                  return (
-                    <Table
-                      rowKey={(r, i) => `${r.ip_address || r.vm_name || i}-${r.source}`}
-                      size="small"
-                      dataSource={records}
-                      locale={{ emptyText: 'No records' }}
-                      pagination={records.length > 50 ? { pageSize: 50 } : false}
-                      columns={[
-                        { title: 'VM Name', dataIndex: 'vm_name', render: v => v || '—' },
-                        { title: 'Hostname', dataIndex: 'os_hostname', render: v => v || '—' },
-                        { title: 'IP Address', dataIndex: 'ip_address',
-                          render: v => <Typography.Text code style={{ fontSize: 12 }}>{v || '—'}</Typography.Text> },
-                        { title: 'Location', dataIndex: 'location', render: v => v || '—' },
-                        { title: 'OS Type', dataIndex: 'os_type', render: v => <Tag>{v || 'Unknown'}</Tag> },
-                        { title: 'Server Status', dataIndex: 'server_status', render: v => v || '—' },
-                        { title: 'Source', dataIndex: 'source',
-                          render: v => <Tag color={NESSUS_APPLICABILITY_SOURCE_COLOR[v] || 'default'}>{v}</Tag> },
-                      ]}
-                    />
-                  );
-                },
-              }}
               columns={[
                 { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
                 { title: 'Description', dataIndex: 'description' },
