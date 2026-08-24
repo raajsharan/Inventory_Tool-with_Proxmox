@@ -1525,6 +1525,12 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                 );
               }}
             />
+            <Typography.Paragraph style={{ marginTop: 10, marginBottom: 0 }}>
+              <strong>% = Nessus Installed / Nessus Applicable × 100</strong> ={' '}
+              <strong>{(nessusApplicability.applicable?.installed ?? 0).toLocaleString()}</strong> /{' '}
+              <strong>{(nessusApplicability.applicable?.total ?? 0).toLocaleString()}</strong> ={' '}
+              <strong>{pct(nessusApplicability.applicable?.installed, nessusApplicability.applicable?.total)}%</strong>
+            </Typography.Paragraph>
             <div style={{ marginTop: 10 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
                 How this is calculated<CompositionNote text={COMPOSITION_4} />(same eligible population as the Nessus install figure above — decommissioned, on-hold, and out-of-scope records excluded):

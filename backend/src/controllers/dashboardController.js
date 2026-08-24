@@ -497,7 +497,7 @@ async function summary(_req, res, next) {
     // total.
     const weeklyNessusApplicabilityQ = db.query(`
       WITH pop AS (
-        SELECT server_status, os_type, 'MSL Assets'::text AS source
+        SELECT server_status, os_type, tenable_installed, 'MSL Assets'::text AS source
           FROM assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
            AND (
@@ -510,7 +510,7 @@ async function summary(_req, res, next) {
            )
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
-        SELECT server_status, os_type, 'Physical Servers'
+        SELECT server_status, os_type, false AS tenable_installed, 'Physical Servers'
           FROM physical_esxi_servers
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
            AND (
@@ -519,7 +519,7 @@ async function summary(_req, res, next) {
            )
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
-        SELECT server_status, os_type, 'Ext. Assets'
+        SELECT server_status, os_type, tenable_installed, 'Ext. Assets'
           FROM ext_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
            AND (server_status IS NULL OR (
@@ -529,14 +529,14 @@ async function summary(_req, res, next) {
              AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
            ))
         UNION ALL
-        SELECT server_status, os_type, 'Beijing Assets'
+        SELECT server_status, os_type, tenable_installed, 'Beijing Assets'
           FROM beijing_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
            AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       ),
       classified AS (
-        SELECT source,
+        SELECT source, COALESCE(tenable_installed, false) AS tenable_installed,
           (os_type ILIKE '%windows%') AS is_windows,
           (
             os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
@@ -563,7 +563,8 @@ async function summary(_req, res, next) {
         CASE WHEN (is_windows OR is_linux) AND NOT is_not_applicable_override
              THEN 'applicable' ELSE 'not_applicable' END AS bucket,
         source,
-        COUNT(*)::int AS count
+        COUNT(*)::int                                        AS count,
+        COUNT(*) FILTER (WHERE tenable_installed)::int       AS installed
       FROM classified
       GROUP BY 1, 2
     `, [mslInclStatuses, mslExclEol]);
@@ -784,18 +785,24 @@ async function summary(_req, res, next) {
     const readinessPct   = total ? ((total - pending) / total) * 100 : 0;
     const healthScore    = Math.round(0.6 * compliancePct + 0.4 * readinessPct);
 
-    // Reshape weeklyNessusApplicabilityQ's (bucket, source, count) rows into
-    // { applicable: { total, mslAssets, extAssets, beijingAssets, physicalEsxi }, not_applicable: {...}, total }
-    // so the Weekly Report table can show which inventory each count comes from.
+    // Reshape weeklyNessusApplicabilityQ's (bucket, source, count, installed) rows
+    // into { applicable: { total, installed, mslAssets, extAssets, beijingAssets,
+    // physicalEsxi }, not_applicable: {...}, total } so the Weekly Report table can
+    // show which inventory each count comes from and the installed % within
+    // the Applicable bucket.
     const NESSUS_APPLICABILITY_SOURCE_KEYS = {
       'MSL Assets': 'mslAssets', 'Ext. Assets': 'extAssets',
       'Beijing Assets': 'beijingAssets', 'Physical Servers': 'physicalEsxi',
     };
-    const nessusApplicabilityByBucket = { applicable: { total: 0 }, not_applicable: { total: 0 } };
+    const nessusApplicabilityByBucket = {
+      applicable: { total: 0, installed: 0 },
+      not_applicable: { total: 0, installed: 0 },
+    };
     for (const r of weeklyNessusApplicability.rows) {
       const key = NESSUS_APPLICABILITY_SOURCE_KEYS[r.source] || r.source;
       nessusApplicabilityByBucket[r.bucket][key] = r.count;
       nessusApplicabilityByBucket[r.bucket].total += r.count;
+      nessusApplicabilityByBucket[r.bucket].installed += r.installed;
     }
 
     res.json({
