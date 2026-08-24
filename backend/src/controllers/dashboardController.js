@@ -483,6 +483,77 @@ async function summary(_req, res, next) {
         FROM (SELECT tenable_installed FROM msl_f UNION ALL SELECT tenable_installed FROM ext_f UNION ALL SELECT tenable_installed FROM beijing_f) x
     `, [mslInclStatuses, mslExclEol]);
 
+    // Weekly Report: Nessus applicability breakdown — same population as
+    // weeklyNessusQ above, so Applicable + Not Applicable reconciles with
+    // that total. Applicable = Windows (any version) or Linux (any distro)
+    // other than CentOS. Not Applicable = everything else in that
+    // population (CentOS, appliances, EVE-NG, MAC, Cisco, VMware
+    // ESXi/vCenter, Proxmox, unknown/blank OS, etc.) — a complement rather
+    // than an explicit list, so the two rows always sum to the total.
+    const weeklyNessusApplicabilityQ = db.query(`
+      WITH all_vms AS (
+        SELECT os_type, server_status, eol_status FROM assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL
+        SELECT os_type, server_status, NULL::text AS eol_status FROM physical_esxi_servers
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+      ),
+      msl_f AS (
+        SELECT os_type FROM all_vms
+         WHERE (
+           array_length($1::text[], 1) IS NULL
+           OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
+         )
+         AND (
+           array_length($2::text[], 1) IS NULL
+           OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
+         )
+         AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+      ),
+      ext_f AS (
+        SELECT os_type FROM ext_assets
+         WHERE deleted_at IS NULL
+           AND decommissioned_at IS NULL
+           AND (server_status IS NULL OR (
+                 server_status NOT ILIKE 'Decom%'
+             AND server_status NOT ILIKE 'Not Applic%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
+           ))
+      ),
+      beijing_f AS (
+        SELECT os_type FROM beijing_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+           AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
+      ),
+      pop AS (
+        SELECT os_type FROM msl_f
+        UNION ALL SELECT os_type FROM ext_f
+        UNION ALL SELECT os_type FROM beijing_f
+      ),
+      classified AS (
+        SELECT
+          (os_type ILIKE '%windows%') AS is_windows,
+          (os_type ILIKE '%centos%')  AS is_centos,
+          (
+            os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
+            OR os_type ILIKE '%centos%'    OR os_type ILIKE '%rhel%'
+            OR os_type ILIKE '%red hat%'   OR os_type ILIKE '%redhat%'
+            OR os_type ILIKE '%debian%'    OR os_type ILIKE '%suse%'
+            OR os_type ILIKE '%fedora%'    OR os_type ILIKE '%rocky%'
+            OR os_type ILIKE '%alma%'      OR os_type ILIKE '%oracle linux%'
+            OR os_type ILIKE '%amazon linux%'
+          ) AS is_linux
+        FROM pop
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE is_windows OR (is_linux AND NOT is_centos))::int         AS applicable,
+        COUNT(*) FILTER (WHERE NOT (is_windows OR (is_linux AND NOT is_centos)))::int   AS not_applicable,
+        COUNT(*)::int                                                                   AS total
+      FROM classified
+    `, [mslInclStatuses, mslExclEol]);
+
     // ---------------------------------------------------------------
     // Weekly Report extras: location-wise + department-wise patching
     // breakdown across the three VM-side tables. Beijing IT column =
@@ -680,13 +751,15 @@ async function summary(_req, res, next) {
     const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
-           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw, weeklyNessus] = await Promise.all([
+           meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw, weeklyNessus,
+           weeklyNessusApplicability] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
       meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ, beijingRawQ, weeklyNessusQ,
+      weeklyNessusApplicabilityQ,
     ]);
 
     const i = inv.rows[0];
@@ -774,6 +847,7 @@ async function summary(_req, res, next) {
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
       weeklyNessus: weeklyNessus.rows[0],
+      weeklyNessusApplicability: weeklyNessusApplicability.rows[0],
       weeklyLocationPatching:   weeklyLocationPatching.rows,
       weeklyDepartmentPatching: weeklyDepartmentPatching.rows,
       meMslBreakdown:  meMslBreakdown.rows,

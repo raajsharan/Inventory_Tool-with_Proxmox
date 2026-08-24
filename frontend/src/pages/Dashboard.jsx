@@ -1357,6 +1357,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
   const nessus = data.weeklyNessus || {};
+  const nessusApplicability = data.weeklyNessusApplicability || {};
   const assetPatching = data.assetInventoryPatchingStatus || {};
   const extPatching   = data.extInventoryPatchingStatus || {};
   const locRows  = data.weeklyLocationPatching || [];
@@ -1478,6 +1479,39 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               **Includes appliances, hypervisors, EOL not supported OS VMs which are not applicable.
             </Typography.Text>
           </Typography.Paragraph>
+
+          {/* Nessus Applicability breakdown — same population as the install line above */}
+          <div className="weekly-breakdown-card" style={{ maxWidth: 420, marginTop: 12, marginBottom: 16 }}>
+            <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: isDark ? '#60a5fa' : '#1d4ed8' }}>
+              Nessus Applicability<CompositionNote text={COMPOSITION_4} symbol="arrow" />:
+            </Typography.Text>
+            <Table
+              rowKey="key"
+              size="small"
+              dataSource={[
+                { key: 'applicable', slNo: 1, description: 'Nessus Applicable', count: nessusApplicability.applicable ?? 0 },
+                { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', count: nessusApplicability.not_applicable ?? 0 },
+              ]}
+              pagination={false}
+              tableLayout="fixed"
+              columns={[
+                { title: 'Sl. No', dataIndex: 'slNo', width: 70 },
+                { title: 'Description', dataIndex: 'description' },
+                { title: 'Count', dataIndex: 'count', align: 'right',
+                  render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+              ]}
+              summary={(rows) => {
+                if (!rows.length) return null;
+                const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+                return (
+                  <Table.Summary.Row style={{ fontWeight: 700 }}>
+                    <Table.Summary.Cell index={0} colSpan={2}><strong>Total</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right"><strong>{grand.toLocaleString()}</strong></Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
+            />
+          </div>
 
           {/* Location-wise count table — combined Asset Inventory + Ext. Assets */}
           <div className="weekly-breakdown-card" style={{ maxWidth: 320, marginTop: 12 }}>
