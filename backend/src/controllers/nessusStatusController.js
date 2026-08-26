@@ -383,7 +383,12 @@ async function install(req, res, next) {
       if (!cmd.trim()) throw new ApiError(422, 'No curl command configured for Nessus Linux install.');
       appendLog(logFile, ip_address, 'INFO', 'Linux curl install — checking curl availability...');
 
-      // Auto-install curl if missing, then run the configured command
+      // Auto-install curl if missing, then run the configured command. If the
+      // install fails with curl's SSL error 60 ("unable to get local issuer
+      // certificate" — a stale/missing CA bundle, common on minimal RHEL/
+      // CentOS-family images), refresh the ca-certificates package and retry
+      // once instead of surfacing the raw curl failure.
+      const CURL_LOG = '/tmp/.nessus_curl_install.log';
       const fullScript = [
         'if ! which curl >/dev/null 2>&1; then',
         '  echo "[NESSUS] curl not found, installing...";',
@@ -399,7 +404,26 @@ async function install(req, res, next) {
         '  echo "[NESSUS] curl installed successfully";',
         'fi;',
         'echo "[NESSUS] Running Nessus Agent curl install...";',
-        cmd,
+        `{ ${cmd}; } > ${CURL_LOG} 2>&1;`,
+        'NESSUS_INSTALL_EXIT=$?;',
+        `cat ${CURL_LOG};`,
+        `if [ $NESSUS_INSTALL_EXIT -ne 0 ] && grep -Eqi "unable to get local issuer certificate|SSL certificate problem" ${CURL_LOG}; then`,
+        '  echo "[NESSUS] SSL certificate issue detected — refreshing ca-certificates and retrying...";',
+        '  if command -v dnf >/dev/null 2>&1; then',
+        '    sudo dnf reinstall -y ca-certificates; sudo dnf update -y ca-certificates;',
+        '  elif command -v yum >/dev/null 2>&1; then',
+        '    sudo yum reinstall -y ca-certificates; sudo yum update -y ca-certificates;',
+        '  elif command -v apt-get >/dev/null 2>&1; then',
+        '    sudo apt-get install --reinstall -y ca-certificates;',
+        '  fi;',
+        '  sudo update-ca-trust extract 2>/dev/null || sudo update-ca-certificates 2>/dev/null;',
+        '  echo "[NESSUS] Retrying Nessus Agent curl install...";',
+        `  { ${cmd}; } > ${CURL_LOG} 2>&1;`,
+        '  NESSUS_INSTALL_EXIT=$?;',
+        `  cat ${CURL_LOG};`,
+        'fi;',
+        `rm -f ${CURL_LOG};`,
+        'exit $NESSUS_INSTALL_EXIT;',
       ].join('\n');
 
       result = await sshRunCommand({ host: ip_address, port, username, password, command: fullScript });
