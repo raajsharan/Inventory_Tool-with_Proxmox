@@ -654,9 +654,19 @@ function InstallDetail({ vm, result }) {
   const usedMethod = result.succeeded_method || result.method;
 
   if (!result.connected) {
+    // In Auto mode, result.error is whatever the LAST method attempted
+    // (ssh_bash) failed with — e.g. an SSH-port ECONNREFUSED — which reads
+    // as "the" reason even though winrm/wmi/psexec failed independently,
+    // for their own reasons, on different ports. Don't present one method's
+    // error as if it explains all of them; point at the per-method
+    // breakdown instead.
+    const multiTried = result.tried && result.tried.length > 1;
     return (
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        <Alert type="error" showIcon message="Connection failed" description={result.error} />
+        <Alert type="error" showIcon message="Connection failed"
+          description={multiTried
+            ? 'Every install method failed — see the reason for each one below.'
+            : result.error} />
         {result.tried && <TriedMethods tried={result.tried} />}
       </Space>
     );
@@ -696,15 +706,20 @@ function InstallDetail({ vm, result }) {
 
 function TriedMethods({ tried }) {
   return (
-    <Space wrap size={4}>
+    <Space direction="vertical" style={{ width: '100%' }} size={4}>
       <Typography.Text type="secondary" style={{ fontSize: 11 }}>Methods tried:</Typography.Text>
       {tried.map((t, i) => {
         const ok    = t.connected && t.exitCode === 0;
         const color = ok ? 'success' : t.connected ? 'warning' : 'error';
         return (
-          <Tooltip key={i} title={t.error || (ok ? 'Succeeded' : `Exit ${t.exitCode ?? 'no connection'}`)}>
+          <Space key={i} size={6} wrap>
             <Tag color={color} style={{ fontSize: 10 }}>{t.method} {ok ? '✓' : '✗'}</Tag>
-          </Tooltip>
+            {!ok && (
+              <Typography.Text type="secondary" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                {t.error || `Exit ${t.exitCode ?? 'no connection'}`}
+              </Typography.Text>
+            )}
+          </Space>
         );
       })}
     </Space>
