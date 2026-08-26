@@ -528,6 +528,19 @@ function ConfigModal({ open, onClose, onSaved }) {
                     {testResult.detail}
                   </pre>
                 )
+                : testResult.success && testResult.sample_fields
+                ? (
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    <div>
+                      Live status field: {testResult.live_status_field
+                        ? <code>{testResult.live_status_field} = {String(testResult.live_status_value)}</code>
+                        : <span style={{ color: '#faad14' }}>not present in the response — Agent Status will show as Unknown until ME EC reports it</span>}
+                    </div>
+                    <div style={{ marginTop: 4, color: '#8c8c8c' }}>
+                      Sample fields: {testResult.sample_fields.join(', ')}
+                    </div>
+                  </div>
+                )
                 : null
             }
           />

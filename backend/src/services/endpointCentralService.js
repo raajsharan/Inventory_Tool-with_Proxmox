@@ -510,8 +510,13 @@ function normalizeComputer(c) {
     agent_install_status: Number.isFinite(installStatusNum) ? installStatusNum : null,
     // agent_status: 0 = Online, 1 = Offline, 2 = Unknown. Prefer the
     // documented live_status field (scancomputers API) over older guessed names.
+    // Default to 2 (Unknown) rather than 1 (Offline) when no live-status field
+    // is present at all — the source endpoint not reporting liveness is not
+    // the same fact as every endpoint being confirmed offline, and defaulting
+    // to Offline was masking that distinction (every row showed Offline with
+    // 0 Online even though ME EC's own console shows agents as live).
     agent_status:   mapLiveStatus(c.live_status ?? c.LIVE_STATUS ?? c.livestatus)
-                  ?? c.agent_status ?? c.AGENT_STATUS ?? c.agentstatus ?? 1,
+                  ?? c.agent_status ?? c.AGENT_STATUS ?? c.agentstatus ?? 2,
     // scan_status: -1 = Not done, 0 = failed, 1 = In progress, 2 = success.
     scan_status:    rawScanStatus(c),
     last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
@@ -924,11 +929,21 @@ async function testConnection() {
 
           const computers = extractComputers(json);
           if (computers !== null) {
+            // Surface the raw field names (and live-status value, if any) of
+            // one sample record — lets an admin confirm whether this ME EC
+            // server's response actually includes a live/agent status field
+            // before assuming the mapping in normalizeComputer() is wrong.
+            const sample = computers[0] || null;
+            const sampleFields = sample ? Object.keys(sample).sort() : [];
+            const liveStatusKey = sampleFields.find(k => /^(live[_]?status|agent[_]?status)$/i.test(k));
             return {
               success:      true,
               message:      `Connected — ${computers.length} endpoint(s) found`,
               working_path: path,
               auth_method:  strat.label,
+              sample_fields: sampleFields,
+              live_status_field: liveStatusKey || null,
+              live_status_value: liveStatusKey ? sample[liveStatusKey] : null,
             };
           }
           // Shape unrecognised — show top-level keys and preview for debugging
