@@ -7,6 +7,7 @@ const adminGuard = [authenticate, requirePageAccess('nessus_status'), authorize(
 
 router.get('/',                ...guard,      ctrl.get);
 router.post('/verify',         ...guard,      ctrl.verify);
+router.post('/service-action', ...adminGuard, ctrl.serviceAction);
 router.get('/install-config',  ...guard,      ctrl.getInstallConfig);
 router.put('/install-config',  ...adminGuard, ctrl.saveInstallConfig);
 router.post('/install',        ...adminGuard, ctrl.install);

@@ -345,5 +345,6 @@ module.exports = {
   sshVerify, sshRunCommand, sshUploadAndRun,
   getConfig, getNessusConfig, isWindows,
   LINUX_CONFIG, WINDOWS_CONFIG, NESSUS_LINUX_CONFIG, NESSUS_WINDOWS_CONFIG,
+  buildLinuxCmdFor, parseLinuxService,
   buildWindowsCmdFor, parseWindowsService, SEP,
 };

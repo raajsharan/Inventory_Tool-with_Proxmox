@@ -5,8 +5,10 @@ const { encrypt, decrypt, decryptSafe } = require('../utils/crypto');
 const {
   sshVerify, sshRunCommand, sshUploadAndRun, isWindows,
   NESSUS_LINUX_CONFIG, NESSUS_WINDOWS_CONFIG,
+  buildLinuxCmdFor, parseLinuxService,
+  parseWindowsService, SEP,
 } = require('../utils/sshVerify');
-const { winrmInstall, psexecInstall, wmiInstall } = require('../utils/winInstall');
+const { winrmInstall, psexecInstall, wmiInstall, winrmServiceAction } = require('../utils/winInstall');
 const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
 
@@ -141,6 +143,45 @@ async function verify(req, res, next) {
     result.ping  = pingResult;
     result.meta  = { credentials_source: 'stored', os_type: osType };
     res.json(result);
+  } catch (e) { next(e); }
+}
+
+// ── POST /nessus-status/service-action ────────────────────────────────────────
+// Start or restart the Nessus Agent service when Live Check shows it isn't
+// running. Windows targets go over WinRM (same transport as install — most
+// Windows boxes don't run an SSH server, so sshRunCommand/sshVerify would
+// just fail with ECONNREFUSED). Linux targets go over SSH, reusing the same
+// systemctl-status parsing as sshVerify() so the returned status matches
+// what Live Check would show.
+async function serviceAction(req, res, next) {
+  try {
+    const { ip_address, source, port = 22, winrm_port, action } = req.body;
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+    if (!['start', 'restart'].includes(action)) throw new ApiError(400, "action must be 'start' or 'restart'");
+
+    const { username, password, osType } = await resolveVm(ip_address, source);
+    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
+    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
+
+    const win = isWindows(osType);
+    let result;
+
+    if (win) {
+      result = await winrmServiceAction({
+        host: ip_address, port: winrm_port || 5985, username, password,
+        serviceName: NESSUS_WINDOWS_CONFIG.serviceName, action,
+      });
+      result.service = { status: parseWindowsService(result.output || ''), name: NESSUS_WINDOWS_CONFIG.serviceName };
+    } else {
+      const svcName = NESSUS_LINUX_CONFIG.serviceName;
+      const cmd = `sudo systemctl ${action} ${svcName}; ${buildLinuxCmdFor(NESSUS_LINUX_CONFIG)}`;
+      const r   = await sshRunCommand({ host: ip_address, port, username, password, command: cmd, timeout: 30000 });
+      const sepIdx = r.output.indexOf(SEP);
+      const svcRaw = sepIdx >= 0 ? r.output.slice(0, sepIdx).trim() : r.output;
+      result = { ...r, service: { status: parseLinuxService(svcRaw), name: svcName } };
+    }
+
+    res.json({ ...result, action, platform: win ? 'windows' : 'linux' });
   } catch (e) { next(e); }
 }
 
@@ -479,4 +520,4 @@ async function clearInstallLog(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { get, verify, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog };
+module.exports = { get, verify, serviceAction, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog };

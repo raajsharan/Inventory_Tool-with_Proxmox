@@ -79,8 +79,9 @@ export default function NessusStatus() {
   const [expanded,      setExpanded]      = useState([]);
   const [methodMap,     setMethodMap]     = useState({});
 
-  const [verifyMap,     setVerifyMap]     = useState({});
-  const [installMap,    setInstallMap]    = useState({});
+  const [verifyMap,       setVerifyMap]       = useState({});
+  const [installMap,      setInstallMap]      = useState({});
+  const [serviceActionMap, setServiceActionMap] = useState({});
   const [verifyDetail,  setVerifyDetail]  = useState({ open: false, vm: null, result: null });
   const [installDetail, setInstallDetail] = useState({ open: false, vm: null, result: null });
 
@@ -147,6 +148,35 @@ export default function NessusStatus() {
       });
     }
   }, []); // eslint-disable-line
+
+  // ── service start / restart ───────────────────────────────────────────────────
+  // Credentials come exclusively from the asset record — no manual entry.
+  const runServiceAction = useCallback(async (vm, action) => {
+    const key = vmKey(vm);
+    patchMap(setServiceActionMap, key, { state: 'loading', action });
+    try {
+      const { data: r } = await api.post('/nessus-status/service-action', {
+        ip_address: vm.ip_address, source: vm.source, port: 22, action,
+      });
+      if (r.needs_credentials) {
+        message.warning(missingCredsError(vm, r));
+        patchMap(setServiceActionMap, key, { state: 'done', action, result: r });
+        return;
+      }
+      patchMap(setServiceActionMap, key, { state: 'done', action, result: r });
+      if (r.connected && !r.error) {
+        message.success(`${action === 'restart' ? 'Restarted' : 'Started'} Nessus Agent on ${vm.vm_name || vm.ip_address}`);
+      } else {
+        message.error(r.error || 'Service action failed — see Live Check details');
+      }
+      // Refresh Live Check so the tag reflects the new status immediately.
+      runVerify(vm);
+    } catch (e) {
+      const err = e.response?.data?.error || e.message;
+      message.error(err);
+      patchMap(setServiceActionMap, key, { state: 'done', action, result: { connected: false, error: err } });
+    }
+  }, [runVerify]); // eslint-disable-line
 
   // ── install ──────────────────────────────────────────────────────────────────
   // Credentials come exclusively from the asset record — no manual entry.
@@ -270,6 +300,9 @@ export default function NessusStatus() {
           const svc  = r.service || {};
           const file = r.file   || {};
           const sm   = SVC_META[svc.status] || SVC_META.unknown;
+          const sa   = serviceActionMap[vmKey(vm)] || {};
+          const canStart   = isAdmin && ['inactive', 'stopped', 'exited', 'failed', 'paused'].includes(svc.status);
+          const canRestart = isAdmin && svc.status === 'running';
           return (
             <Space wrap size={4}>
               <Tooltip title={`Service: ${svc.name || ''}`}>
@@ -283,6 +316,12 @@ export default function NessusStatus() {
               <Button size="small" type="link" style={{ padding: 0 }}
                 onClick={() => setVerifyDetail({ open: true, vm, result: r })}>Details</Button>
               <Button size="small" icon={<ReloadOutlined />} onClick={() => runVerify(vm)} />
+              {sa.state === 'loading' ? <Spin size="small" /> : (canStart || canRestart) && (
+                <Button size="small" icon={<PlayCircleOutlined />}
+                  onClick={() => runServiceAction(vm, canStart ? 'start' : 'restart')}>
+                  {canStart ? 'Start' : 'Restart'}
+                </Button>
+              )}
             </Space>
           );
         }
@@ -539,12 +578,28 @@ export default function NessusStatus() {
         open={verifyDetail.open}
         title={<Space><FileSearchOutlined />Verify — {verifyDetail.vm?.vm_name || verifyDetail.vm?.ip_address}</Space>}
         onCancel={() => setVerifyDetail({ open: false, vm: null, result: null })}
-        footer={[
-          <Button key="rv" icon={<ReloadOutlined />}
-            onClick={() => { setVerifyDetail(s => ({ ...s, open: false })); runVerify(verifyDetail.vm); }}>Re-verify</Button>,
-          <Button key="cl" type="primary" style={{ background: ACCENT, borderColor: ACCENT }}
-            onClick={() => setVerifyDetail({ open: false, vm: null, result: null })}>Close</Button>,
-        ]}
+        footer={(() => {
+          const svcStatus = verifyDetail.result?.service?.status;
+          const canStart   = isAdmin && ['inactive', 'stopped', 'exited', 'failed', 'paused'].includes(svcStatus);
+          const canRestart = isAdmin && svcStatus === 'running';
+          const buttons = [
+            <Button key="rv" icon={<ReloadOutlined />}
+              onClick={() => { setVerifyDetail(s => ({ ...s, open: false })); runVerify(verifyDetail.vm); }}>Re-verify</Button>,
+          ];
+          if (canStart || canRestart) {
+            buttons.push(
+              <Button key="sa" icon={<PlayCircleOutlined />}
+                onClick={() => { setVerifyDetail(s => ({ ...s, open: false })); runServiceAction(verifyDetail.vm, canStart ? 'start' : 'restart'); }}>
+                {canStart ? 'Start Service' : 'Restart Service'}
+              </Button>,
+            );
+          }
+          buttons.push(
+            <Button key="cl" type="primary" style={{ background: ACCENT, borderColor: ACCENT }}
+              onClick={() => setVerifyDetail({ open: false, vm: null, result: null })}>Close</Button>,
+          );
+          return buttons;
+        })()}
         width={680} destroyOnClose
       >
         {verifyDetail.result && <VerifyDetail vm={verifyDetail.vm} result={verifyDetail.result} />}

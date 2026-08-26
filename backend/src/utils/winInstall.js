@@ -141,6 +141,71 @@ function winrmInstall({ host, username, password, port = 5985, filePath, remoteD
 }
 
 /**
+ * Start or restart a Windows service over WinRM (PowerShell Remoting).
+ * Windows targets rarely run an SSH server, so this reuses the same
+ * transport as winrmInstall() rather than sshRunCommand/sshVerify (which
+ * need SSH on the target and would just fail with ECONNREFUSED here).
+ *
+ * Returns the raw PowerShell output (including the final Get-Service status
+ * line) rather than a parsed status — parse it with parseWindowsService()
+ * from sshVerify.js so it stays consistent with how Live Check reports status.
+ *
+ * @param {{ host, username, password, port?, serviceName, action: 'start'|'restart', timeout? }} opts
+ * @returns Promise<{ connected, error, output, exitCode }>
+ */
+function winrmServiceAction({ host, username, password, port = 5985, serviceName, action, timeout = 30000 }) {
+  return new Promise((resolve) => {
+    const pw       = password.replace(/'/g, "''");
+    const user     = username.replace(/'/g, "''");
+    const safeHost = host.replace(/'/g, "''");
+    const safeSvc  = serviceName.replace(/'/g, "''");
+    const verb     = action === 'restart' ? 'Restart-Service' : 'Start-Service';
+
+    const script = [
+      `$ErrorActionPreference = 'Stop'`,
+      `$pw   = ConvertTo-SecureString '${pw}' -AsPlainText -Force`,
+      `$cred = New-Object PSCredential('${user}', $pw)`,
+      `$sopt = New-PSSessionOption -SkipCACheck -SkipCNCheck`,
+      `$sess = New-PSSession -ComputerName '${safeHost}' -Port ${port} -Credential $cred -SessionOption $sopt`,
+      `Write-Output '[WinRM] ${verb} -Name ${safeSvc}'`,
+      `Invoke-Command -Session $sess -ScriptBlock {`,
+      `  ${verb} -Name '${safeSvc}' -Force`,
+      `  Start-Sleep -Seconds 1`,
+      `  (Get-Service -Name '${safeSvc}').Status.ToString()`,
+      `}`,
+      `Remove-PSSession $sess`,
+    ].join('\n');
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+
+    let output = '';
+    const timer = setTimeout(() => {
+      resolve({ connected: false, error: `WinRM timed out after ${Math.round(timeout / 1000)}s`, output, exitCode: null });
+    }, timeout + 5000);
+
+    const child = execFile(
+      PS_BIN,
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+      { timeout, maxBuffer: 10 * 1024 * 1024 },
+    );
+
+    child.stdout.on('data', d => { output += d; });
+    child.stderr.on('data', d => { output += d; });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      output = cleanPsOutput(output);
+      const error = code !== 0 ? (describePsError(null, output) || `PowerShell exited with code ${code}`) : null;
+      resolve({ connected: code !== null, error, output, exitCode: code });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ connected: false, error: describePsError(err, output), output, exitCode: null });
+    });
+  });
+}
+
+/**
  * PsExec remote execution — runs psexec.exe locally to execute a command on the remote VM.
  * If filePath is provided, copies it to the remote VM with -c before running.
  *
@@ -279,4 +344,4 @@ function wmiInstall({ host, username, password, filePath, remoteDir = 'C:/Window
   });
 }
 
-module.exports = { winrmInstall, psexecInstall, wmiInstall };
+module.exports = { winrmInstall, psexecInstall, wmiInstall, winrmServiceAction };
