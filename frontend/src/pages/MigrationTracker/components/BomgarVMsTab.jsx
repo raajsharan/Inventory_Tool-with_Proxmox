@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Table, Button, Select, Typography, Space, message, Tooltip, Tag } from 'antd';
-import { DownloadOutlined, LinkOutlined } from '@ant-design/icons';
+import { Table, Button, Select, Typography, Space, message, Tooltip, Tag, Popconfirm } from 'antd';
+import { DownloadOutlined, LinkOutlined, DeleteOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import {
@@ -187,12 +187,28 @@ export default function BomgarVMsTab({ projectId, onJumpToHost, hiddenColumns = 
   const allToggleable = [...staticToggleable, ...customFieldCols];
   const { visible, toggle, reset, order, reorder } = useColumnVisibility('bomgar-vms', allToggleable.map(c => c.key));
 
+  const actionsColumn = {
+    title: 'Actions', key: 'actions', fixed: 'right', width: 80,
+    render: (_, r) => (
+      <Popconfirm
+        title="Delete this VM?"
+        description="This will permanently remove the VM record."
+        okText="Delete"
+        okButtonProps={{ danger: true }}
+        onConfirm={() => remove(r.id)}
+      >
+        <Button size="small" danger icon={<DeleteOutlined />} />
+      </Popconfirm>
+    ),
+  };
+
   const columns = [
     allColumns[0], // vm — always visible, never reordered
     ...order
       .filter(k => visible.has(k))
       .map(k => allToggleable.find(c => c.key === k))
       .filter(Boolean),
+    ...(canEdit ? [actionsColumn] : []),
   ];
 
   const summaryCards = summary2 ? [
