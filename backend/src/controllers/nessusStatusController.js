@@ -357,6 +357,28 @@ async function install(req, res, next) {
     const cmd         = cfgRow.linux_cmd || '';
     let result;
 
+    // CentOS isn't a supported OS for the Nessus Agent — Tenable's own
+    // installer only discovers this after downloading and running the full
+    // curl script, failing with a generic "Unknown or unsupported OS" (exit
+    // 1). Check the live OS via hostnamectl first (falling back to
+    // /etc/os-release on minimal images that lack it) so we can stop before
+    // running the install instead of after.
+    appendLog(logFile, ip_address, 'INFO', 'Checking OS via hostnamectl before install...');
+    const osCheck = await sshRunCommand({
+      host: ip_address, port, username, password,
+      command: 'hostnamectl 2>/dev/null || cat /etc/os-release 2>/dev/null',
+      timeout: 15000,
+    });
+    if (osCheck.connected && /centos/i.test(osCheck.output || '')) {
+      appendLog(logFile, ip_address, 'ERROR', 'CentOS detected — Nessus Agent is not supported on CentOS. Install skipped.');
+      return res.json({
+        connected: true, error: null, output: osCheck.output, exitCode: 1,
+        skipped: true, unsupported_os: true,
+        reason: 'CentOS is not a supported OS for Nessus Agent — install skipped',
+        platform: 'linux', os_type: osType, command: cmd,
+      });
+    }
+
     if (linuxMethod === 'curl') {
       if (!cmd.trim()) throw new ApiError(422, 'No curl command configured for Nessus Linux install.');
       appendLog(logFile, ip_address, 'INFO', 'Linux curl install — checking curl availability...');

@@ -319,8 +319,8 @@ export default function NessusStatus() {
           if (is.result.skipped) {
             return (
               <Space size={4} wrap>
-                <Tag color="blue">Skipped</Tag>
-                <Typography.Text type="secondary" style={{ fontSize: 11 }}>Already installed</Typography.Text>
+                <Tag color={is.result.unsupported_os ? 'warning' : 'blue'}>Skipped</Tag>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>{is.result.reason || 'Already installed'}</Typography.Text>
                 <Button size="small" icon={<ReloadOutlined />} onClick={() => runInstall(vm)} />
               </Space>
             );
@@ -672,8 +672,10 @@ function InstallDetail({ vm, result }) {
         <Tag color={success ? 'success' : 'warning'}>Exit code: {result.exitCode ?? '—'}</Tag>
       </Space>
       {result.tried && <TriedMethods tried={result.tried} />}
-      <Alert type={success ? 'success' : 'warning'} showIcon
-        message={success
+      <Alert type={result.skipped ? 'info' : success ? 'success' : 'warning'} showIcon
+        message={result.skipped
+          ? (result.reason || 'Install skipped.')
+          : success
           ? 'Nessus Agent install completed. Click "Verify Now" to confirm the agent is running.'
           : 'Install command finished but may have had issues. Review the output below.'} />
       {result.command && (
