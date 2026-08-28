@@ -277,11 +277,11 @@ async function hostsSummary(projectId = null) {
 
   const { rows } = await db.query(`
     SELECT
-      COUNT(*)::int                                                                AS total_hosts,
-      COUNT(*) FILTER (WHERE (vms_vacate='Completed'
+      COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                             AS total_hosts,
+      COUNT(*) FILTER (WHERE vms_vacate='Completed'
                          AND proxmox_install='Completed'
-                         AND vm_migration_back='Completed')
-                          OR cleared_at IS NOT NULL)::int                         AS fully_migrated,
+                         AND vm_migration_back='Completed'
+                         AND cleared_at IS NULL)::int                             AS fully_migrated,
       COUNT(*) FILTER (WHERE vms_vacate != 'Completed'
                          AND cleared_at IS NULL)::int                             AS pending_vacate,
       COALESCE(SUM(vms_to_migrate) FILTER (WHERE cleared_at IS NULL),0)::int     AS total_vms_to_migrate,
@@ -349,8 +349,8 @@ async function vmSummary(table, projectId = null) {
 
   const { rows } = await db.query(`
     SELECT
-      COUNT(*)::int                                                                                           AS total,
-      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)::int                  AS migrated,
+      COUNT(*) FILTER (WHERE cleared_at IS NULL)::int                                                        AS total,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed'             AND cleared_at IS NULL)::int         AS migrated,
       COUNT(*) FILTER (WHERE migration_status = 'Not Started'           AND cleared_at IS NULL)::int         AS not_started,
       COUNT(*) FILTER (WHERE migration_status = 'Awaiting confirmation' AND cleared_at IS NULL)::int         AS awaiting_confirmation,
       COUNT(*) FILTER (WHERE migration_status = 'In Progress'           AND cleared_at IS NULL)::int         AS in_progress,
@@ -1014,7 +1014,7 @@ async function customVMSummary(tabId) {
   const { rows } = await db.query(`
     SELECT
       COUNT(*) FILTER (WHERE cleared_at IS NULL)                                                        AS total,
-      COUNT(*) FILTER (WHERE migration_status = 'Completed' OR cleared_at IS NOT NULL)                  AS migrated,
+      COUNT(*) FILTER (WHERE migration_status = 'Completed'             AND cleared_at IS NULL)         AS migrated,
       COUNT(*) FILTER (WHERE migration_status = 'Not Started'           AND cleared_at IS NULL)         AS not_started,
       COUNT(*) FILTER (WHERE migration_status = 'Awaiting confirmation' AND cleared_at IS NULL)         AS awaiting_confirmation,
       COUNT(*) FILTER (WHERE migration_status = 'In Progress'           AND cleared_at IS NULL)         AS in_progress,
