@@ -68,7 +68,6 @@ export default function VMReconcile() {
                   size="small" loading={loading} rowKey="id"
                   dataSource={missing} pagination={{ pageSize: 20 }}
                   scroll={{ x: 'max-content' }}
-                  sticky={{ offsetScroll: 0 }}
                   columns={[
                     { title: 'VM Name', dataIndex: 'name', render: v => <Text strong>{v}</Text> },
                     { title: 'Hostname', dataIndex: 'hostname',
@@ -97,7 +96,6 @@ export default function VMReconcile() {
                     size="small" loading={loading} rowKey={(r) => `${r.source}-${r.id}`}
                     dataSource={stale} pagination={{ pageSize: 20 }}
                     scroll={{ x: 'max-content' }}
-                    sticky={{ offsetScroll: 0 }}
                     columns={[
                       { title: 'Record', render: (_, r) => {
                         const m = SOURCE_META[r.source] || SOURCE_META.assets;

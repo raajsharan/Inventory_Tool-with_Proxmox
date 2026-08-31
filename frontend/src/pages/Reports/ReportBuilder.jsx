@@ -361,7 +361,6 @@ function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivo
         columns={tableColumns}
         size="small"
         scroll={{ x: 'max-content' }}
-        sticky={{ offsetScroll: 0 }}
         pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10,20,50,100] }}
       />
     );
@@ -404,7 +403,6 @@ function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivo
         columns={tableColumns}
         size="small"
         scroll={{ x: 'max-content' }}
-        sticky={{ offsetScroll: 0 }}
         pagination={false}
         summary={() => {
           const totals = {};

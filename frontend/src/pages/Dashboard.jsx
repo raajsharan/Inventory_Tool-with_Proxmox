@@ -788,7 +788,6 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           dataSource={data.recentAssets || []}
           pagination={false}
           scroll={{ x: 'max-content' }}
-          sticky={{ offsetScroll: 0 }}
           rowClassName="dashcard-row"
           columns={[
             { title: 'VM Name', dataIndex: 'vm_name' },
@@ -1035,7 +1034,6 @@ function ExtendedInventoryTab({ data, compCfg = {} }) {
             dataSource={depts}
             columns={deptColumns}
             scroll={{ x: 'max-content' }}
-            sticky={{ offsetScroll: 0 }}
             pagination={false}
             summary={(rows) => {
               if (!rows.length) return null;
@@ -1217,7 +1215,6 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
           columns={columns}
           pagination={false}
           scroll={{ x: 'max-content' }}
-          sticky={{ offsetScroll: 0 }}
           tableLayout="fixed"
           summary={() => (
             <Table.Summary.Row style={{ fontWeight: 700 }}>
@@ -1493,7 +1490,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               ]}
               pagination={false}
               scroll={{ x: 'max-content' }}
-              sticky={{ offsetScroll: 0 }}
               tableLayout="fixed"
               columns={[
                 { title: 'Sl. No', dataIndex: 'slNo', width: 60 },

@@ -85,7 +85,7 @@ function DriftSection({ title, icon, color, data, columns, emptyText }) {
       title={<Space>{icon}<Text>{title}</Text><Badge count={data.length} color={color} /></Space>}
       style={{ marginBottom: 12 }}
     >
-      <Table size="small" rowKey="id" dataSource={data} columns={columns} pagination={false} scroll={{ x: 'max-content' }} sticky={{ offsetScroll: 0 }} />
+      <Table size="small" rowKey="id" dataSource={data} columns={columns} pagination={false} scroll={{ x: 'max-content' }} />
     </Card>
   );
 }

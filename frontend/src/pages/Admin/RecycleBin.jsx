@@ -201,7 +201,6 @@ export default function RecycleBin() {
         size="small"
         rowClassName="dashcard-row"
         scroll={{ x: 'max-content' }}
-        sticky={{ offsetScroll: 0 }}
         pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         locale={{ emptyText: <Empty description="Recycle bin is empty" /> }}
       />

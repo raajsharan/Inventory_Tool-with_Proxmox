@@ -34,7 +34,6 @@ export default function AuditLogs() {
         rowClassName="dashcard-row"
         pagination={{ current: page, pageSize, total: data.total, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
         scroll={{ x: 'max-content' }}
-        sticky={{ offsetScroll: 0 }}
         columns={[
           { title: 'When', dataIndex: 'created_at', width: 180, render: v => new Date(v).toLocaleString() },
           { title: 'User', dataIndex: 'user_email', width: 200 },

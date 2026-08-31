@@ -124,7 +124,6 @@ export default function VMDashboard() {
               pagination={false}
               rowClassName="dashcard-row"
               scroll={{ x: 'max-content' }}
-              sticky={{ offsetScroll: 0 }}
             />
           </Card>
         </Col>
@@ -138,7 +137,6 @@ export default function VMDashboard() {
               pagination={false}
               rowClassName="dashcard-row"
               scroll={{ x: 'max-content' }}
-              sticky={{ offsetScroll: 0 }}
             />
           </Card>
         </Col>

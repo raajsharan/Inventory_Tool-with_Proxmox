@@ -343,7 +343,6 @@ function OverridesView() {
         dataSource={items}
         pagination={{ pageSize: 20 }}
         scroll={{ x: 'max-content' }}
-        sticky={{ offsetScroll: 0 }}
         columns={[
           { title: 'Frequency', dataIndex: 'frequency', width: 100, render: v => <Tag>{v}</Tag> },
           { title: 'Period', dataIndex: 'period_key', width: 110 },

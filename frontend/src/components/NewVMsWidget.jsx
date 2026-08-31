@@ -88,7 +88,6 @@ export default function NewVMsWidget() {
           dataSource={items}
           columns={columns}
           scroll={{ x: 'max-content' }}
-          sticky={{ offsetScroll: 0 }}
           pagination={{ pageSize: 10, showTotal: t => `${t} new VM${t !== 1 ? 's' : ''}` }}
         />
       )}

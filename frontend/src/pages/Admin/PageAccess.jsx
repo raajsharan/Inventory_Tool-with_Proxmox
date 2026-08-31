@@ -144,7 +144,6 @@ export default function PageAccess() {
         loading={loading}
         size="small"
         scroll={{ x: 'max-content' }}
-        sticky={{ offsetScroll: 0 }}
         rowClassName={(r) => r.isGroup ? '' : 'dashcard-row'}
       />
     </Card>

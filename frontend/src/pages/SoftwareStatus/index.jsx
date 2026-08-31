@@ -588,7 +588,6 @@ export default function SoftwareStatus() {
               pagination={r.vms.length > 50 ? { pageSize: 50, size: 'small' } : false}
               size="small" style={{ margin: '0 0 8px 0' }}
               scroll={{ x: 'max-content' }}
-              sticky={{ offsetScroll: 0 }}
               rowClassName={v => !v.me_installed ? 'row-warning' : ''}
             />
           ),
