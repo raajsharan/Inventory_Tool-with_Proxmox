@@ -48,6 +48,7 @@ export default function PVENodeTopology() {
           columns={nodeColumns}
           pagination={false}
           scroll={{ x: 'max-content' }}
+          sticky={{ offsetScroll: 0 }}
         />
       ),
     };

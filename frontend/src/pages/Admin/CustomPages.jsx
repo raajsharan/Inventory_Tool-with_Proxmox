@@ -148,6 +148,7 @@ export default function AdminCustomPages() {
         dataSource={rows}
         pagination={false}
         scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
         columns={[
           {
             title: 'Page',

@@ -165,6 +165,7 @@ export default function Decommissioned() {
                   dataSource={current} columns={currentColumns}
                   pagination={{ pageSize: 20 }}
                   scroll={{ x: 'max-content' }}
+                  sticky={{ offsetScroll: 0 }}
                   locale={{ emptyText: 'No decommissioned servers right now.' }}
                 />
               ),
@@ -192,6 +193,7 @@ export default function Decommissioned() {
                     dataSource={log} columns={logColumns}
                     pagination={{ pageSize: 20 }}
                     scroll={{ x: 'max-content' }}
+                    sticky={{ offsetScroll: 0 }}
                     locale={{ emptyText: 'No decommission events recorded yet.' }}
                   />
                 </>

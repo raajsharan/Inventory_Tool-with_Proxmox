@@ -73,6 +73,7 @@ export default function VMESXiTopology() {
             columns={esxiCols}
             pagination={false}
             scroll={{ x: 'max-content' }}
+            sticky={{ offsetScroll: 0 }}
           />
         </>
       ),

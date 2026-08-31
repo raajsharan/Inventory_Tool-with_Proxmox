@@ -26,6 +26,7 @@ export default function ImportHistory() {
         dataSource={data}
         rowClassName="dashcard-row"
         scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
         columns={[
           { title: 'When', dataIndex: 'created_at', render: v => new Date(v).toLocaleString() },
           { title: 'File', dataIndex: 'filename' },

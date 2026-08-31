@@ -128,6 +128,7 @@ export default function CustomPageView() {
           showSizeChanger: true,
         }}
         scroll={{ x: 'max-content' }}
+        sticky={{ offsetScroll: 0 }}
         columns={[
           ...page.fields.map(f => ({
             title: f.label,

@@ -29,6 +29,7 @@ function HVTable({ vms, emptyText }) {
       dataSource={vms}
       columns={baseCols}
       scroll={{ x: 'max-content' }}
+      sticky={{ offsetScroll: 0 }}
       pagination={{ pageSize: 50, showTotal: t => `${t} total` }}
     />
   );

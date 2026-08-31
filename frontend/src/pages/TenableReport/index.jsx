@@ -368,6 +368,7 @@ export default function TenableReport() {
           rowKey={(r, i) => `${r.ip_address || r.matched_ip || ''}_${i}`}
           size="small"
           scroll={{ x: 'max-content' }}
+          sticky={{ offsetScroll: 0 }}
           pagination={{ pageSize: PAGE_SIZE, showSizeChanger: false, showTotal: t => `${t} records` }}
           rowClassName={() => 'tenable-row'}
         />

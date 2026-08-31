@@ -59,6 +59,7 @@ export default function PVESnapshots() {
               dataSource={data}
               columns={columns}
               scroll={{ x: 'max-content' }}
+              sticky={{ offsetScroll: 0 }}
               pagination={{ pageSize: 50, showTotal: t => `${t} total` }}
             />
           )

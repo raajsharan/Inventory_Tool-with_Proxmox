@@ -208,6 +208,7 @@ export default function VMMacUpload() {
           columns={columns}
           pagination={false}
           scroll={{ x: 'max-content' }}
+          sticky={{ offsetScroll: 0 }}
           locale={{ emptyText: 'No mapping files uploaded yet' }}
         />
       </Card>
