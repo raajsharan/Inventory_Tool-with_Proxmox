@@ -440,6 +440,7 @@ export default function InstallConfig() {
           &nbsp;<strong>WMI</strong> uses Win32_Process.Create — async, verify separately.
           &nbsp;<strong>PsExec</strong> copies the installer with <code>-c</code> via SMB (port 445).
           &nbsp;<strong>SSH</strong> uploads via SFTP + exec.
+          &nbsp;This fallback chain is intended for Windows Server hosts — desktop Windows editions aren't validated against it.
         </Paragraph>
 
         {/* Deployment options — global only; locations inherit these */}

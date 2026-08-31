@@ -63,6 +63,52 @@ function describePsError(err, output) {
   return null;
 }
 
+// Maps a failed Win32_Process.Create ReturnValue (thrown from the WMI script
+// in wmiInstall below) to what it actually means, instead of leaving the
+// caller with just a non-zero exit code — mirrors the classification the
+// ManageEngineAgentDeployer tool applies to the same WMI/DCOM failure modes.
+function classifyWmiFailure(output) {
+  const text = output || '';
+  if (/rpc server is unavailable/i.test(text)) {
+    return 'WMI/DCOM execution unavailable: RPC server is unavailable on the target (check Windows Firewall, DCOM, and that the Remote Registry / WMI services are running)';
+  }
+  if (/access is denied/i.test(text)) {
+    return 'WMI/DCOM execution blocked: access denied on the target (the account needs local admin rights; UAC remote restrictions can block a non-built-in-Administrator account)';
+  }
+  const rv = text.match(/Win32_Process\.Create returned (-?\d+)/i);
+  if (rv) {
+    const codes = { '2': 'access denied', '3': 'insufficient privilege', '8': 'unknown failure', '9': 'path not found', '21': 'invalid parameter' };
+    const label = codes[rv[1]] || `unrecognized ReturnValue ${rv[1]}`;
+    return `WMI process creation failed: ${label} (ReturnValue=${rv[1]})`;
+  }
+  return null;
+}
+
+// Maps a failed PsExec attempt to what it actually means — exit code 1385 in
+// particular ("blocked by endpoint policy") is a known PsExec failure mode
+// classified the same way by the ManageEngineAgentDeployer tool.
+function classifyPsExecFailure(output, exitCode) {
+  const text = output || '';
+  if (exitCode === 1385) {
+    return 'PsExec blocked by endpoint policy: the account does not have the required logon rights on the target (exit code 1385) — grant network logon rights or use an account with local admin rights';
+  }
+  if (/could not be accessed/i.test(text)) {
+    return 'PsExec could not reach the target — check the account has admin rights on ADMIN$ and that SMB (port 445) is reachable';
+  }
+  if (/logon failure/i.test(text)) {
+    return 'PsExec logon failure — check the username/password are correct for this host';
+  }
+  return null;
+}
+
+// Last-resort fallback so a failed attempt never surfaces error: null — falls
+// back to whatever text the remote command actually printed.
+function lastResortError(output) {
+  const trimmed = (output || '').trim();
+  if (!trimmed) return null;
+  return trimmed.length > 500 ? trimmed.slice(-500) : trimmed;
+}
+
 /**
  * WinRM install via PowerShell Invoke-Command running on the local server.
  * Optionally copies the installer file to the remote VM using Copy-Item -ToSession.
@@ -129,7 +175,7 @@ function winrmInstall({ host, username, password, port = 5985, filePath, remoteD
       const connected = !output.includes('WS-Management') && !output.includes('ETIMEDOUT')
         ? true
         : code !== null;
-      const error = code !== 0 ? (describePsError(null, output) || `PowerShell exited with code ${code}`) : null;
+      const error = code !== 0 ? (describePsError(null, output) || lastResortError(output) || `PowerShell exited with code ${code}`) : null;
       resolve({ connected, error, output, exitCode: code });
     });
 
@@ -215,7 +261,7 @@ function winrmServiceAction({ host, username, password, port = 5985, serviceName
 function psexecInstall({ host, username, password, psexecPath, filePath, command, timeout = 300000 }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(psexecPath)) {
-      return resolve({ connected: false, error: `PsExec not found: ${psecPath}`, output: '', exitCode: null });
+      return resolve({ connected: false, error: `PsExec not found: ${psexecPath}`, output: '', exitCode: null });
     }
 
     const args = [
@@ -253,7 +299,8 @@ function psexecInstall({ host, username, password, psexecPath, filePath, command
       clearTimeout(timer);
       // PsExec exit 0 = success; non-zero = error on remote or connection issue
       const connected = code !== null && !output.includes('could not be accessed');
-      resolve({ connected, error: null, output, exitCode: code });
+      const error = code !== 0 ? (classifyPsExecFailure(output, code) || lastResortError(output)) : null;
+      resolve({ connected, error, output, exitCode: code });
     });
 
     child.on('error', (err) => {
@@ -331,7 +378,7 @@ function wmiInstall({ host, username, password, filePath, remoteDir = 'C:/Window
       output = cleanPsOutput(output);
       resolve({
         connected: code !== null,
-        error: code !== 0 ? describePsError(null, output) : null,   // other WMI errors surface in output via $ErrorActionPreference
+        error: code !== 0 ? (classifyWmiFailure(output) || describePsError(null, output) || lastResortError(output)) : null,
         output,
         exitCode: code,
       });

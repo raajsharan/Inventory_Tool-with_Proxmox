@@ -452,6 +452,7 @@ export default function NessusInstallConfig() {
           &nbsp;<strong>WMI</strong> uses Win32_Process.Create — async, verify separately.
           &nbsp;<strong>PsExec</strong> copies the installer via SMB (port 445).
           &nbsp;<strong>SSH</strong> uploads via SFTP + exec.
+          &nbsp;This fallback chain is intended for Windows Server hosts — desktop Windows editions aren't validated against it.
         </Paragraph>
 
         <Space>

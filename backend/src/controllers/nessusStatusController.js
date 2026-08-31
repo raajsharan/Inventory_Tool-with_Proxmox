@@ -8,7 +8,8 @@ const {
   buildLinuxCmdFor, parseLinuxService,
   parseWindowsService, SEP,
 } = require('../utils/sshVerify');
-const { winrmInstall, psexecInstall, wmiInstall, winrmServiceAction } = require('../utils/winInstall');
+const { winrmServiceAction } = require('../utils/winInstall');
+const { installWindowsWithFallback } = require('../utils/windowsInstallFallback');
 const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
 
@@ -279,33 +280,6 @@ async function saveInstallConfig(req, res, next) {
   } catch (e) { next(e); }
 }
 
-// ── Windows: execute one method ───────────────────────────────────────────────
-async function runWinMethod({ method, host, port, username, password, cfgRow, remoteDir, timeout = 300000 }) {
-  const filePath = cfgRow.windows_file_path;
-  const cmd      = cfgRow.windows_cmd || '';
-
-  if (method === 'winrm') {
-    return winrmInstall({ host, username, password, port: cfgRow.windows_winrm_port || 5985, filePath, remoteDir, command: cmd, timeout });
-  }
-  if (method === 'wmi') {
-    return wmiInstall({ host, username, password, filePath, remoteDir, smbPort: cfgRow.windows_smb_port || 445, command: cmd, timeout });
-  }
-  if (method === 'psexec') {
-    const psexecPath = cfgRow.windows_psexec_path;
-    if (!psexecPath || !fs.existsSync(psexecPath)) {
-      return { connected: false, error: `PsExec not found: ${psexecPath || '(not configured)'}`, output: '', exitCode: null };
-    }
-    return psexecInstall({ host, username, password, psexecPath, filePath, command: cmd, timeout });
-  }
-  // ssh / ssh_bash
-  let execCmd = cmd || (filePath ? '{installer} /Silent' : '');
-  if (method === 'ssh_bash') execCmd = `bash -c '${execCmd.replace(/'/g, "'\\''")}'`;
-  if (filePath) {
-    return sshUploadAndRun({ host, port, username, password, remoteDir, files: [{ localPath: filePath, placeholder: 'installer' }], command: execCmd, timeout });
-  }
-  return sshRunCommand({ host, port, username, password, command: execCmd, timeout });
-}
-
 // ── POST /nessus-status/install ───────────────────────────────────────────────
 async function install(req, res, next) {
   try {
@@ -347,50 +321,11 @@ async function install(req, res, next) {
       const filePath = cfgRow.windows_file_path;
       if (filePath && !fs.existsSync(filePath)) throw new ApiError(422, `Installer not found: ${filePath}`);
 
-      const selectedMethod = windows_method_override || cfgRow.windows_method || 'auto';
-      const AUTO_ORDER     = ['winrm', 'wmi', 'psexec', 'ssh', 'ssh_bash'];
-      const methodsToTry   = selectedMethod === 'auto' ? AUTO_ORDER : [selectedMethod];
-      const tried = [];
-      let lastResult = null;
-
-      for (const method of methodsToTry) {
-        const timeout = selectedMethod === 'auto' ? 45000 : 300000;
-        if (selectedMethod === 'auto') {
-          appendLog(logFile, ip_address, 'INFO', `Auto mode trying ${method.toUpperCase()}`);
-        }
-        let r;
-        try {
-          r = await runWinMethod({ method, host: ip_address, port, username, password, cfgRow, remoteDir, timeout });
-        } catch (e) {
-          r = { connected: false, error: e.message, output: '', exitCode: null };
-        }
-        tried.push({ method, connected: r.connected, exitCode: r.exitCode, error: r.error || null });
-        lastResult = r;
-
-        if (r.connected && r.exitCode === 0) {
-          if (selectedMethod === 'auto') {
-            appendLog(logFile, ip_address, 'INFO',    `Auto mode selected ${method.toUpperCase()}`);
-            appendLog(logFile, ip_address, 'SUCCESS', 'Connection test passed');
-            appendLog(logFile, ip_address, 'INFO',    `Nessus deployment completed via ${method.toUpperCase()}`);
-          } else {
-            appendLog(logFile, ip_address, 'SUCCESS', `Nessus deployment completed via ${method.toUpperCase()}`);
-          }
-          return res.json({
-            ...r, platform: 'windows', os_type: osType, command: cfgRow.windows_cmd || '',
-            method, tried: tried.length > 1 ? tried : undefined,
-            succeeded_method: selectedMethod === 'auto' ? method : undefined,
-          });
-        }
-        if (r.error) appendLog(logFile, ip_address, 'ERROR', `${method.toUpperCase()} failed: ${r.error}`);
-        if (selectedMethod !== 'auto') break;
-      }
-
-      appendLog(logFile, ip_address, 'ERROR', 'All methods exhausted. Nessus deployment failed.');
-      return res.json({
-        ...lastResult, platform: 'windows', os_type: osType, command: cfgRow.windows_cmd || '',
-        method: methodsToTry[methodsToTry.length - 1],
-        tried: tried.length > 1 ? tried : undefined,
+      const result = await installWindowsWithFallback({
+        ip_address, port, username, password, cfgRow, remoteDir, osType,
+        windows_method_override, appendLog, logFile, agentLabel: 'Nessus Agent',
       });
+      return res.json(result);
     }
 
     // Linux
