@@ -287,7 +287,7 @@ export default function AssetImport({
               onShowSizeChange: (_, size) => setPreviewPageSize(size),
               onChange: (_, size) => setPreviewPageSize(size),
             }}
-            scroll={{ x: 700 }}
+            scroll={{ x: 'max-content' }}
             locale={{ emptyText: `No "${rowFilter}" rows` }}
           />
         </Card>

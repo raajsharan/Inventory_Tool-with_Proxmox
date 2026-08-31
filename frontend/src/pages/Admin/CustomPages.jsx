@@ -147,6 +147,7 @@ export default function AdminCustomPages() {
         loading={loading}
         dataSource={rows}
         pagination={false}
+        scroll={{ x: 'max-content' }}
         columns={[
           {
             title: 'Page',

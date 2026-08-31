@@ -787,6 +787,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           size="small"
           dataSource={data.recentAssets || []}
           pagination={false}
+          scroll={{ x: 'max-content' }}
           rowClassName="dashcard-row"
           columns={[
             { title: 'VM Name', dataIndex: 'vm_name' },
@@ -1213,6 +1214,7 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
           dataSource={enriched}
           columns={columns}
           pagination={false}
+          scroll={{ x: 'max-content' }}
           tableLayout="fixed"
           summary={() => (
             <Table.Summary.Row style={{ fontWeight: 700 }}>
@@ -1487,6 +1489,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                   count: nessusApplicability.not_applicable?.total ?? 0 },
               ]}
               pagination={false}
+              scroll={{ x: 'max-content' }}
               tableLayout="fixed"
               columns={[
                 { title: 'Sl. No', dataIndex: 'slNo', width: 60 },

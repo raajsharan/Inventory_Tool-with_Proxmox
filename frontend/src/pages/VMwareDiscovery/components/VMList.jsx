@@ -223,7 +223,7 @@ export default function VMList({ hostId }) {
           dataSource={data.items}
           rowClassName="dashcard-row"
           columns={columns}
-          scroll={{ x: 1700 }}
+          scroll={{ x: 'max-content' }}
           sticky={{ offsetScroll: 0 }}
           pagination={{
             current: page,

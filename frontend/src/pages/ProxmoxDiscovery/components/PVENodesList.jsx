@@ -97,7 +97,7 @@ export default function PVENodesList() {
         rowKey="id"
         dataSource={filtered}
         columns={columns}
-        scroll={{ x: 1500 }}
+        scroll={{ x: 'max-content' }}
         sticky={{ offsetScroll: 0 }}
         pagination={{
           pageSize: 50,

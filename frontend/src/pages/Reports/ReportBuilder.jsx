@@ -360,7 +360,7 @@ function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivo
         dataSource={rows}
         columns={tableColumns}
         size="small"
-        scroll={{ x: Math.max(800, tableColumns.length * 140) }}
+        scroll={{ x: 'max-content' }}
         pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10,20,50,100] }}
       />
     );
@@ -402,7 +402,7 @@ function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivo
         dataSource={data}
         columns={tableColumns}
         size="small"
-        scroll={{ x: Math.max(800, pcols.length * 100 + 300) }}
+        scroll={{ x: 'max-content' }}
         pagination={false}
         summary={() => {
           const totals = {};

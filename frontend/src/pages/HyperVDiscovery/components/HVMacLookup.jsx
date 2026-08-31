@@ -205,7 +205,7 @@ export default function HVMacLookup() {
                 rowKey="id"
                 dataSource={data?.results || []}
                 columns={columns}
-                scroll={{ x: 1600 }}
+                scroll={{ x: 'max-content' }}
                 sticky={{ offsetScroll: 0 }}
                 pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} total` }}
                 rowClassName={r => r.is_matched ? 'mac-matched-row' : ''}

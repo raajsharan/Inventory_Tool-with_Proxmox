@@ -127,6 +127,7 @@ export default function CustomPageView() {
           onChange: (current, pageSize) => setPg({ current, pageSize }),
           showSizeChanger: true,
         }}
+        scroll={{ x: 'max-content' }}
         columns={[
           ...page.fields.map(f => ({
             title: f.label,

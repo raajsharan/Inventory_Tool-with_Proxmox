@@ -25,6 +25,7 @@ export default function ImportHistory() {
         rowKey="id"
         dataSource={data}
         rowClassName="dashcard-row"
+        scroll={{ x: 'max-content' }}
         columns={[
           { title: 'When', dataIndex: 'created_at', render: v => new Date(v).toLocaleString() },
           { title: 'File', dataIndex: 'filename' },

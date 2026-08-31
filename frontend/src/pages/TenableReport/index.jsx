@@ -422,7 +422,7 @@ export default function TenableReport() {
           rowKey="id"
           size="small"
           pagination={false}
-          scroll={{ x: 700 }}
+          scroll={{ x: 'max-content' }}
           locale={{ emptyText: 'No imports yet' }}
         />
       </Drawer>

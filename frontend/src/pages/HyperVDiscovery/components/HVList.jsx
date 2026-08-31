@@ -93,7 +93,7 @@ export default function HVList() {
           rowKey="id"
           dataSource={items}
           columns={columns}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 'max-content' }}
           sticky={{ offsetScroll: 0 }}
           rowClassName="dashcard-row"
           pagination={{

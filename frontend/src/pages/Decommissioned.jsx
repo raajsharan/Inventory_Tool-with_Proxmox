@@ -164,6 +164,7 @@ export default function Decommissioned() {
                   size="small" rowKey={(r) => `${r.source}-${r.id}`} loading={loading}
                   dataSource={current} columns={currentColumns}
                   pagination={{ pageSize: 20 }}
+                  scroll={{ x: 'max-content' }}
                   locale={{ emptyText: 'No decommissioned servers right now.' }}
                 />
               ),
@@ -190,6 +191,7 @@ export default function Decommissioned() {
                     size="small" rowKey="id" loading={loading}
                     dataSource={log} columns={logColumns}
                     pagination={{ pageSize: 20 }}
+                    scroll={{ x: 'max-content' }}
                     locale={{ emptyText: 'No decommission events recorded yet.' }}
                   />
                 </>

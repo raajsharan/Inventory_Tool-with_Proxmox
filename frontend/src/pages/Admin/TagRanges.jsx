@@ -88,6 +88,7 @@ export default function TagRanges() {
         loading={loading}
         dataSource={rows}
         pagination={false}
+        scroll={{ x: 'max-content' }}
         columns={[
           { title: 'Sort', dataIndex: 'sort_order', width: 60 },
           { title: 'Department', dataIndex: 'name' },

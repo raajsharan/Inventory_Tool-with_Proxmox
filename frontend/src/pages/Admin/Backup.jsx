@@ -143,6 +143,7 @@ function RunsTable({ kind, runs, onReload }) {
       </Space>
       <Table
         size="small" rowKey="id" dataSource={runs} pagination={{ pageSize: 8 }}
+        scroll={{ x: 'max-content' }}
         columns={[
           { title: 'When', dataIndex: 'started_at', render: v => new Date(v).toLocaleString(), width: 180 },
           { title: 'Trigger', dataIndex: 'trigger', width: 100,

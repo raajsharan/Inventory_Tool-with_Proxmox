@@ -143,6 +143,7 @@ export default function PageAccess() {
         pagination={false}
         loading={loading}
         size="small"
+        scroll={{ x: 'max-content' }}
         rowClassName={(r) => r.isGroup ? '' : 'dashcard-row'}
       />
     </Card>

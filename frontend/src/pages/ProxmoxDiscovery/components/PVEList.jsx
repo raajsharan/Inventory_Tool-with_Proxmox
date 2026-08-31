@@ -184,7 +184,7 @@ export default function PVEList() {
             rowKey="id"
             dataSource={items}
             columns={columns}
-            scroll={{ x: 1900 }}
+            scroll={{ x: 'max-content' }}
             sticky={{ offsetScroll: 0 }}
             rowClassName="dashcard-row"
             pagination={{
