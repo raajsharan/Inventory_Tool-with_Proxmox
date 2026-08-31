@@ -657,6 +657,42 @@ const TABLE_RECORD_TYPE = {
   migration_standalone_esxi: 'standalone_esxi',
 };
 
+// Built-in tabs that can be wiped in bulk from the Migration Projects admin
+// page — deliberately excludes migration_hosts and migration_custom_vms,
+// which aren't offered a "wipe all" action.
+const WIPEABLE_TABLES = {
+  bomgar_vms:      'migration_bomgar_vms',
+  security_vms:    'migration_security_vms',
+  standalone_esxi: 'migration_standalone_esxi',
+};
+
+// Permanently deletes every row of one built-in VM tab across ALL migration
+// projects (not scoped to a single project_id) — a "clean slate" action for
+// data that was imported wrong or is no longer needed, distinct from the
+// per-row Delete button which only soft-clears (sets cleared_at).
+async function wipeTabData(tabKey) {
+  const table = WIPEABLE_TABLES[tabKey];
+  if (!table) throw new Error(`Unknown or non-wipeable tab: ${tabKey}`);
+  const recordType = TABLE_RECORD_TYPE[table];
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    if (recordType) {
+      await client.query(
+        `DELETE FROM migration_field_values
+          WHERE record_type = $1
+            AND record_id IN (SELECT id FROM ${table})`,
+        [recordType],
+      );
+    }
+    const { rowCount } = await client.query(`DELETE FROM ${table}`);
+    await client.query('COMMIT');
+    return rowCount;
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 async function confirmImport(buffer, preserveStatus = false, projectId) {
   if (!projectId) throw new Error('project_id is required for import');
   const pid = parseInt(projectId, 10);
@@ -1180,6 +1216,7 @@ async function saveTabConfigs(projectId, configs) {
 
 module.exports = {
   getProjects, listProjectsWithStats, createProject, updateProject, deleteProject,
+  wipeTabData,
   getTabConfig, saveTabConfigs,
   getCustomTabs, createCustomTab, updateCustomTab, deleteCustomTab,
   listCustomVMs, patchCustomVM, customVMSummary, customFilterOptions,

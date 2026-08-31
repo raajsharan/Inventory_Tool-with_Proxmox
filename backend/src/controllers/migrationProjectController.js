@@ -32,6 +32,18 @@ async function deleteProject(req, res, next) {
   }
 }
 
+// ── DANGER ZONE ────────────────────────────────────────────────────────────────
+
+async function wipeTabData(req, res, next) {
+  try {
+    const deleted = await svc.wipeTabData(req.params.tabKey);
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    if (/Unknown or non-wipeable tab/.test(e.message)) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+}
+
 // ── CUSTOM TAB CRUD ───────────────────────────────────────────────────────────
 
 async function listCustomTabs(req, res, next) {
@@ -114,6 +126,7 @@ async function deleteFieldDef(req, res, next) {
 
 module.exports = {
   listProjects, createProject, updateProject, deleteProject,
+  wipeTabData,
   getTabConfig, saveTabConfig,
   listCustomTabs, createCustomTab, updateCustomTab, deleteCustomTab,
   listFieldDefs, createFieldDef, updateFieldDef, deleteFieldDef,

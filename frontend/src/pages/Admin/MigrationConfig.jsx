@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Table, Button, Modal, Form, Input, Switch, Tag, Space,
-  Typography, Popconfirm, message, Tooltip, Badge,
+  Typography, Popconfirm, message, Tooltip, Badge, Alert, Card,
   Drawer, Checkbox, Divider, Collapse, Select,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, StarOutlined,
   ProjectOutlined, HddOutlined, CloudServerOutlined,
   SettingOutlined, DesktopOutlined, SafetyOutlined, ClusterOutlined,
-  AppstoreOutlined,
+  AppstoreOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { TAB_DEFAULTS, COLUMN_REGISTRY, CUSTOM_COLUMNS } from '../MigrationTracker/tabColumnRegistry.js';
@@ -696,6 +696,10 @@ export default function MigrationConfig() {
   const [tabDrawerOpen,    setTabDrawerOpen]    = useState(false);
   const [tabDrawerProject, setTabDrawerProject] = useState(null);
 
+  const [wipeTarget, setWipeTarget]   = useState(null); // { key, label, count }
+  const [wipeConfirm, setWipeConfirm] = useState('');
+  const [wiping, setWiping]           = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -762,6 +766,26 @@ export default function MigrationConfig() {
     }
   };
 
+  const openWipeModal = (tabKey, label, count) => {
+    setWipeTarget({ key: tabKey, label, count });
+    setWipeConfirm('');
+  };
+
+  const handleWipe = async () => {
+    if (!wipeTarget) return;
+    setWiping(true);
+    try {
+      const { data } = await api.delete(`/admin/migration-projects/danger/wipe/${wipeTarget.key}`);
+      message.success(`Wiped ${data.deleted} ${wipeTarget.label} record${data.deleted === 1 ? '' : 's'} across all projects`);
+      setWipeTarget(null);
+      load();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Wipe failed');
+    } finally {
+      setWiping(false);
+    }
+  };
+
   const handleSetDefault = async (record) => {
     try {
       await api.patch(`/admin/migration-projects/${record.id}`, { is_default: true });
@@ -783,6 +807,14 @@ export default function MigrationConfig() {
     const customTotal  = (r.custom_tabs || []).reduce((s, t) => s + (t.vm_count ?? 0), 0);
     return builtinTotal + customTotal;
   };
+
+  // Cross-project totals for the Danger Zone — sums the same per-project
+  // counts already shown in the "Total VMs" / "VM Tabs" columns above.
+  const wipeableTabs = [
+    { key: 'bomgar_vms',      label: 'Bomgar VMs',      icon: <DesktopOutlined />, count: projects.reduce((s, r) => s + (r.bomgar_count ?? 0), 0) },
+    { key: 'security_vms',    label: 'Security VMs',    icon: <SafetyOutlined />,  count: projects.reduce((s, r) => s + (r.security_count ?? 0), 0) },
+    { key: 'standalone_esxi', label: 'Standalone ESXi', icon: <ClusterOutlined />, count: projects.reduce((s, r) => s + (r.standalone_count ?? 0), 0) },
+  ];
 
   const columns = [
     {
@@ -912,6 +944,65 @@ export default function MigrationConfig() {
         pagination={false}
         locale={{ emptyText: 'No migration projects yet. Create your first project to get started.' }}
       />
+
+      <Card
+        title={<Space><WarningOutlined style={{ color: '#ff4d4f' }} /><Text strong>Danger Zone</Text></Space>}
+        style={{ marginTop: 24, borderColor: '#ffccc7' }}
+      >
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+          Permanently delete every record of a built-in VM tab, across <strong>all migration projects</strong> —
+          not just the row counts shown above. This is a hard delete, not the row-level Delete button (which only
+          marks a VM as cleared). There is no undo outside of a database backup.
+        </Text>
+        <Space direction="vertical" style={{ width: '100%' }} size={8}>
+          {wipeableTabs.map(t => (
+            <div key={t.key} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 12px', background: 'rgba(255,77,79,0.04)', borderRadius: 6,
+            }}>
+              <Space>
+                {t.icon}
+                <Text strong>{t.label}</Text>
+                <Tag color={t.count > 0 ? 'red' : 'default'}>{t.count} record{t.count === 1 ? '' : 's'}</Tag>
+              </Space>
+              <Button
+                danger size="small" icon={<DeleteOutlined />}
+                disabled={t.count === 0}
+                onClick={() => openWipeModal(t.key, t.label, t.count)}
+              >
+                Wipe All Data
+              </Button>
+            </div>
+          ))}
+        </Space>
+      </Card>
+
+      {/* Danger Zone: wipe-all confirmation */}
+      <Modal
+        open={!!wipeTarget}
+        onCancel={() => setWipeTarget(null)}
+        title={<Space><WarningOutlined style={{ color: '#ff4d4f' }} />Wipe all {wipeTarget?.label}?</Space>}
+        okText="Permanently Delete"
+        okType="danger"
+        okButtonProps={{ disabled: wipeConfirm.trim() !== wipeTarget?.label, loading: wiping }}
+        onOk={handleWipe}
+        destroyOnClose
+      >
+        <Alert
+          type="error" showIcon style={{ marginBottom: 16 }}
+          message={`This permanently deletes all ${wipeTarget?.count ?? 0} ${wipeTarget?.label} record${wipeTarget?.count === 1 ? '' : 's'} across every migration project.`}
+          description="This cannot be undone. Any custom field values saved against these rows are deleted too."
+        />
+        <Text style={{ display: 'block', marginBottom: 8 }}>
+          Type <Text strong>{wipeTarget?.label}</Text> to confirm:
+        </Text>
+        <Input
+          value={wipeConfirm}
+          onChange={e => setWipeConfirm(e.target.value)}
+          placeholder={wipeTarget?.label}
+          autoFocus
+        />
+      </Modal>
 
       {/* Project create / edit modal */}
       <Modal
