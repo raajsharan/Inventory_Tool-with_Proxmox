@@ -1058,79 +1058,6 @@ function ExtendedInventoryTab({ data, compCfg = {} }) {
   );
 }
 
-function PatchPill({ n, label, tone, isDark }) {
-  const palette = {
-    green:  { bg: 'rgba(34,197,94,0.10)',  fg: '#15803d', dfg: '#4ade80' },
-    blue:   { bg: 'rgba(59,130,246,0.10)', fg: '#1d4ed8', dfg: '#60a5fa' },
-    yellow: { bg: 'rgba(234,179,8,0.18)',  fg: '#a16207', dfg: '#fbbf24' },
-    purple: { bg: 'rgba(168,85,247,0.10)', fg: '#7e22ce', dfg: '#c084fc' },
-    red:    { bg: 'rgba(239,68,68,0.10)',  fg: '#b91c1c', dfg: '#f87171' },
-    cyan:   { bg: 'rgba(6,182,212,0.10)',  fg: '#0e7490', dfg: '#22d3ee' },
-    gray:   { bg: 'rgba(148,163,184,0.12)',fg: '#475569', dfg: '#94a3b8' },
-    orange: { bg: 'rgba(249,115,22,0.10)', fg: '#c2410c', dfg: '#fb923c' },
-  }[tone || 'gray'];
-  return (
-    <div style={{
-      background: palette.bg, color: isDark ? palette.dfg : palette.fg,
-      borderRadius: 8, padding: '8px 12px',
-    }}>
-      <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>{(n ?? 0).toLocaleString()}</div>
-      <div style={{ fontSize: 12 }}>{label}</div>
-    </div>
-  );
-}
-
-function PatchingStatusCard({ title, data, isDark }) {
-  const auto = data?.auto_patching ?? 0;
-  const manual = data?.manual_patching ?? 0;
-  const totalExclNa = data?.total_excl_na ?? data?.total ?? 0;
-  const pct = totalExclNa ? Math.round(((auto + manual) / totalExclNa) * 100) : 0;
-  const overall = (data?.auto_patching ?? 0) + (data?.manual_patching ?? 0)
-    + (data?.pending ?? 0) + (data?.on_hold ?? 0) + (data?.alive_powered_off ?? 0);
-  const overallPct = totalExclNa ? ((overall / totalExclNa) * 100) : 0;
-
-  return (
-    <Card type="inner"
-      title={
-        <Space>
-          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
-            width: 30, height: 30, borderRadius: 6, display: 'flex',
-            alignItems: 'center', justifyContent: 'center' }}>
-            <ThunderboltOutlined />
-          </div>
-          <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>{title}</Typography.Title>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>Patching type distribution</Typography.Text>
-          </div>
-        </Space>
-      }
-    >
-      <Row gutter={16} align="middle">
-        <Col xs={24} md={6} style={{ textAlign: 'center' }}>
-          <DonutRing percent={pct} color="#2563eb" label="Auto + Manual"
-            sub={`${totalExclNa.toLocaleString()} total records`} />
-        </Col>
-        <Col xs={24} md={18}>
-          <Row gutter={[10, 10]}>
-            <Col xs={12} md={8}><PatchPill n={data?.auto_patching}     label="Auto"               tone="green"  isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.manual_patching}   label="Manual"             tone="blue"   isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.exception}         label="Exception"          tone="yellow" isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.beijing_it}        label="Beijing IT"         tone="purple" isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.eol}               label="EOL - No Patches"   tone="red"    isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.pending}           label="Pending"            tone="cyan"   isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.on_hold}           label="On Hold"            tone="gray"   isDark={isDark} /></Col>
-            <Col xs={12} md={8}><PatchPill n={data?.alive_powered_off} label="Alive Powered Off"  tone="orange" isDark={isDark} /></Col>
-          </Row>
-        </Col>
-      </Row>
-      <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>
-        <strong>Overall:</strong> {overall.toLocaleString()} / (Auto + Manual + Pending + On Hold + Alive Powered Off)
-        = <strong>{overallPct.toFixed(2)}%</strong>
-      </Typography.Paragraph>
-    </Card>
-  );
-}
-
 function WeeklyReportRow({ label, children }) {
   return (
     <Row gutter={16} style={{ padding: '16px 0', borderBottom: '1px solid var(--ant-color-border-secondary, #303030)' }}>
@@ -1566,30 +1493,6 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               }}
             />
           </div>
-        </WeeklyReportRow></Wgt>
-
-        <Wgt tab="weekly" k="patch_management"><WeeklyReportRow label={<WTitle tab="weekly" k="patch_management" d="Patch Management Solution" />}>
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            message={
-              <span>
-                <strong>Overall Patch Compliance (Auto + Manual):</strong>{' '}
-                <strong>{overallPatchN.toLocaleString()}</strong> / <strong>{overallPatchD.toLocaleString()}</strong> ={' '}
-                <strong>{overallPatchPct}%</strong>{' '}
-                <Typography.Text type="secondary">(Not Applicable excluded)</Typography.Text>
-              </span>
-            }
-          />
-          <Row gutter={[16, 16]}>
-            <Col xs={24} lg={12}>
-              <PatchingStatusCard title="Asset Inventory Patching Status" data={assetPatching} isDark={isDark} />
-            </Col>
-            <Col xs={24} lg={12}>
-              <PatchingStatusCard title="Ext. Inventory Patching Status" data={extPatching} isDark={isDark} />
-            </Col>
-          </Row>
         </WeeklyReportRow></Wgt>
       </Card>
 
