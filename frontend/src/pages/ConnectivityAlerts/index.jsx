@@ -101,7 +101,8 @@ export default function ConnectivityAlerts() {
             Connectivity Alerts
           </Title>
           <Text type="secondary">
-            Ping / SSH connectivity failures raised by the host monitor across VMware, Proxmox, and Hyper-V.
+            Connectivity failures across VMware, Proxmox, and Hyper-V — the ping/SSH host monitor, and
+            discovery runs that couldn't reach a host's management API at all.
           </Text>
         </div>
         <Segmented options={RANGE_OPTIONS} value={days} onChange={setDays} />

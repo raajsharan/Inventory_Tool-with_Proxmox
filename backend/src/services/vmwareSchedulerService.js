@@ -12,6 +12,7 @@ const vmSvc  = require('./vmwareService');
 const dbSvc  = require('./vmwareDbService');
 const teams  = require('./teamsNotificationService');
 const utilSvc = require('./hostUtilizationService');
+const alertsSvc = require('./hostAlertsService');
 
 const jobs = {};       // host -> cron.Task
 const running = new Set();  // hosts currently being discovered
@@ -79,6 +80,9 @@ async function runDiscovery(host) {
     // Notify on every failed attempt — tiered by consecutive-failure count
     // (1st = Warning, 2nd+ = Critical), not just the up -> down transition.
     teams.notifyHostDown('VMware', host, err.message, failCount).catch(() => {});
+    alertsSvc.logDiscoveryFailure({
+      platform: 'VMware', hostId: record.id, host, errorMessage: err.message, failCount,
+    }).catch(logErr => console.error(`[vmware-scheduler] failed to log connectivity alert for ${host}:`, logErr.message));
   } finally {
     running.delete(host);
   }

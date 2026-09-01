@@ -106,6 +106,13 @@ const STATEMENTS = [
   // connection refused, "host unreachable", etc). Backs the "Timed Out
   // Reaching" card.
   `ALTER TABLE host_connectivity_alerts ADD COLUMN IF NOT EXISTS timed_out BOOLEAN NOT NULL DEFAULT FALSE`,
+  // Which subsystem raised this row — the ping-monitor's own ICMP/SSH dual
+  // check ('ping_monitor'), or a discovery run that couldn't even reach the
+  // host's management API ('discovery', logged by hostAlertsService.
+  // logDiscoveryFailure(), called from each scheduler's failure branch).
+  // Both are genuine connectivity failures, just at different layers, so
+  // they're counted together on the Connectivity Alerts page.
+  `ALTER TABLE host_connectivity_alerts ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'ping_monitor'`,
   `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_created_at ON host_connectivity_alerts(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_platform   ON host_connectivity_alerts(platform)`,
 

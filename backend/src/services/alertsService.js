@@ -47,4 +47,4 @@ async function getFailedHosts() {
   return alerts;
 }
 
-module.exports = { getFailedHosts };
+module.exports = { getFailedHosts, AUTH_PATTERN };

@@ -11,6 +11,7 @@ const db    = require('./hypervDbService');
 const svc   = require('./hypervService');
 const teams = require('./teamsNotificationService');
 const utilSvc = require('./hostUtilizationService');
+const alertsSvc = require('./hostAlertsService');
 
 const jobs    = new Map();   // hostId → CronTask
 const running = new Set();   // hostId values currently running
@@ -68,6 +69,9 @@ async function runDiscovery(hostId) {
     // Notify on every failed attempt — tiered by consecutive-failure count
     // (1st = Warning, 2nd+ = Critical), not just the up -> down transition.
     teams.notifyHostDown('Hyper-V', host.host, err.message, failCount).catch(() => {});
+    alertsSvc.logDiscoveryFailure({
+      platform: 'Hyper-V', hostId, host: host.host, errorMessage: err.message, failCount,
+    }).catch(logErr => console.error(`[hyperv-scheduler] failed to log connectivity alert for ${host.host}:`, logErr.message));
   } finally {
     running.delete(hostId);
   }
