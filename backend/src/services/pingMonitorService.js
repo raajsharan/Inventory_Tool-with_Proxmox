@@ -250,8 +250,14 @@ async function checkPlatform(platform) {
         `UPDATE ${table} SET ping_status = 'down', ping_fail_count = $2, ping_last_checked_at = NOW() WHERE id = $1`,
         [h.id, failCount]
       );
-      const checks = { ping: pingOk, ssh: sshOk };
-      if (failCount === 1) {
+      const checks   = { ping: pingOk, ssh: sshOk };
+      const severity = failCount === 1 ? 'warning' : 'critical';
+      db.query(
+        `INSERT INTO host_connectivity_alerts (platform, host_id, host, severity, ping_ok, ssh_ok, fail_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [platform, h.id, h.host, severity, pingOk, sshOk, failCount],
+      ).catch(err => console.error(`[ping-monitor] failed to log alert for ${platform}/${h.host}:`, err.message));
+      if (severity === 'warning') {
         teams.notifyPingWarning(platform, h.host, checks).catch(() => {});
       } else {
         teams.notifyPingCritical(platform, h.host, failCount, checks).catch(() => {});

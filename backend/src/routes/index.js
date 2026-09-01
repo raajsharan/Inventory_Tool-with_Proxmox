@@ -44,6 +44,7 @@ router.use('/teams-notification',       require('./teamsNotificationRoutes'));
 router.use('/ping-monitor',             require('./pingMonitorRoutes'));
 router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
 router.use('/alerts',                   require('./alertsRoutes'));
+router.use('/connectivity-alerts',      require('./hostAlertsRoutes'));
 // /my-tasks is open to any authenticated user (each team member's own
 // tasks); /reckoner, /config, /overrides are admin-only via authorize()
 // inside recurringActivityRoutes.js — no page-access gate at the mount,

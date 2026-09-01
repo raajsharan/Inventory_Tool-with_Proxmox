@@ -58,6 +58,7 @@ const InstallConfig          = lazy(() => import('./pages/Admin/InstallConfig.js
 const VMwareDiscovery        = lazy(() => import('./pages/VMwareDiscovery/index.jsx'));
 const ProxmoxDiscovery       = lazy(() => import('./pages/ProxmoxDiscovery/index.jsx'));
 const HyperVDiscovery        = lazy(() => import('./pages/HyperVDiscovery/index.jsx'));
+const ConnectivityAlerts     = lazy(() => import('./pages/ConnectivityAlerts/index.jsx'));
 const SoftwareStatus         = lazy(() => import('./pages/SoftwareStatus/index.jsx'));
 const NessusStatus           = lazy(() => import('./pages/NessusStatus/index.jsx'));
 const NessusInstallConfig    = lazy(() => import('./pages/Admin/NessusInstallConfig.jsx'));
@@ -123,6 +124,7 @@ export default function App() {
             <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
             <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
             <Route path="/hyperv-discovery"   element={<HyperVDiscovery />} />
+            <Route path="/connectivity-alerts" element={<ConnectivityAlerts />} />
             <Route path="/migration-tracker"  element={<MigrationTracker />} />
             <Route path="/endpoint-central"   element={<EndpointCentral />} />
 

@@ -50,6 +50,7 @@ const STATIC_PAGES = [
   { key: 'vmware',                  label: 'VMware Discovery',               group: 'General' },
   { key: 'proxmox',                 label: 'Proxmox Discovery',              group: 'General' },
   { key: 'hyperv',                  label: 'Hyper-V Discovery',              group: 'General' },
+  { key: 'connectivity_alerts',      label: 'Connectivity Alerts',            group: 'General' },
 ];
 
 async function dynamicCustomPages() {

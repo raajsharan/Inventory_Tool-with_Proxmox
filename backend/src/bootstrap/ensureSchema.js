@@ -84,6 +84,25 @@ const STATEMENTS = [
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_fail_count INT NOT NULL DEFAULT 0`,
   `ALTER TABLE proxmox_hosts ADD COLUMN IF NOT EXISTS ping_last_checked_at TIMESTAMPTZ`,
 
+  // Alert history for the ping-monitor above — a durable, queryable log of
+  // every Warning/Critical transition (recoveries aren't alerts, so they
+  // aren't logged here), independent of whether Teams notifications are
+  // configured. Backs the Connectivity Alerts page's "by date" / "by
+  // platform" cards.
+  `CREATE TABLE IF NOT EXISTS host_connectivity_alerts (
+      id          SERIAL PRIMARY KEY,
+      platform    VARCHAR(20) NOT NULL,
+      host_id     INT NOT NULL,
+      host        VARCHAR(255) NOT NULL,
+      severity    VARCHAR(10) NOT NULL,
+      ping_ok     BOOLEAN NOT NULL,
+      ssh_ok      BOOLEAN,
+      fail_count  INT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_created_at ON host_connectivity_alerts(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_platform   ON host_connectivity_alerts(platform)`,
+
   `CREATE TABLE IF NOT EXISTS ping_monitor_config (
       id                       SERIAL PRIMARY KEY,
       singleton                BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,

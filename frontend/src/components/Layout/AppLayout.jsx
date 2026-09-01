@@ -13,7 +13,7 @@ import {
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
   ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
-  CalendarOutlined,
+  CalendarOutlined, AlertOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -158,7 +158,8 @@ export default function AppLayout() {
             { key: '/vmware-discovery',   icon: <ApartmentOutlined />, label: <Link to="/vmware-discovery">VMware Discovery</Link> },
             { key: '/proxmox-discovery',  icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },
             { key: '/hyperv-discovery',   icon: <WindowsOutlined />,   label: <Link to="/hyperv-discovery">Hyper-V Discovery</Link> },
-          ],
+            can('connectivity_alerts') && { key: '/connectivity-alerts', icon: <AlertOutlined />, label: <Link to="/connectivity-alerts">Connectivity Alerts</Link> },
+          ].filter(Boolean),
         }];
       case 'migration-tracker':
         return can('migration_tracker')
