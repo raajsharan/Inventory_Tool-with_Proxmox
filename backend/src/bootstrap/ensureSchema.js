@@ -100,6 +100,12 @@ const STATEMENTS = [
       fail_count  INT NOT NULL,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  // Added after the table's initial release — whether the deciding check
+  // (SSH once consulted, otherwise ping) failed via a real timeout (no
+  // response at all) rather than an active rejection (auth failure,
+  // connection refused, "host unreachable", etc). Backs the "Timed Out
+  // Reaching" card.
+  `ALTER TABLE host_connectivity_alerts ADD COLUMN IF NOT EXISTS timed_out BOOLEAN NOT NULL DEFAULT FALSE`,
   `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_created_at ON host_connectivity_alerts(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_platform   ON host_connectivity_alerts(platform)`,
 

@@ -167,30 +167,34 @@ function isWithinWindow(start, end) {
 }
 
 // Lightweight SSH reachability probe — just needs a successful auth, not a
-// command result, so it resolves as soon as the session is 'ready'.
+// command result, so it resolves as soon as the session is 'ready'. Reports
+// whether a failure was a real timeout (no response at all — the `timer`
+// path below) versus an active rejection (auth failure, connection refused,
+// host key mismatch, etc. — the `conn.on('error', ...)` path), so callers
+// can tell "unreachable" apart from "reachable but refused".
 function sshCheck(host, username, password, timeout = 6000) {
   return new Promise((resolve) => {
     const conn = new Client();
     let settled = false;
-    const finish = (ok) => {
+    const finish = (ok, timedOut = false) => {
       if (settled) return;
       settled = true;
       try { conn.end(); } catch { /* ignore */ }
-      resolve(ok);
+      resolve({ ok, timedOut });
     };
     const timer = setTimeout(() => {
       try { conn.destroy(); } catch { /* ignore */ }
-      finish(false);
+      finish(false, true);
     }, timeout + 1000);
 
     conn.on('ready', () => { clearTimeout(timer); finish(true); });
-    conn.on('error', () => { clearTimeout(timer); finish(false); });
+    conn.on('error', () => { clearTimeout(timer); finish(false, false); });
 
     try {
       conn.connect({ host, port: 22, username, password, readyTimeout: timeout });
     } catch {
       clearTimeout(timer);
-      finish(false);
+      finish(false, false);
     }
   });
 }
@@ -213,9 +217,11 @@ async function checkPlatform(platform) {
 
   for (const h of hosts) {
     let pingOk = false;
+    let pingTimedOut = false;
     try {
       const result = await ping(h.host);
       pingOk = !!result.reachable;
+      pingTimedOut = !!result.timedOut;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(`[ping-monitor] ${platform} ping failed for ${h.host}:`, err.message);
@@ -226,13 +232,19 @@ async function checkPlatform(platform) {
     // when this platform supports it and the host has stored credentials.
     let sshOk = null; // null = not checked / not applicable
     let reachable = pingOk;
+    // Whichever check ultimately decided "unreachable" is the one whose
+    // timeout-ness describes the failure — ping alone when SSH was never
+    // consulted, SSH once it was (it superseded ping's own result).
+    let timedOut = pingTimedOut;
 
     if (!pingOk && useSsh && h.username && h.password_encrypted) {
       let password = null;
       try { password = crypto.decrypt(h.password_encrypted); } catch { /* ignore */ }
       if (password) {
-        sshOk = await sshCheck(h.host, h.username, password);
+        const sshResult = await sshCheck(h.host, h.username, password);
+        sshOk    = sshResult.ok;
         reachable = sshOk;
+        timedOut  = sshResult.timedOut;
       }
     }
 
@@ -253,9 +265,9 @@ async function checkPlatform(platform) {
       const checks   = { ping: pingOk, ssh: sshOk };
       const severity = failCount === 1 ? 'warning' : 'critical';
       db.query(
-        `INSERT INTO host_connectivity_alerts (platform, host_id, host, severity, ping_ok, ssh_ok, fail_count)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [platform, h.id, h.host, severity, pingOk, sshOk, failCount],
+        `INSERT INTO host_connectivity_alerts (platform, host_id, host, severity, ping_ok, ssh_ok, fail_count, timed_out)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [platform, h.id, h.host, severity, pingOk, sshOk, failCount, timedOut],
       ).catch(err => console.error(`[ping-monitor] failed to log alert for ${platform}/${h.host}:`, err.message));
       if (severity === 'warning') {
         teams.notifyPingWarning(platform, h.host, checks).catch(() => {});
