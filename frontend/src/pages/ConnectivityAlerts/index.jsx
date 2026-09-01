@@ -28,7 +28,7 @@ export default function ConnectivityAlerts() {
   const EMPTY = { byDate: [], byPlatform: [], total: 0, timedOut: { total: 0, byPlatform: [] } };
   const [data, setData]       = useState(EMPTY);
 
-  const UTIL_EMPTY = { current: [], history: { total: 0, byDate: [], byPlatform: [] }, config: { cpu_threshold_pct: 85, memory_threshold_pct: 85 } };
+  const UTIL_EMPTY = { current: [], history: { total: 0, byDate: [], byPlatform: [] }, config: { cpu_threshold_pct: 85, memory_threshold_pct: 85, disk_threshold_pct: 85 } };
   const [utilLoading, setUtilLoading] = useState(true);
   const [util, setUtil]               = useState(UTIL_EMPTY);
 
@@ -76,6 +76,14 @@ export default function ConnectivityAlerts() {
       title: 'Memory', dataIndex: 'memory_pct', key: 'memory_pct', width: 90, align: 'right',
       render: v => v == null ? '—' : (
         <Text strong={v >= util.config.memory_threshold_pct} type={v >= util.config.memory_threshold_pct ? 'danger' : undefined}>
+          {v}%
+        </Text>
+      ),
+    },
+    {
+      title: 'Disk', dataIndex: 'disk_pct', key: 'disk_pct', width: 90, align: 'right',
+      render: v => v == null ? '—' : (
+        <Text strong={v >= util.config.disk_threshold_pct} type={v >= util.config.disk_threshold_pct ? 'danger' : undefined}>
           {v}%
         </Text>
       ),
@@ -193,7 +201,7 @@ export default function ConnectivityAlerts() {
         <Col xs={24}>
           <Card
             title="High Utilization"
-            extra={<Tag>CPU ≥ {util.config.cpu_threshold_pct}% or Memory ≥ {util.config.memory_threshold_pct}%</Tag>}
+            extra={<Tag>CPU ≥ {util.config.cpu_threshold_pct}% · Memory ≥ {util.config.memory_threshold_pct}% · Disk ≥ {util.config.disk_threshold_pct}%</Tag>}
           >
             {utilLoading ? (
               <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>

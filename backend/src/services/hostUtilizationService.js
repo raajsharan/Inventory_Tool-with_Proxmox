@@ -15,7 +15,7 @@ const vmwareDb = require('./vmwareDbService');
 const proxmoxDb = require('./proxmoxDbService');
 const hypervDb = require('./hypervDbService');
 
-const DEFAULTS = { enabled: true, cpu_threshold_pct: 85, memory_threshold_pct: 85 };
+const DEFAULTS = { enabled: true, cpu_threshold_pct: 85, memory_threshold_pct: 85, disk_threshold_pct: 85 };
 
 async function getConfig() {
   const { rows } = await db.query('SELECT * FROM utilization_monitor_config LIMIT 1');
@@ -32,51 +32,59 @@ async function saveConfig(fields) {
     enabled              = cfg.enabled,
     cpu_threshold_pct    = cfg.cpu_threshold_pct,
     memory_threshold_pct = cfg.memory_threshold_pct,
+    disk_threshold_pct   = cfg.disk_threshold_pct,
   } = fields;
 
-  const cpuPct = Number(cpu_threshold_pct);
-  const memPct = Number(memory_threshold_pct);
-  if (!validPct(cpuPct)) throw new Error(`Invalid CPU threshold "${cpu_threshold_pct}" — expected a number 0-100`);
-  if (!validPct(memPct)) throw new Error(`Invalid memory threshold "${memory_threshold_pct}" — expected a number 0-100`);
+  const cpuPct  = Number(cpu_threshold_pct);
+  const memPct  = Number(memory_threshold_pct);
+  const diskPct = Number(disk_threshold_pct);
+  if (!validPct(cpuPct))  throw new Error(`Invalid CPU threshold "${cpu_threshold_pct}" — expected a number 0-100`);
+  if (!validPct(memPct))  throw new Error(`Invalid memory threshold "${memory_threshold_pct}" — expected a number 0-100`);
+  if (!validPct(diskPct)) throw new Error(`Invalid disk threshold "${disk_threshold_pct}" — expected a number 0-100`);
 
   await db.query(
-    `INSERT INTO utilization_monitor_config (enabled, cpu_threshold_pct, memory_threshold_pct, updated_at)
-     VALUES ($1, $2, $3, NOW())
+    `INSERT INTO utilization_monitor_config (enabled, cpu_threshold_pct, memory_threshold_pct, disk_threshold_pct, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
      ON CONFLICT (singleton) DO UPDATE SET
         enabled              = EXCLUDED.enabled,
         cpu_threshold_pct    = EXCLUDED.cpu_threshold_pct,
         memory_threshold_pct = EXCLUDED.memory_threshold_pct,
+        disk_threshold_pct   = EXCLUDED.disk_threshold_pct,
         updated_at           = NOW()`,
-    [enabled === true || enabled === 'true', cpuPct, memPct],
+    [enabled === true || enabled === 'true', cpuPct, memPct, diskPct],
   );
   return getConfig();
 }
 
-function memPctOf(usedMb, totalMb) {
-  const used  = Number(usedMb);
-  const total = Number(totalMb);
-  if (!total || !Number.isFinite(used) || !Number.isFinite(total)) return null;
-  return Math.round((used / total) * 1000) / 10;
+// Generic used/total -> percentage helper — works for memory (MB) and disk
+// (GB) alike, since both are just a used/total ratio.
+function pctOf(used, total) {
+  const u = Number(used);
+  const t = Number(total);
+  if (!t || !Number.isFinite(u) || !Number.isFinite(t)) return null;
+  return Math.round((u / t) * 1000) / 10;
 }
 
-async function logIfOver({ platform, hostId, host, ipAddress, cpuPct, memoryPct }) {
+async function logIfOver({ platform, hostId, host, ipAddress, cpuPct, memoryPct, diskPct }) {
   const cfg = await getConfig();
   if (cfg.enabled === false) return;
-  const cpuOver = cpuPct    != null && cpuPct    >= (cfg.cpu_threshold_pct    ?? DEFAULTS.cpu_threshold_pct);
-  const memOver = memoryPct != null && memoryPct >= (cfg.memory_threshold_pct ?? DEFAULTS.memory_threshold_pct);
-  if (!cpuOver && !memOver) return;
+  const cpuOver  = cpuPct    != null && cpuPct    >= (cfg.cpu_threshold_pct    ?? DEFAULTS.cpu_threshold_pct);
+  const memOver  = memoryPct != null && memoryPct >= (cfg.memory_threshold_pct ?? DEFAULTS.memory_threshold_pct);
+  const diskOver = diskPct   != null && diskPct   >= (cfg.disk_threshold_pct   ?? DEFAULTS.disk_threshold_pct);
+  if (!cpuOver && !memOver && !diskOver) return;
 
   await db.query(
     `INSERT INTO host_utilization_alerts
-       (platform, host_id, host, ip_address, cpu_pct, memory_pct, cpu_over, memory_over)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [platform, hostId, host, ipAddress || null, cpuPct, memoryPct, cpuOver, memOver],
+       (platform, host_id, host, ip_address, cpu_pct, memory_pct, disk_pct, cpu_over, memory_over, disk_over)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [platform, hostId, host, ipAddress || null, cpuPct, memoryPct, diskPct, cpuOver, memOver, diskOver],
   );
 }
 
 // allStats: entries from vmwareService.getAllHostStats — { esxi_name, esxi_ip,
-// cpu_usage_pct, memory_total_mb, memory_used_mb, ... }. Covers both the
-// standalone-ESXi (allStats.length === 1) and vCenter (many) cases uniformly.
+// cpu_usage_pct, memory_total_mb, memory_used_mb, disk_total_gb, disk_used_gb,
+// ... }. Covers both the standalone-ESXi (allStats.length === 1) and vCenter
+// (many) cases uniformly.
 async function checkAndLogVMware(hostId, allStats) {
   for (const s of allStats || []) {
     await logIfOver({
@@ -85,13 +93,15 @@ async function checkAndLogVMware(hostId, allStats) {
       host: s.esxi_name || s.esxi_ip,
       ipAddress: s.esxi_ip,
       cpuPct: s.cpu_usage_pct ?? null,
-      memoryPct: memPctOf(s.memory_used_mb, s.memory_total_mb),
+      memoryPct: pctOf(s.memory_used_mb, s.memory_total_mb),
+      diskPct: pctOf(s.disk_used_gb, s.disk_total_gb),
     }).catch(err => console.error(`[utilization-monitor] failed to log VMware alert for ${s.esxi_name || s.esxi_ip}:`, err.message));
   }
 }
 
 // nodes: entries from proxmoxService.discover()'s `nodes` array — { node,
-// ip_address, cpu_usage_pct, memory_mb (total), memory_used_mb, ... }.
+// ip_address, cpu_usage_pct, memory_mb (total), memory_used_mb, disk_total_gb,
+// disk_used_gb, ... }.
 async function checkAndLogProxmox(hostId, nodes) {
   for (const n of nodes || []) {
     await logIfOver({
@@ -100,13 +110,15 @@ async function checkAndLogProxmox(hostId, nodes) {
       host: n.node,
       ipAddress: n.ip_address,
       cpuPct: n.cpu_usage_pct ?? null,
-      memoryPct: memPctOf(n.memory_used_mb, n.memory_mb),
+      memoryPct: pctOf(n.memory_used_mb, n.memory_mb),
+      diskPct: pctOf(n.disk_used_gb, n.disk_total_gb),
     }).catch(err => console.error(`[utilization-monitor] failed to log Proxmox alert for ${n.node}:`, err.message));
   }
 }
 
 // stats: single object from hypervService.getHostStats() — { cpu_usage_pct,
-// memory_total_mb, memory_used_mb }. One physical host per Hyper-V connection.
+// memory_total_mb, memory_used_mb, disk_total_gb, disk_used_gb }. One
+// physical host per Hyper-V connection.
 async function checkAndLogHyperV(hostId, hostAddress, stats) {
   if (!stats) return;
   await logIfOver({
@@ -115,7 +127,8 @@ async function checkAndLogHyperV(hostId, hostAddress, stats) {
     host: hostAddress,
     ipAddress: hostAddress,
     cpuPct: stats.cpu_usage_pct ?? null,
-    memoryPct: memPctOf(stats.memory_used_mb, stats.memory_total_mb),
+    memoryPct: pctOf(stats.memory_used_mb, stats.memory_total_mb),
+    diskPct: pctOf(stats.disk_used_gb, stats.disk_total_gb),
   }).catch(err => console.error(`[utilization-monitor] failed to log Hyper-V alert for ${hostAddress}:`, err.message));
 }
 
@@ -142,8 +155,9 @@ async function attachOwnership(candidates) {
 
 async function getCurrentHighUtilization() {
   const cfg = await getConfig();
-  const cpuThreshold = cfg.cpu_threshold_pct ?? DEFAULTS.cpu_threshold_pct;
-  const memThreshold = cfg.memory_threshold_pct ?? DEFAULTS.memory_threshold_pct;
+  const cpuThreshold  = cfg.cpu_threshold_pct    ?? DEFAULTS.cpu_threshold_pct;
+  const memThreshold  = cfg.memory_threshold_pct ?? DEFAULTS.memory_threshold_pct;
+  const diskThreshold = cfg.disk_threshold_pct   ?? DEFAULTS.disk_threshold_pct;
 
   const [vmwareHosts, vmwareEsxiMap, proxmoxNodes, hypervHosts] = await Promise.all([
     vmwareDb.listHosts(),
@@ -158,34 +172,44 @@ async function getCurrentHighUtilization() {
   // connections have theirs cleared to NULL (see vmwareSchedulerService.js),
   // so this never double-counts a vCenter's children.
   for (const h of vmwareHosts) {
-    if (h.cpu_usage_pct == null && h.memory_used_mb == null) continue;
+    if (h.cpu_usage_pct == null && h.memory_used_mb == null && h.disk_used_gb == null) continue;
     candidates.push({
       platform: 'VMware', host: h.host, ip_address: h.host,
-      cpu_pct: h.cpu_usage_pct ?? null, memory_pct: memPctOf(h.memory_used_mb, h.memory_total_mb),
+      cpu_pct: h.cpu_usage_pct ?? null,
+      memory_pct: pctOf(h.memory_used_mb, h.memory_total_mb),
+      disk_pct: pctOf(h.disk_used_gb, h.disk_total_gb),
     });
   }
   for (const s of vmwareEsxiMap.values()) {
     candidates.push({
       platform: 'VMware', host: s.esxi_name || s.esxi_ip, ip_address: s.esxi_ip,
-      cpu_pct: s.cpu_usage_pct ?? null, memory_pct: memPctOf(s.memory_used_mb, s.memory_total_mb),
+      cpu_pct: s.cpu_usage_pct ?? null,
+      memory_pct: pctOf(s.memory_used_mb, s.memory_total_mb),
+      disk_pct: pctOf(s.disk_used_gb, s.disk_total_gb),
     });
   }
   for (const n of proxmoxNodes) {
     candidates.push({
       platform: 'Proxmox', host: n.node, ip_address: n.ip_address,
-      cpu_pct: n.cpu_usage_pct ?? null, memory_pct: memPctOf(n.memory_used_mb, n.memory_mb),
+      cpu_pct: n.cpu_usage_pct ?? null,
+      memory_pct: pctOf(n.memory_used_mb, n.memory_mb),
+      disk_pct: pctOf(n.disk_used_gb, n.disk_total_gb),
     });
   }
   for (const h of hypervHosts) {
-    if (h.cpu_usage_pct == null && h.memory_used_mb == null) continue;
+    if (h.cpu_usage_pct == null && h.memory_used_mb == null && h.disk_used_gb == null) continue;
     candidates.push({
       platform: 'Hyper-V', host: h.host, ip_address: h.host,
-      cpu_pct: h.cpu_usage_pct ?? null, memory_pct: memPctOf(h.memory_used_mb, h.memory_total_mb),
+      cpu_pct: h.cpu_usage_pct ?? null,
+      memory_pct: pctOf(h.memory_used_mb, h.memory_total_mb),
+      disk_pct: pctOf(h.disk_used_gb, h.disk_total_gb),
     });
   }
 
   const over = candidates.filter(c =>
-    (c.cpu_pct != null && c.cpu_pct >= cpuThreshold) || (c.memory_pct != null && c.memory_pct >= memThreshold)
+    (c.cpu_pct  != null && c.cpu_pct  >= cpuThreshold) ||
+    (c.memory_pct != null && c.memory_pct >= memThreshold) ||
+    (c.disk_pct != null && c.disk_pct >= diskThreshold)
   );
   return attachOwnership(over);
 }

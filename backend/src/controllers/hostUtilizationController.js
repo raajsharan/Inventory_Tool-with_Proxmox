@@ -9,7 +9,11 @@ async function getSummary(req, res, next) {
     ]);
     res.json({
       current, history,
-      config: { cpu_threshold_pct: config.cpu_threshold_pct, memory_threshold_pct: config.memory_threshold_pct },
+      config: {
+        cpu_threshold_pct: config.cpu_threshold_pct,
+        memory_threshold_pct: config.memory_threshold_pct,
+        disk_threshold_pct: config.disk_threshold_pct,
+      },
     });
   } catch (e) { next(e); }
 }

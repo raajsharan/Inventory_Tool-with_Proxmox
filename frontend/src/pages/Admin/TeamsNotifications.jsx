@@ -267,6 +267,7 @@ function UtilizationThresholds() {
         enabled: r.data.enabled ?? true,
         cpu_threshold_pct: r.data.cpu_threshold_pct ?? 85,
         memory_threshold_pct: r.data.memory_threshold_pct ?? 85,
+        disk_threshold_pct: r.data.disk_threshold_pct ?? 85,
       }))
       .catch(() => message.error('Failed to load utilization thresholds'));
   }, [utilForm]);
@@ -292,9 +293,9 @@ function UtilizationThresholds() {
         <Title level={5} style={{ margin: 0 }}>High Utilization Thresholds</Title>
       </Space>
       <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-        A host is flagged as "High Utilization" on the Connectivity Alerts page whenever its CPU or
-        Memory usage — checked on every VMware/Proxmox/Hyper-V discovery run — is at or above either
-        threshold below.
+        A host is flagged as "High Utilization" on the Connectivity Alerts page whenever its CPU,
+        Memory, or Disk usage — checked on every VMware/Proxmox/Hyper-V discovery run — is at or
+        above any of the thresholds below.
       </Text>
       <Form form={utilForm} layout="inline" onFinish={handleUtilSave}>
         <Form.Item name="enabled" label="Enabled" valuePropName="checked">
@@ -308,6 +309,12 @@ function UtilizationThresholds() {
         </Form.Item>
         <Form.Item
           name="memory_threshold_pct" label="Memory threshold"
+          rules={[{ required: true, message: 'Required' }]}
+        >
+          <InputNumber min={0} max={100} addonAfter="%" style={{ width: 120 }} />
+        </Form.Item>
+        <Form.Item
+          name="disk_threshold_pct" label="Disk threshold"
           rules={[{ required: true, message: 'Required' }]}
         >
           <InputNumber min={0} max={100} addonAfter="%" style={{ width: 120 }} />

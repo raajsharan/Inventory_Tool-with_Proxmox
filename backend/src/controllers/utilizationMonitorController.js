@@ -8,7 +8,7 @@ async function saveConfig(req, res, next) {
   try {
     res.json(await svc.saveConfig(req.body));
   } catch (e) {
-    if (/Invalid CPU threshold|Invalid memory threshold/.test(e.message)) return res.status(400).json({ error: e.message });
+    if (/Invalid CPU threshold|Invalid memory threshold|Invalid disk threshold/.test(e.message)) return res.status(400).json({ error: e.message });
     next(e);
   }
 }

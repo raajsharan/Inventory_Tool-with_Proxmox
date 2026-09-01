@@ -122,6 +122,8 @@ const STATEMENTS = [
       memory_threshold_pct  NUMERIC(5,1) NOT NULL DEFAULT 85,
       updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  // Added after the table's initial release, alongside CPU/Memory.
+  `ALTER TABLE utilization_monitor_config ADD COLUMN IF NOT EXISTS disk_threshold_pct NUMERIC(5,1) NOT NULL DEFAULT 85`,
   `CREATE TABLE IF NOT EXISTS host_utilization_alerts (
       id           SERIAL PRIMARY KEY,
       platform     VARCHAR(20) NOT NULL,
@@ -134,6 +136,8 @@ const STATEMENTS = [
       memory_over  BOOLEAN NOT NULL DEFAULT FALSE,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  `ALTER TABLE host_utilization_alerts ADD COLUMN IF NOT EXISTS disk_pct  NUMERIC(5,1)`,
+  `ALTER TABLE host_utilization_alerts ADD COLUMN IF NOT EXISTS disk_over BOOLEAN NOT NULL DEFAULT FALSE`,
   `CREATE INDEX IF NOT EXISTS idx_host_util_alerts_created_at ON host_utilization_alerts(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_host_util_alerts_platform   ON host_utilization_alerts(platform)`,
 
