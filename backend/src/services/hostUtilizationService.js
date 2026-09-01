@@ -17,9 +17,25 @@ const hypervDb = require('./hypervDbService');
 
 const DEFAULTS = { enabled: true, cpu_threshold_pct: 85, memory_threshold_pct: 85, disk_threshold_pct: 85 };
 
+// Postgres NUMERIC columns (cpu_usage_pct, the three *_threshold_pct fields)
+// come back from `pg` as strings, not numbers, to avoid float precision
+// loss — without this, threshold comparisons below silently become string
+// (lexicographic) comparisons instead of numeric ones once both sides are
+// strings, e.g. "100.0" >= "85.0" is FALSE as strings ('1' < '8').
+function num(v) {
+  return v == null ? null : Number(v);
+}
+
 async function getConfig() {
   const { rows } = await db.query('SELECT * FROM utilization_monitor_config LIMIT 1');
-  return rows[0] ? rows[0] : { ...DEFAULTS, id: null };
+  if (!rows[0]) return { ...DEFAULTS, id: null };
+  const row = rows[0];
+  return {
+    ...row,
+    cpu_threshold_pct: num(row.cpu_threshold_pct),
+    memory_threshold_pct: num(row.memory_threshold_pct),
+    disk_threshold_pct: num(row.disk_threshold_pct),
+  };
 }
 
 function validPct(n) {
@@ -92,7 +108,7 @@ async function checkAndLogVMware(hostId, allStats) {
       hostId,
       host: s.esxi_name || s.esxi_ip,
       ipAddress: s.esxi_ip,
-      cpuPct: s.cpu_usage_pct ?? null,
+      cpuPct: num(s.cpu_usage_pct),
       memoryPct: pctOf(s.memory_used_mb, s.memory_total_mb),
       diskPct: pctOf(s.disk_used_gb, s.disk_total_gb),
     }).catch(err => console.error(`[utilization-monitor] failed to log VMware alert for ${s.esxi_name || s.esxi_ip}:`, err.message));
@@ -109,7 +125,7 @@ async function checkAndLogProxmox(hostId, nodes) {
       hostId,
       host: n.node,
       ipAddress: n.ip_address,
-      cpuPct: n.cpu_usage_pct ?? null,
+      cpuPct: num(n.cpu_usage_pct),
       memoryPct: pctOf(n.memory_used_mb, n.memory_mb),
       diskPct: pctOf(n.disk_used_gb, n.disk_total_gb),
     }).catch(err => console.error(`[utilization-monitor] failed to log Proxmox alert for ${n.node}:`, err.message));
@@ -126,7 +142,7 @@ async function checkAndLogHyperV(hostId, hostAddress, stats) {
     hostId,
     host: hostAddress,
     ipAddress: hostAddress,
-    cpuPct: stats.cpu_usage_pct ?? null,
+    cpuPct: num(stats.cpu_usage_pct),
     memoryPct: pctOf(stats.memory_used_mb, stats.memory_total_mb),
     diskPct: pctOf(stats.disk_used_gb, stats.disk_total_gb),
   }).catch(err => console.error(`[utilization-monitor] failed to log Hyper-V alert for ${hostAddress}:`, err.message));
@@ -175,7 +191,7 @@ async function getCurrentHighUtilization() {
     if (h.cpu_usage_pct == null && h.memory_used_mb == null && h.disk_used_gb == null) continue;
     candidates.push({
       platform: 'VMware', host: h.host, ip_address: h.host,
-      cpu_pct: h.cpu_usage_pct ?? null,
+      cpu_pct: num(h.cpu_usage_pct),
       memory_pct: pctOf(h.memory_used_mb, h.memory_total_mb),
       disk_pct: pctOf(h.disk_used_gb, h.disk_total_gb),
     });
@@ -183,7 +199,7 @@ async function getCurrentHighUtilization() {
   for (const s of vmwareEsxiMap.values()) {
     candidates.push({
       platform: 'VMware', host: s.esxi_name || s.esxi_ip, ip_address: s.esxi_ip,
-      cpu_pct: s.cpu_usage_pct ?? null,
+      cpu_pct: num(s.cpu_usage_pct),
       memory_pct: pctOf(s.memory_used_mb, s.memory_total_mb),
       disk_pct: pctOf(s.disk_used_gb, s.disk_total_gb),
     });
@@ -191,7 +207,7 @@ async function getCurrentHighUtilization() {
   for (const n of proxmoxNodes) {
     candidates.push({
       platform: 'Proxmox', host: n.node, ip_address: n.ip_address,
-      cpu_pct: n.cpu_usage_pct ?? null,
+      cpu_pct: num(n.cpu_usage_pct),
       memory_pct: pctOf(n.memory_used_mb, n.memory_mb),
       disk_pct: pctOf(n.disk_used_gb, n.disk_total_gb),
     });
@@ -200,7 +216,7 @@ async function getCurrentHighUtilization() {
     if (h.cpu_usage_pct == null && h.memory_used_mb == null && h.disk_used_gb == null) continue;
     candidates.push({
       platform: 'Hyper-V', host: h.host, ip_address: h.host,
-      cpu_pct: h.cpu_usage_pct ?? null,
+      cpu_pct: num(h.cpu_usage_pct),
       memory_pct: pctOf(h.memory_used_mb, h.memory_total_mb),
       disk_pct: pctOf(h.disk_used_gb, h.disk_total_gb),
     });
