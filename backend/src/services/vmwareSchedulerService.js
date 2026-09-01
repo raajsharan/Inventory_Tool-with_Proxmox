@@ -11,6 +11,7 @@ try { cron = require('node-cron'); } catch { cron = null; }
 const vmSvc  = require('./vmwareService');
 const dbSvc  = require('./vmwareDbService');
 const teams  = require('./teamsNotificationService');
+const utilSvc = require('./hostUtilizationService');
 
 const jobs = {};       // host -> cron.Task
 const running = new Set();  // hosts currently being discovered
@@ -61,6 +62,7 @@ async function runDiscovery(host) {
       await dbSvc.setEsxiHostStats(record.id, allStats);
       if (allStats.length === 1) await dbSvc.setHostStats(record.id, allStats[0]);
       else await dbSvc.clearHostStats(record.id);
+      await utilSvc.checkAndLogVMware(record.id, allStats);
     } catch (statsErr) {
       // eslint-disable-next-line no-console
       console.warn(`[vmware-scheduler] host stats collection failed for ${host}:`, statsErr.message);

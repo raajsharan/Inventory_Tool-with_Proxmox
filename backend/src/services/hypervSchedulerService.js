@@ -10,6 +10,7 @@ const cron  = require('node-cron');
 const db    = require('./hypervDbService');
 const svc   = require('./hypervService');
 const teams = require('./teamsNotificationService');
+const utilSvc = require('./hostUtilizationService');
 
 const jobs    = new Map();   // hostId → CronTask
 const running = new Set();   // hostId values currently running
@@ -55,6 +56,7 @@ async function runDiscovery(hostId) {
     try {
       const stats = await svc.getHostStats(cfg);
       await db.setHostStats(hostId, stats);
+      await utilSvc.checkAndLogHyperV(hostId, host.host, stats);
     } catch (statsErr) {
       console.warn(`[hyperv-scheduler] host stats collection failed for ${host.host}:`, statsErr.message);
     }

@@ -1,0 +1,9 @@
+const router = require('express').Router();
+const { authenticate, requirePageAccess } = require('../middleware/auth');
+const ctrl = require('../controllers/hostUtilizationController');
+
+const guard = [authenticate, requirePageAccess('connectivity_alerts')];
+
+router.get('/summary', ...guard, ctrl.getSummary);
+
+module.exports = router;

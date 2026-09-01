@@ -109,6 +109,34 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_created_at ON host_connectivity_alerts(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_host_conn_alerts_platform   ON host_connectivity_alerts(platform)`,
 
+  // High CPU/Memory utilization monitor — admin-set thresholds (config) and
+  // a durable log of every discovery tick that found a host over either one
+  // (checkAndLog* in hostUtilizationService.js, called from each platform's
+  // scheduler right after it saves fresh telemetry). Backs the "High
+  // Utilization" card on the Connectivity Alerts page.
+  `CREATE TABLE IF NOT EXISTS utilization_monitor_config (
+      id                    SERIAL PRIMARY KEY,
+      singleton             BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
+      enabled               BOOLEAN NOT NULL DEFAULT TRUE,
+      cpu_threshold_pct     NUMERIC(5,1) NOT NULL DEFAULT 85,
+      memory_threshold_pct  NUMERIC(5,1) NOT NULL DEFAULT 85,
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS host_utilization_alerts (
+      id           SERIAL PRIMARY KEY,
+      platform     VARCHAR(20) NOT NULL,
+      host_id      INT NOT NULL,
+      host         VARCHAR(255) NOT NULL,
+      ip_address   VARCHAR(64),
+      cpu_pct      NUMERIC(5,1),
+      memory_pct   NUMERIC(5,1),
+      cpu_over     BOOLEAN NOT NULL DEFAULT FALSE,
+      memory_over  BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_host_util_alerts_created_at ON host_utilization_alerts(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_host_util_alerts_platform   ON host_utilization_alerts(platform)`,
+
   `CREATE TABLE IF NOT EXISTS ping_monitor_config (
       id                       SERIAL PRIMARY KEY,
       singleton                BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,

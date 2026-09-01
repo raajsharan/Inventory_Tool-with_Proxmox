@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Card, Col, Row, Segmented, Typography, Empty, Spin, Tag, Space, Statistic } from 'antd';
-import { AlertOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Card, Col, Row, Segmented, Typography, Empty, Spin, Tag, Space, Statistic, Table } from 'antd';
+import { AlertOutlined, ClockCircleOutlined, DashboardOutlined } from '@ant-design/icons';
 import { Column, Pie } from '@ant-design/plots';
 import api from '../../api/client';
 
@@ -28,12 +28,22 @@ export default function ConnectivityAlerts() {
   const EMPTY = { byDate: [], byPlatform: [], total: 0, timedOut: { total: 0, byPlatform: [] } };
   const [data, setData]       = useState(EMPTY);
 
+  const UTIL_EMPTY = { current: [], history: { total: 0, byDate: [], byPlatform: [] }, config: { cpu_threshold_pct: 85, memory_threshold_pct: 85 } };
+  const [utilLoading, setUtilLoading] = useState(true);
+  const [util, setUtil]               = useState(UTIL_EMPTY);
+
   useEffect(() => {
     setLoading(true);
     api.get('/connectivity-alerts/summary', { params: { days } })
       .then(r => setData(r.data))
       .catch(() => setData(EMPTY))
       .finally(() => setLoading(false));
+
+    setUtilLoading(true);
+    api.get('/host-utilization/summary', { params: { days } })
+      .then(r => setUtil(r.data))
+      .catch(() => setUtil(UTIL_EMPTY))
+      .finally(() => setUtilLoading(false));
   }, [days]);
 
   const sortByPlatform = (rows) => rows
@@ -45,6 +55,34 @@ export default function ConnectivityAlerts() {
   const platformColors = platformData.map(r => PLATFORM_COLOR[r.platform] || '#999');
   const timedOutByPlatform = sortByPlatform(data.timedOut.byPlatform);
   const timedOutPct = data.total ? Math.round((data.timedOut.total / data.total) * 100) : 0;
+
+  const utilHistoryByPlatform = sortByPlatform(util.history.byPlatform);
+
+  const UTIL_COLUMNS = [
+    {
+      title: 'Platform', dataIndex: 'platform', key: 'platform', width: 100,
+      render: v => <Tag color={PLATFORM_COLOR[v]}>{v}</Tag>,
+    },
+    { title: 'Host', dataIndex: 'host', key: 'host', ellipsis: true },
+    {
+      title: 'CPU', dataIndex: 'cpu_pct', key: 'cpu_pct', width: 90, align: 'right',
+      render: v => v == null ? '—' : (
+        <Text strong={v >= util.config.cpu_threshold_pct} type={v >= util.config.cpu_threshold_pct ? 'danger' : undefined}>
+          {v}%
+        </Text>
+      ),
+    },
+    {
+      title: 'Memory', dataIndex: 'memory_pct', key: 'memory_pct', width: 90, align: 'right',
+      render: v => v == null ? '—' : (
+        <Text strong={v >= util.config.memory_threshold_pct} type={v >= util.config.memory_threshold_pct ? 'danger' : undefined}>
+          {v}%
+        </Text>
+      ),
+    },
+    { title: 'Assigned User', dataIndex: 'assigned_user', key: 'assigned_user', render: v => v || '—' },
+    { title: 'Department', dataIndex: 'department', key: 'department', render: v => v || '—' },
+  ];
 
   return (
     <div>
@@ -147,6 +185,49 @@ export default function ConnectivityAlerts() {
                     ))}
                   </Space>
                 )}
+              </>
+            )}
+          </Card>
+        </Col>
+
+        <Col xs={24}>
+          <Card
+            title="High Utilization"
+            extra={<Tag>CPU ≥ {util.config.cpu_threshold_pct}% or Memory ≥ {util.config.memory_threshold_pct}%</Tag>}
+          >
+            {utilLoading ? (
+              <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+            ) : (
+              <>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                  Hosts currently over threshold, right now — Assigned User / Department come from Physical &amp; ESXi Servers where a matching IP exists.
+                </Text>
+                {util.current.length === 0 ? (
+                  <Empty
+                    image={<DashboardOutlined style={{ fontSize: 32, color: '#52c41a' }} />}
+                    description="No hosts currently over threshold"
+                    style={{ padding: '24px 0' }}
+                  />
+                ) : (
+                  <Table
+                    rowKey={(r, i) => `${r.platform}-${r.host}-${i}`}
+                    dataSource={util.current}
+                    columns={UTIL_COLUMNS}
+                    pagination={false}
+                    size="small"
+                    scroll={{ x: 'max-content' }}
+                  />
+                )}
+                <Space size={16} style={{ marginTop: 16 }} wrap>
+                  <Text type="secondary">
+                    {util.history.total.toLocaleString()} high-utilization alert{util.history.total === 1 ? '' : 's'} logged in this range
+                  </Text>
+                  {utilHistoryByPlatform.map(r => (
+                    <Tag key={r.platform} color={PLATFORM_COLOR[r.platform]}>
+                      {r.platform}: {r.count.toLocaleString()}
+                    </Tag>
+                  ))}
+                </Space>
               </>
             )}
           </Card>

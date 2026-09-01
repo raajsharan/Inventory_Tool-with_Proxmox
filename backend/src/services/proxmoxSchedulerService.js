@@ -10,6 +10,7 @@ const cron  = require('node-cron');
 const db    = require('./proxmoxDbService');
 const pxSvc = require('./proxmoxService');
 const teams = require('./teamsNotificationService');
+const utilSvc = require('./hostUtilizationService');
 
 const jobs    = new Map();   // hostId → CronTask
 const running = new Set();   // hostId values currently running
@@ -42,6 +43,14 @@ async function runDiscovery(hostId) {
     );
     await db.saveVMs(runId, hostId, host.host, vms);
     await db.saveNodes(runId, hostId, host.host, nodes);
+    // Never let utilization-alert logging fail the discovery run itself —
+    // same defensive stance as the stats-collection blocks in the VMware/
+    // Hyper-V schedulers (which already have their own nested try/catch).
+    try {
+      await utilSvc.checkAndLogProxmox(hostId, nodes);
+    } catch (utilErr) {
+      console.warn(`[proxmox-scheduler] utilization check failed for ${host.host}:`, utilErr.message);
+    }
     await db.finishRun(runId, vms.length);
     await db.setLastDiscovery(hostId, vms.length);
 

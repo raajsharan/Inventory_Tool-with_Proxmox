@@ -42,9 +42,11 @@ router.use('/migration',                authenticate, requirePageAccess('migrati
 router.use('/endpoint-central',         authenticate, requirePageAccess('endpoint_central'),   require('./endpointCentralRoutes'));
 router.use('/teams-notification',       require('./teamsNotificationRoutes'));
 router.use('/ping-monitor',             require('./pingMonitorRoutes'));
+router.use('/utilization-monitor',      require('./utilizationMonitorRoutes'));
 router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
 router.use('/alerts',                   require('./alertsRoutes'));
 router.use('/connectivity-alerts',      require('./hostAlertsRoutes'));
+router.use('/host-utilization',         require('./hostUtilizationRoutes'));
 // /my-tasks is open to any authenticated user (each team member's own
 // tasks); /reckoner, /config, /overrides are admin-only via authorize()
 // inside recurringActivityRoutes.js — no page-access gate at the mount,
