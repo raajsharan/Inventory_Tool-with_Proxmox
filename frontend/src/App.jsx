@@ -69,7 +69,6 @@ const EndpointCentral        = lazy(() => import('./pages/EndpointCentral/index.
 const ServerModels           = lazy(() => import('./pages/Admin/ServerModels.jsx'));
 const TeamsNotifications     = lazy(() => import('./pages/Admin/TeamsNotifications.jsx'));
 const WeeklyReport           = lazy(() => import('./pages/WeeklyReport/index.jsx'));
-const WeeklyReportInputs     = lazy(() => import('./pages/Admin/WeeklyReportInputs.jsx'));
 
 function RouteFallback() {
   return (
@@ -150,7 +149,6 @@ export default function App() {
             <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
             <Route path="/admin/migration-config"         element={<MigrationConfig />} />
             <Route path="/admin/teams-notifications"      element={<TeamsNotifications />} />
-            <Route path="/admin/weekly-report-inputs"     element={<WeeklyReportInputs />} />
             <Route path="/decommissioned" element={<Decommissioned />} />
             <Route path="/admin/nav-order" element={<NavOrder />} />
             <Route path="/admin/user-page-control" element={<UserPageControl />} />
