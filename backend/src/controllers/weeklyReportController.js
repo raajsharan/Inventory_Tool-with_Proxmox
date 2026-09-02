@@ -36,7 +36,24 @@ async function updateManualSection(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function createManualSection(req, res, next) {
+  try {
+    const title = (req.body?.title || '').trim();
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+    const row = await manualSvc.createManualSection(title, req.body?.content, req.user?.id);
+    res.status(201).json(row);
+  } catch (e) { next(e); }
+}
+
+async function deleteManualSection(req, res, next) {
+  try {
+    const ok = await manualSvc.deleteManualSection(req.params.sectionKey);
+    if (!ok) return res.status(404).json({ error: 'Section not found' });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+}
+
 module.exports = {
   getCurrent, listSnapshots, getSnapshot, generateNow,
-  listManualSections, updateManualSection,
+  listManualSections, updateManualSection, createManualSection, deleteManualSection,
 };

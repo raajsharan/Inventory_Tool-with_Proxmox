@@ -91,6 +91,7 @@ async function getAssetInventorySection(dashboardData) {
     section_key: 'asset_inventory',
     title: 'Assets Inventory (MSL + Ext)',
     kind: 'auto',
+    sort_order: 10,
     data: {
       combinedNumerator: msl.combinedNumerator ?? 0,
       combinedDenominator: msl.combinedDenominator ?? 0,
@@ -113,6 +114,7 @@ async function getNessusSection(dashboardData) {
     section_key: 'nessus_agent',
     title: 'Nessus Agent Install',
     kind: 'auto',
+    sort_order: 50,
     data: {
       applicable,
       notApplicable,
@@ -172,6 +174,7 @@ async function getPatchManagementSection(dashboardData) {
     section_key: 'patch_management',
     title: 'Patch Management Solution / ManageEngine Deployment',
     kind: 'auto',
+    sort_order: 20,
     data: {
       managedComputers,
       waitingComputers,
@@ -195,6 +198,7 @@ async function getMigrationSection() {
     section_key: 'migration_project',
     title: 'PROJECT WORK: VMware/Broadcom to Proxmox Migration',
     kind: 'auto',
+    sort_order: 110,
     data: { projectId, ...ov },
   };
 }

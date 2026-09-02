@@ -20,38 +20,27 @@ function todayLocalDate() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// Screenshot row order: Asset Inventory -> Patch Management -> (manual:
-// iDRAC/OpenManage, Server Identity) -> Nessus -> (manual: BAU Activities,
-// ESXi Patching, SOP, Ticketing, Queries/Challenges) -> Migration Project ->
-// (manual: Vulnerability Mitigation, EOL Tracker, Licenses).
+// Auto sections carry a fixed sort_order (weeklyReportAutoService.js) that
+// interleaves with the manual rows' own sort_order (weekly_report_manual_
+// sections, seeded/migrated by ensureSchema.js) — merging by that single
+// number instead of a hardcoded key list means a row a user adds or removes
+// via the Manage Inputs tab is reflected here with no code change.
 async function buildCurrentReport() {
   const [auto, manualRows] = await Promise.all([
     autoSvc.buildAutoSections(),
     manualSvc.listManualSections(),
   ]);
-  const manualByKey = new Map(manualRows.map(r => [r.section_key, r]));
-  const manualSection = (key) => {
-    const r = manualByKey.get(key);
-    return r ? { section_key: r.section_key, title: r.title, kind: 'manual', data: { content: r.content } } : null;
-  };
 
   const sections = [
-    auto.assetInventory,
-    auto.patchManagement,
-    manualSection('idrac_openmanage'),
-    manualSection('server_identity'),
-    auto.nessus,
-    manualSection('bau_activities'),
-    manualSection('esxi_patching'),
-    manualSection('sop'),
-    manualSection('ticketing'),
-    manualSection('queries_challenges'),
-    auto.migration,
-    manualSection('migration_narrative'),
-    manualSection('vulnerability_mitigation'),
-    manualSection('eol_tracker'),
-    manualSection('licenses'),
-  ].filter(Boolean);
+    ...Object.values(auto),
+    ...manualRows.map(r => ({
+      section_key: r.section_key,
+      title: r.title,
+      kind: 'manual',
+      sort_order: r.sort_order,
+      data: { content: r.content },
+    })),
+  ].sort((a, b) => a.sort_order - b.sort_order);
 
   return { reportDate: todayLocalDate(), sections };
 }

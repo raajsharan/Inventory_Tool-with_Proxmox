@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   Card, Col, Row, Select, Typography, Empty, Spin, Table, Tag, Space, Statistic, Button, App,
+  Tabs, Input, Modal, Popconfirm,
 } from 'antd';
-import { FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  FileTextOutlined, ReloadOutlined, EditOutlined, SaveOutlined, PlusOutlined, DeleteOutlined,
+} from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -29,27 +33,28 @@ function AssetInventorySection({ data }) {
         <li><strong>{(data.nameConflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
       </ul>
       <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>Location-wise endpoint count:</Text>
-      <Table
-        rowKey="location"
-        size="small"
-        dataSource={data.locations || []}
-        pagination={false}
-        style={{ maxWidth: 360 }}
-        columns={[
-          { title: 'Location', dataIndex: 'location' },
-          { title: 'Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
-        ]}
-        summary={(rows) => {
-          if (!rows.length) return null;
-          const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
-          return (
-            <Table.Summary.Row style={{ fontWeight: 700 }}>
-              <Table.Summary.Cell index={0}>Grand Total</Table.Summary.Cell>
-              <Table.Summary.Cell index={1} align="right">{grand.toLocaleString()}</Table.Summary.Cell>
-            </Table.Summary.Row>
-          );
-        }}
-      />
+      <div className="weekly-breakdown-card" style={{ maxWidth: 320 }}>
+        <Table
+          rowKey="location"
+          size="small"
+          dataSource={data.locations || []}
+          pagination={false}
+          columns={[
+            { title: 'Location', dataIndex: 'location' },
+            { title: 'Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+          ]}
+          summary={(rows) => {
+            if (!rows.length) return null;
+            const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+            return (
+              <Table.Summary.Row style={{ fontWeight: 700 }}>
+                <Table.Summary.Cell index={0}>Grand Total</Table.Summary.Cell>
+                <Table.Summary.Cell index={1} align="right">{grand.toLocaleString()}</Table.Summary.Cell>
+              </Table.Summary.Row>
+            );
+          }}
+        />
+      </div>
     </>
   );
 }
@@ -61,22 +66,24 @@ function NessusSection({ data }) {
   ];
   return (
     <>
-      <Table
-        rowKey="key"
-        size="small"
-        dataSource={rows}
-        pagination={false}
-        scroll={{ x: 'max-content' }}
-        columns={[
-          { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
-          { title: 'Description', dataIndex: 'description' },
-          { title: 'Assets Inventory', dataIndex: 'mslAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
-          { title: 'Ext. Inventory', dataIndex: 'extAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
-          { title: 'Beijing Inventory', dataIndex: 'beijingAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
-          { title: 'Physical & ESXi Inventory', dataIndex: 'physicalEsxi', align: 'right', render: v => (v ?? 0).toLocaleString() },
-          { title: 'Total Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
-        ]}
-      />
+      <div className="weekly-breakdown-card">
+        <Table
+          rowKey="key"
+          size="small"
+          dataSource={rows}
+          pagination={false}
+          scroll={{ x: 'max-content' }}
+          columns={[
+            { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
+            { title: 'Description', dataIndex: 'description' },
+            { title: 'Assets Inventory', dataIndex: 'mslAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
+            { title: 'Ext. Inventory', dataIndex: 'extAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
+            { title: 'Beijing Inventory', dataIndex: 'beijingAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
+            { title: 'Physical & ESXi Inventory', dataIndex: 'physicalEsxi', align: 'right', render: v => (v ?? 0).toLocaleString() },
+            { title: 'Total Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+          ]}
+        />
+      </div>
       <Paragraph style={{ marginTop: 12 }}>
         <strong>Nessus Compliance Percentage</strong> = {pctText(data.applicable?.installed, data.applicable?.total, data.compliancePct)}
       </Paragraph>
@@ -127,30 +134,36 @@ function PatchManagementSection({ data }) {
       </Space>
 
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Location-wise Auto/Manual patching status:</Text>
-      <BreakdownTable breakdown={data.locationPatching} groupLabel="Location" />
+      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20 }}>
+        <BreakdownTable breakdown={data.locationPatching} groupLabel="Location" />
+      </Card>
 
-      <Text underline strong style={{ display: 'block', margin: '20px 0 8px' }}>Departments Patching Onboarding Status:</Text>
-      <BreakdownTable breakdown={data.departmentPatching} groupLabel="Department" />
+      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Departments Patching Onboarding Status:</Text>
+      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20 }}>
+        <BreakdownTable breakdown={data.departmentPatching} groupLabel="Department" />
+      </Card>
 
-      <Text underline strong style={{ display: 'block', margin: '20px 0 8px' }}>Auto Patching Group Count Status:</Text>
+      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Auto Patching Group Count Status:</Text>
       <Paragraph>
         <strong>ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
         {pctText(data.meCompliance?.combinedYes, data.meCompliance?.combinedDen, data.meCompliance?.combinedPct)}
       </Paragraph>
       <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{data.meCompliance?.footnote}</Text>
-      <Table
-        rowKey="bucket"
-        size="small"
-        dataSource={data.meCompliance?.rows || []}
-        pagination={false}
-        scroll={{ x: 'max-content' }}
-        columns={[
-          { title: 'Patching Type', dataIndex: 'bucket' },
-          { title: 'No', dataIndex: 'no_me', align: 'center' },
-          { title: 'Yes', dataIndex: 'yes_me', align: 'center' },
-          { title: 'Total', dataIndex: 'total', align: 'center', render: v => <strong>{v}</strong> },
-        ]}
-      />
+      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }}>
+        <Table
+          rowKey="bucket"
+          size="small"
+          dataSource={data.meCompliance?.rows || []}
+          pagination={false}
+          scroll={{ x: 'max-content' }}
+          columns={[
+            { title: 'Patching Type', dataIndex: 'bucket' },
+            { title: 'No', dataIndex: 'no_me', align: 'center' },
+            { title: 'Yes', dataIndex: 'yes_me', align: 'center' },
+            { title: 'Total', dataIndex: 'total', align: 'center', render: v => <strong>{v}</strong> },
+          ]}
+        />
+      </Card>
     </>
   );
 }
@@ -175,7 +188,7 @@ function MigrationSection({ data }) {
       <Row gutter={16}>
         {groups.map(g => (
           <Col xs={24} sm={8} key={g.label}>
-            <Card size="small" title={g.label}>
+            <Card size="small" className="dashcard" title={g.label}>
               <Space size={16}>
                 <Statistic title="Total" value={g.total ?? 0} />
                 <Statistic title="Migrated" value={g.migrated ?? 0} valueStyle={{ color: '#52c41a' }} />
@@ -195,18 +208,287 @@ const AUTO_RENDERERS = {
   migration_project: MigrationSection,
 };
 
-function SectionCard({ section }) {
+function SectionContent({ section }) {
   const Renderer = section.kind === 'auto' ? AUTO_RENDERERS[section.section_key] : null;
+  if (Renderer) return <Renderer data={section.data} />;
+  return section.data?.content
+    ? <div style={{ whiteSpace: 'pre-wrap' }}>{section.data.content}</div>
+    : <Text type="secondary" italic>No content yet.</Text>;
+}
+
+// ── The report itself: one row per section (Sl. No / Section / Content),
+// matching the source Confluence-style report's layout instead of a
+// Card-per-section stack. Rows fade in with a short stagger, and a colored
+// tag marks whether a row is computed from live data or hand-maintained.
+function ReportTable({ sections }) {
+  const columns = [
+    { title: 'Sl. No', width: 64, align: 'center', render: (_, __, i) => i + 1 },
+    {
+      title: 'Section',
+      dataIndex: 'title',
+      width: 260,
+      render: (title, section) => (
+        <Space direction="vertical" size={4}>
+          <Text strong>{title}</Text>
+          <Tag color={section.kind === 'auto' ? 'blue' : 'gold'} style={{ width: 'fit-content', margin: 0 }}>
+            {section.kind === 'auto' ? 'Auto' : 'Manual'}
+          </Tag>
+        </Space>
+      ),
+    },
+    {
+      title: 'Content',
+      dataIndex: 'content',
+      render: (_, section) => <SectionContent section={section} />,
+    },
+  ];
   return (
-    <Card title={section.title} style={{ marginBottom: 16 }}>
-      {Renderer ? (
-        <Renderer data={section.data} />
-      ) : (
-        section.data?.content
-          ? <div style={{ whiteSpace: 'pre-wrap' }}>{section.data.content}</div>
-          : <Text type="secondary">No content yet.</Text>
-      )}
+    <Table
+      className="weekly-report-table"
+      rowKey="section_key"
+      rowClassName="dashcard-row"
+      columns={columns}
+      dataSource={sections}
+      pagination={false}
+      bordered
+      scroll={{ x: 'max-content' }}
+      onRow={(_, index) => ({
+        style: { animation: 'dashcard-fadein 0.4s cubic-bezier(0.22,1,0.36,1) both', animationDelay: `${Math.min(index, 14) * 40}ms` },
+      })}
+    />
+  );
+}
+
+// ── Manage Inputs tab — the narrative/manual content the report can't
+// compute automatically. Open to anyone who can see this page, not just
+// admins — this is collaboratively maintained content, same as anything
+// else on the Weekly Report.
+function SectionEditor({ section, index, onSaved, onDeleted }) {
+  const { message } = App.useApp();
+  const [value, setValue] = useState(section.content || '');
+  const [saving, setSaving] = useState(false);
+  const dirty = value !== (section.content || '');
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { data } = await api.put(`/weekly-report/manual-sections/${section.section_key}`, { content: value });
+      message.success(`"${section.title}" saved`);
+      onSaved(data);
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    try {
+      await api.delete(`/weekly-report/manual-sections/${section.section_key}`);
+      message.success(`"${section.title}" removed from the report`);
+      onDeleted(section.section_key);
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to remove section');
+    }
+  };
+
+  return (
+    <Card
+      className="dashcard"
+      style={{ marginBottom: 16, animationDelay: `${(index ?? 0) * 40}ms` }}
+      title={section.title}
+      extra={
+        <Space size={12}>
+          {section.updated_at && <Text type="secondary" style={{ fontSize: 12 }}>Last updated {new Date(section.updated_at).toLocaleString()}</Text>}
+          <Popconfirm
+            title="Remove this section?"
+            description="It will no longer appear on the report."
+            okText="Remove"
+            okButtonProps={{ danger: true }}
+            onConfirm={remove}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      }
+    >
+      <Input.TextArea
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        autoSize={{ minRows: 4, maxRows: 20 }}
+        placeholder="Type this section's content — bullet lines, notes, links, or a small table typed as plain text."
+      />
+      <Space style={{ marginTop: 12 }}>
+        <Button type="primary" icon={<SaveOutlined />} loading={saving} disabled={!dirty} onClick={save}>
+          Save
+        </Button>
+      </Space>
     </Card>
+  );
+}
+
+function AddSectionModal({ open, onClose, onCreated }) {
+  const { message } = App.useApp();
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!title.trim()) { message.error('Title is required'); return; }
+    setSaving(true);
+    try {
+      const { data } = await api.post('/weekly-report/manual-sections', { title: title.trim(), content });
+      message.success(`"${data.title}" added`);
+      onCreated(data);
+      setTitle('');
+      setContent('');
+      onClose();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to add section');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Add report section"
+      open={open}
+      onCancel={onClose}
+      onOk={submit}
+      okText="Add"
+      confirmLoading={saving}
+      destroyOnClose
+    >
+      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <div>
+          <Text strong style={{ display: 'block', marginBottom: 4 }}>Title</Text>
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Backup Verification" maxLength={255} />
+        </div>
+        <div>
+          <Text strong style={{ display: 'block', marginBottom: 4 }}>Content (optional — can be filled in later)</Text>
+          <Input.TextArea value={content} onChange={e => setContent(e.target.value)} autoSize={{ minRows: 3, maxRows: 10 }} />
+        </div>
+      </Space>
+    </Modal>
+  );
+}
+
+function ManageInputsPanel() {
+  const { message } = App.useApp();
+  const [sections, setSections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get('/weekly-report/manual-sections')
+      .then(r => setSections(r.data || []))
+      .catch(() => message.error('Failed to load Weekly Report sections'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  const onSaved = (updated) => {
+    setSections(prev => prev.map(s => s.section_key === updated.section_key ? updated : s));
+  };
+  const onCreated = (created) => {
+    setSections(prev => [...prev, created].sort((a, b) => a.sort_order - b.sort_order));
+  };
+  const onDeleted = (sectionKey) => {
+    setSections(prev => prev.filter(s => s.section_key !== sectionKey));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+        <Text type="secondary">
+          Content for the sections the Weekly Report can't compute automatically — BAU activities, SOP
+          count, licenses, migration challenges, and so on. Whatever is saved here is what the next
+          Wednesday snapshot (and the live "Current" preview) will show for that section.
+        </Text>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)} style={{ flexShrink: 0 }}>
+          Add Section
+        </Button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 80 }}><Spin /></div>
+      ) : (
+        sections.map((s, i) => (
+          <SectionEditor key={s.section_key} section={s} index={i} onSaved={onSaved} onDeleted={onDeleted} />
+        ))
+      )}
+
+      <AddSectionModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={onCreated} />
+    </div>
+  );
+}
+
+function ReportPanel({ report, loading }) {
+  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Spin /></div>;
+  if (!report) return <Empty description="No report available" />;
+  return <ReportTable sections={report.sections} />;
+}
+
+// Pulls the four headline percentages out of the auto sections for the
+// masthead figures — same document-header treatment already used for
+// Dashboard's own Weekly tab (styles.css .wr-masthead/.wr-figures).
+function reportFigures(sections) {
+  const byKey = Object.fromEntries((sections || []).map(s => [s.section_key, s.data]));
+  const asset = byKey.asset_inventory;
+  const nessus = byKey.nessus_agent;
+  const patch = byKey.patch_management;
+  const hosts = byKey.migration_project?.hosts || {};
+  const migrationPct = hosts.total_hosts ? Math.round((hosts.fully_migrated / hosts.total_hosts) * 100) : 0;
+  return [
+    {
+      label: 'Asset Inventory', value: asset?.combinedPct ?? 0,
+      detail: asset ? `${(asset.combinedNumerator ?? 0).toLocaleString()} / ${(asset.combinedDenominator ?? 0).toLocaleString()}` : '—',
+    },
+    {
+      label: 'Nessus Compliance', value: nessus?.compliancePct ?? 0,
+      detail: nessus ? `${(nessus.applicable?.installed ?? 0).toLocaleString()} / ${(nessus.applicable?.total ?? 0).toLocaleString()}` : '—',
+    },
+    {
+      label: 'ME Compliance', value: patch?.meCompliance?.combinedPct ?? 0,
+      detail: patch ? `${(patch.meCompliance?.combinedYes ?? 0).toLocaleString()} / ${(patch.meCompliance?.combinedDen ?? 0).toLocaleString()}` : '—',
+    },
+    {
+      label: 'Migration Progress', value: migrationPct,
+      detail: `${(hosts.fully_migrated ?? 0).toLocaleString()} / ${(hosts.total_hosts ?? 0).toLocaleString()} hosts`,
+    },
+  ];
+}
+
+function ReportMasthead({ report }) {
+  const figures = reportFigures(report?.sections);
+  const dateLabel = report?.reportDate
+    ? new Date(`${report.reportDate}T00:00:00`).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
+  return (
+    <div className="wr-masthead">
+      <div className="wr-masthead-top">
+        <div>
+          <span className="wr-eyebrow">Server Team · Weekly Report</span>
+          <h2 className="wr-title">Infrastructure &amp; Compliance Snapshot</h2>
+        </div>
+        <div className="wr-stamp">
+          {dateLabel}<br />
+          {(report?.sections?.length ?? 0)} sections
+        </div>
+      </div>
+      <div className="wr-figures">
+        {figures.map(f => (
+          <div className="wr-figure" key={f.label}>
+            <div className="wr-figure-value">{f.value}<span className="wr-pct">%</span></div>
+            <div className="wr-figure-label">{f.label}</div>
+            <div className="wr-figure-detail">{f.detail}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -249,16 +531,10 @@ export default function WeeklyReport() {
     }
   };
 
-  return (
+  const reportTab = (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <Title level={4} style={{ margin: 0 }}>
-            <FileTextOutlined style={{ marginRight: 8 }} />
-            Weekly Report{report ? ` — ${report.reportDate}` : ''}
-          </Title>
-          <Text type="secondary">A snapshot is saved automatically every Wednesday.</Text>
-        </div>
+      <ReportMasthead report={report} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 16 }}>
         <Space>
           <Select
             style={{ width: 220 }}
@@ -276,14 +552,26 @@ export default function WeeklyReport() {
           )}
         </Space>
       </div>
+      <ReportPanel report={report} loading={loading} />
+    </div>
+  );
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 80 }}><Spin /></div>
-      ) : !report ? (
-        <Empty description="No report available" />
-      ) : (
-        report.sections.map(section => <SectionCard key={section.section_key} section={section} />)
-      )}
+  return (
+    <div>
+      <style>{DASH_CSS}</style>
+      <Title level={4} style={{ margin: 0 }}>
+        <FileTextOutlined style={{ marginRight: 8 }} />
+        Weekly Report{report ? ` — ${report.reportDate}` : ''}
+      </Title>
+      <Text type="secondary">A snapshot is saved automatically every Wednesday.</Text>
+
+      <Tabs
+        style={{ marginTop: 16 }}
+        items={[
+          { key: 'report', label: 'Report', children: reportTab },
+          { key: 'inputs', label: <span><EditOutlined /> Manage Inputs</span>, children: <ManageInputsPanel /> },
+        ]}
+      />
     </div>
   );
 }

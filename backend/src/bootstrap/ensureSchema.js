@@ -892,19 +892,35 @@ const STATEMENTS = [
    )`,
   // Seed one row per known manual section so the Inputs editor has something
   // to render on first load — INSERT is a no-op once a row already exists.
+  // sort_order is spaced by 10 and interleaves with the auto sections' own
+  // fixed sort_order (10/20/50/110 in weeklyReportAutoService.js) so
+  // buildCurrentReport() can merge auto+manual into one ordered report by a
+  // single ORDER BY instead of a hardcoded list — new rows just slot in.
   `INSERT INTO weekly_report_manual_sections (section_key, title, sort_order) VALUES
-     ('idrac_openmanage',       'Dell iDRAC and Open Manage',                 1),
-     ('server_identity',        'Server Identity Management',                 2),
-     ('bau_activities',         'Server Management / BAU Activities',         3),
-     ('esxi_patching',          'ESXi Patching / Escape Vulnerability',        4),
-     ('sop',                    'Define Approved Server Creation Process SOP',5),
-     ('ticketing',              'Ticketing Data',                             6),
-     ('queries_challenges',     'Queries to Lin / Challenges',                7),
-     ('migration_narrative',    'Migration Project — Scope, Progress & Challenges', 8),
-     ('vulnerability_mitigation','Vulnerability Mitigation',                  9),
-     ('eol_tracker',            'EOL Project Tracker',                       10),
-     ('licenses',               'Licenses',                                  11)
+     ('idrac_openmanage',       'Dell iDRAC and Open Manage',                 30),
+     ('server_identity',        'Server Identity Management',                40),
+     ('bau_activities',         'Server Management / BAU Activities',        60),
+     ('esxi_patching',          'ESXi Patching / Escape Vulnerability',       70),
+     ('sop',                    'Define Approved Server Creation Process SOP',80),
+     ('ticketing',              'Ticketing Data',                            90),
+     ('queries_challenges',     'Queries to Lin / Challenges',              100),
+     ('migration_narrative',    'Migration Project — Scope, Progress & Challenges', 120),
+     ('vulnerability_mitigation','Vulnerability Mitigation',                130),
+     ('eol_tracker',            'EOL Project Tracker',                      140),
+     ('licenses',               'Licenses',                                 150)
    ON CONFLICT (section_key) DO NOTHING`,
+  // One-time correction for databases that already ran the original (tight
+  // 1-11) seed above before the spaced-out scheme existed — always safe to
+  // re-run, a no-op once values already match.
+  `UPDATE weekly_report_manual_sections SET sort_order = v.sort_order
+     FROM (VALUES
+       ('idrac_openmanage', 30), ('server_identity', 40), ('bau_activities', 60),
+       ('esxi_patching', 70), ('sop', 80), ('ticketing', 90),
+       ('queries_challenges', 100), ('migration_narrative', 120),
+       ('vulnerability_mitigation', 130), ('eol_tracker', 140), ('licenses', 150)
+     ) AS v(section_key, sort_order)
+     WHERE weekly_report_manual_sections.section_key = v.section_key
+       AND weekly_report_manual_sections.sort_order <> v.sort_order`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get
