@@ -51,6 +51,8 @@ const STATIC_PAGES = [
   { key: 'proxmox',                 label: 'Proxmox Discovery',              group: 'General' },
   { key: 'hyperv',                  label: 'Hyper-V Discovery',              group: 'General' },
   { key: 'connectivity_alerts',      label: 'Connectivity Alerts',            group: 'General' },
+  { key: 'weekly_report',            label: 'Weekly Report',                  group: 'General' },
+  { key: 'admin/weekly-report-inputs', label: 'Weekly Report Inputs',         group: 'Administration' },
 ];
 
 async function dynamicCustomPages() {

@@ -68,6 +68,8 @@ const MigrationTracker       = lazy(() => import('./pages/MigrationTracker/index
 const EndpointCentral        = lazy(() => import('./pages/EndpointCentral/index.jsx'));
 const ServerModels           = lazy(() => import('./pages/Admin/ServerModels.jsx'));
 const TeamsNotifications     = lazy(() => import('./pages/Admin/TeamsNotifications.jsx'));
+const WeeklyReport           = lazy(() => import('./pages/WeeklyReport/index.jsx'));
+const WeeklyReportInputs     = lazy(() => import('./pages/Admin/WeeklyReportInputs.jsx'));
 
 function RouteFallback() {
   return (
@@ -125,6 +127,7 @@ export default function App() {
             <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
             <Route path="/hyperv-discovery"   element={<HyperVDiscovery />} />
             <Route path="/connectivity-alerts" element={<ConnectivityAlerts />} />
+            <Route path="/weekly-report"       element={<WeeklyReport />} />
             <Route path="/migration-tracker"  element={<MigrationTracker />} />
             <Route path="/endpoint-central"   element={<EndpointCentral />} />
 
@@ -147,6 +150,7 @@ export default function App() {
             <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
             <Route path="/admin/migration-config"         element={<MigrationConfig />} />
             <Route path="/admin/teams-notifications"      element={<TeamsNotifications />} />
+            <Route path="/admin/weekly-report-inputs"     element={<WeeklyReportInputs />} />
             <Route path="/decommissioned" element={<Decommissioned />} />
             <Route path="/admin/nav-order" element={<NavOrder />} />
             <Route path="/admin/user-page-control" element={<UserPageControl />} />

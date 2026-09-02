@@ -870,6 +870,41 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_phx_vm_name_trgm         ON physical_esxi_servers USING GIN (vm_name gin_trgm_ops)`,
   `CREATE INDEX IF NOT EXISTS idx_phx_hostname_trgm        ON physical_esxi_servers USING GIN (os_hostname gin_trgm_ops)`,
   `CREATE INDEX IF NOT EXISTS idx_phx_ip_trgm              ON physical_esxi_servers USING GIN (ip_address gin_trgm_ops)`,
+
+  // ── Weekly Report: narrative/manual content (weeklyReportManualService.js)
+  // and the archived, fully-frozen snapshot history (weeklyReportService.js,
+  // written every Wednesday by weeklyReportScheduler.js).
+  `CREATE TABLE IF NOT EXISTS weekly_report_manual_sections (
+      id           SERIAL PRIMARY KEY,
+      section_key  VARCHAR(64) UNIQUE NOT NULL,
+      title        VARCHAR(255) NOT NULL,
+      sort_order   INT NOT NULL,
+      content      TEXT,
+      updated_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS weekly_report_snapshots (
+      id            SERIAL PRIMARY KEY,
+      report_date   DATE NOT NULL UNIQUE,
+      sections      JSONB NOT NULL,
+      generated_by  VARCHAR(20) NOT NULL DEFAULT 'scheduler',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  // Seed one row per known manual section so the Inputs editor has something
+  // to render on first load — INSERT is a no-op once a row already exists.
+  `INSERT INTO weekly_report_manual_sections (section_key, title, sort_order) VALUES
+     ('idrac_openmanage',       'Dell iDRAC and Open Manage',                 1),
+     ('server_identity',        'Server Identity Management',                 2),
+     ('bau_activities',         'Server Management / BAU Activities',         3),
+     ('esxi_patching',          'ESXi Patching / Escape Vulnerability',        4),
+     ('sop',                    'Define Approved Server Creation Process SOP',5),
+     ('ticketing',              'Ticketing Data',                             6),
+     ('queries_challenges',     'Queries to Lin / Challenges',                7),
+     ('migration_narrative',    'Migration Project — Scope, Progress & Challenges', 8),
+     ('vulnerability_mitigation','Vulnerability Mitigation',                  9),
+     ('eol_tracker',            'EOL Project Tracker',                       10),
+     ('licenses',               'Licenses',                                  11)
+   ON CONFLICT (section_key) DO NOTHING`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get

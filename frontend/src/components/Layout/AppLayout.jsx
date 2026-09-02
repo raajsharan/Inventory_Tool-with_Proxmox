@@ -13,7 +13,7 @@ import {
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
   ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
-  CalendarOutlined, AlertOutlined,
+  CalendarOutlined, AlertOutlined, FileTextOutlined, EditOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -138,9 +138,10 @@ export default function AppLayout() {
             ].filter(Boolean),
           }));
       case '/reports':
-        return can('reports')
-          ? [{ key: '/reports', icon: <BarChartOutlined />, label: <Link to="/reports">Report Builder</Link> }]
-          : [];
+        return [
+          can('reports') && { key: '/reports', icon: <BarChartOutlined />, label: <Link to="/reports">Report Builder</Link> },
+          can('weekly_report') && { key: '/weekly-report', icon: <FileTextOutlined />, label: <Link to="/weekly-report">Weekly Report</Link> },
+        ].filter(Boolean);
       case 'software-services': {
         const meItem      = can('software_status')   && { key: '/software-status',  icon: <SafetyCertificateOutlined />, label: <Link to="/software-status">ManageEngine Status</Link> };
         const nessusItem  = can('nessus_status')     && { key: '/nessus-status',    icon: <SafetyCertificateOutlined />, label: <Link to="/nessus-status">Nessus Agent Status</Link> };
@@ -196,6 +197,7 @@ export default function AppLayout() {
       can('admin/compliance-config')  && { key: '/admin/compliance-config',  icon: <ControlOutlined />,         label: <Link to="/admin/compliance-config">Compliance Config</Link> },
       can('admin/migration-config')   && { key: '/admin/migration-config',   icon: <ProjectOutlined />,          label: <Link to="/admin/migration-config">Migration Config</Link> },
       can('admin/teams-notifications') && { key: '/admin/teams-notifications', icon: <NotificationOutlined />,    label: <Link to="/admin/teams-notifications">Teams Notifications</Link> },
+      can('admin/weekly-report-inputs') && { key: '/admin/weekly-report-inputs', icon: <EditOutlined />,          label: <Link to="/admin/weekly-report-inputs">Weekly Report Inputs</Link> },
       can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
       can('admin/imports')          && { key: '/admin/db-import',         icon: <DatabaseOutlined />,          label: <Link to="/admin/db-import">DB Import</Link> },
       can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },

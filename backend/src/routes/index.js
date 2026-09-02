@@ -47,6 +47,7 @@ router.use('/server-models',            authenticate, require('./serverModelsRou
 router.use('/alerts',                   require('./alertsRoutes'));
 router.use('/connectivity-alerts',      require('./hostAlertsRoutes'));
 router.use('/host-utilization',         require('./hostUtilizationRoutes'));
+router.use('/weekly-report',            require('./weeklyReportRoutes'));
 // /my-tasks is open to any authenticated user (each team member's own
 // tasks); /reckoner, /config, /overrides are admin-only via authorize()
 // inside recurringActivityRoutes.js — no page-access gate at the mount,
