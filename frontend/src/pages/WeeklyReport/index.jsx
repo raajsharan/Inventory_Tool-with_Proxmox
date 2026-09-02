@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
   Card, Col, Row, Select, Typography, Empty, Spin, Table, Tag, Space, Statistic, Button, App,
-  Tabs, Input, Modal, Popconfirm,
+  Tabs, Input, Modal, Popconfirm, Progress, Popover, List, theme,
 } from 'antd';
 import {
   FileTextOutlined, ReloadOutlined, EditOutlined, SaveOutlined, PlusOutlined, DeleteOutlined,
+  CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, DatabaseOutlined, ClusterOutlined, StopOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -168,36 +169,130 @@ function PatchManagementSection({ data }) {
   );
 }
 
+function migrationPct(n, total) {
+  if (!total) return 0;
+  return Math.round((n / total) * 100);
+}
+
+// Same visual as Migration Tracker's own MigrationOverview.jsx (progress
+// bar, host tiles, per-source cards with status tags) — but purely
+// presentational off the `data` this section already carries, rather than
+// that component's own live self-fetch. A past week's archived snapshot
+// must keep showing what was true then, not re-fetch today's numbers.
 function MigrationSection({ data }) {
+  const { token } = theme.useToken();
   const hosts = data.hosts || {};
+  const totalVMs = data.totalVMs ?? 0;
+  const migrated = data.migrated ?? 0;
+  const remaining = data.remaining ?? Math.max(0, totalVMs - migrated);
+  const migrPct = migrationPct(migrated, totalVMs);
   const groups = [
-    { label: 'Bomgar VMs', ...data.bomgar },
-    { label: 'Security VMs', ...data.security },
-    { label: 'Standalone ESXi', ...data.standalone },
+    { label: 'Bomgar VMs', d: data.bomgar || {} },
+    { label: 'Security VMs', d: data.security || {} },
+    { label: 'Standalone ESXi', d: data.standalone || {} },
   ];
+
   return (
-    <>
+    <div>
+      <Card size="small" className="migration-card" style={{ marginBottom: 20 }}>
+        <Row gutter={24} align="middle">
+          <Col flex="auto">
+            <Progress
+              percent={migrPct}
+              strokeColor={{ '0%': '#1677ff', '100%': '#52c41a' }}
+              format={() => `${migrated} / ${totalVMs} VMs migrated`}
+              strokeWidth={16}
+            />
+          </Col>
+          <Col>
+            <Statistic title="Remaining" value={remaining} suffix="VMs"
+              valueStyle={{ color: remaining ? token.colorWarning : token.colorSuccess }} />
+          </Col>
+        </Row>
+      </Card>
+
       <Text strong style={{ display: 'block', marginBottom: 8 }}>Hosts</Text>
-      <Space size={24} wrap style={{ marginBottom: 20 }}>
-        <Statistic title="Total Hosts" value={hosts.total_hosts ?? 0} />
-        <Statistic title="Fully Migrated" value={hosts.fully_migrated ?? 0} valueStyle={{ color: '#52c41a' }} />
-        <Statistic title="Pending Vacate" value={hosts.pending_vacate ?? 0} valueStyle={{ color: '#fa8c16' }} />
-        <Statistic title="VMs to Migrate" value={hosts.total_vms_to_migrate ?? 0} />
-      </Space>
-      <Text strong style={{ display: 'block', marginBottom: 8 }}>VMs by Source</Text>
-      <Row gutter={16}>
-        {groups.map(g => (
-          <Col xs={24} sm={8} key={g.label}>
-            <Card size="small" className="dashcard" title={g.label}>
-              <Space size={16}>
-                <Statistic title="Total" value={g.total ?? 0} />
-                <Statistic title="Migrated" value={g.migrated ?? 0} valueStyle={{ color: '#52c41a' }} />
-              </Space>
+      <Row gutter={12} style={{ marginBottom: 20 }}>
+        {[
+          { title: 'Total Hosts', value: hosts.total_hosts, icon: <DatabaseOutlined />, color: undefined },
+          { title: 'Fully Migrated', value: hosts.fully_migrated, icon: <CheckCircleOutlined />, color: '#52c41a' },
+          { title: 'Pending Vacate', value: hosts.pending_vacate, icon: <ClockCircleOutlined />, color: '#fa8c16' },
+          { title: 'VMs to Migrate', value: totalVMs, icon: <ClusterOutlined />, color: undefined },
+        ].map((s) => (
+          <Col key={s.title} xs={12} sm={6}>
+            <Card size="small" className="migration-card">
+              <Statistic title={s.title} value={s.value ?? 0} prefix={s.icon} valueStyle={s.color ? { color: s.color } : {}} />
             </Card>
           </Col>
         ))}
       </Row>
-    </>
+
+      <Text strong style={{ display: 'block', marginBottom: 8 }}>VMs by Source</Text>
+      <Row gutter={12}>
+        {groups.map(({ label, d }) => (
+          <Col key={label} xs={24} sm={8}>
+            <Card size="small" className="migration-card" title={label}>
+              <Row gutter={8}>
+                <Col span={12}>
+                  <Statistic title="Total" value={d.total ?? 0} />
+                </Col>
+                <Col span={12}>
+                  <Statistic title="Migrated" value={d.migrated ?? 0} valueStyle={{ color: '#52c41a' }} prefix={<CheckCircleOutlined />} />
+                </Col>
+              </Row>
+              <Progress
+                percent={migrationPct((d.migrated ?? 0) + (d.cleaned_up ?? 0), d.total)}
+                size="small"
+                style={{ marginTop: 8 }}
+                strokeColor="#52c41a"
+                format={(percent) => <span style={{ fontSize: 20 }}>{percent}%</span>}
+              />
+              <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {d.not_started > 0 && (
+                  <Tag color="default" icon={<ClockCircleOutlined />}>{d.not_started} Not Started</Tag>
+                )}
+                {d.awaiting_confirmation > 0 && (
+                  <Tag color="warning" icon={<ClockCircleOutlined />}>{d.awaiting_confirmation} Awaiting</Tag>
+                )}
+                {d.in_progress > 0 && (
+                  <Popover
+                    title={<span><SyncOutlined spin style={{ color: '#1677ff', marginRight: 6 }} />In Progress VMs</span>}
+                    content={
+                      <List
+                        size="small"
+                        dataSource={d.in_progress_vms || []}
+                        style={{ maxHeight: 260, overflowY: 'auto', minWidth: 200, maxWidth: 320 }}
+                        renderItem={vm => (
+                          <List.Item style={{ padding: '3px 0', fontSize: 12 }}>
+                            <Text ellipsis style={{ maxWidth: 300 }}>{vm}</Text>
+                          </List.Item>
+                        )}
+                      />
+                    }
+                    trigger="hover"
+                    placement="bottomLeft"
+                    getPopupContainer={() => document.body}
+                  >
+                    <Tag color="processing" icon={<SyncOutlined spin />} style={{ cursor: 'pointer' }}>
+                      {d.in_progress} In Progress
+                    </Tag>
+                  </Popover>
+                )}
+                {d.cleaned_up > 0 && (
+                  <Tag color="cyan" icon={<CheckCircleOutlined />}>{d.cleaned_up} Cleaned up</Tag>
+                )}
+                {d.to_be_deleted > 0 && (
+                  <Tag color="orange" icon={<DeleteOutlined />}>{d.to_be_deleted} To be Deleted</Tag>
+                )}
+                {d.blocked > 0 && (
+                  <Tag color="error" icon={<StopOutlined />}>{d.blocked} Blocked</Tag>
+                )}
+              </div>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+    </div>
   );
 }
 
