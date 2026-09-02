@@ -27,6 +27,7 @@ export const DASH_CSS = `
 /* Make the Collapse used by ExpandableTableCard read like the size="small"
    Cards it sits next to, instead of antd's default Collapse chrome. */
 .dashcard-collapse.ant-collapse { background: #fff; border-radius: 8px; border: 1px solid #f0f0f0; }
+body[data-theme="dark"] .dashcard-collapse.ant-collapse { background: #1c1c1c; border-color: #303030; }
 .dashcard-collapse .ant-collapse-item { border-bottom: none; }
 .dashcard-collapse .ant-collapse-header { padding: 9px 12px !important; align-items: center !important; }
 .dashcard-collapse .ant-collapse-content-box { padding: 0 !important; }
