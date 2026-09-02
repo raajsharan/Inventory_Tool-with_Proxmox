@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Card, Col, Row, Segmented, Typography, Empty, Spin, Tag, Space, Statistic, Table } from 'antd';
-import { AlertOutlined, ClockCircleOutlined, DashboardOutlined } from '@ant-design/icons';
-import { Column, Pie } from '@ant-design/plots';
+import { Card, Col, Row, Segmented, Typography, Empty, Spin, Tag, Table, Progress, Avatar } from 'antd';
+import {
+  AlertOutlined, ClockCircleOutlined, DashboardOutlined, ArrowUpOutlined, ArrowDownOutlined,
+} from '@ant-design/icons';
+import { Column, Tiny } from '@ant-design/plots';
 import api from '../../api/client';
+import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const { Title, Text } = Typography;
 
 // Matches AlertBell.jsx's INTEGRATION_META colors, so a platform reads the
 // same everywhere in the app.
 const PLATFORM_COLOR = { VMware: '#722ed1', Proxmox: '#2f54eb', 'Hyper-V': '#1677ff' };
-const PLATFORM_ORDER = ['VMware', 'Proxmox', 'Hyper-V'];
+const PLATFORMS = ['VMware', 'Proxmox', 'Hyper-V'];
+const DISCOVERY_COLOR = '#fa8c16';
+const UTIL_COLOR = '#f5222d';
 
 const RANGE_OPTIONS = [
   { label: '7 days',  value: 7 },
@@ -39,10 +44,94 @@ function alertDetail(r, intervals) {
   return `Checked every ${interval} min — failing ${n} consecutive check${n === 1 ? '' : 's'} (~${downMins} min down)`;
 }
 
+// null previousTotal (all-time range has no "previous period") -> no badge.
+function pctChange(cur, prev) {
+  if (prev === null || prev === undefined) return null;
+  if (prev === 0) return cur > 0 ? 100 : 0;
+  return Math.round(((cur - prev) / prev) * 100);
+}
+
+// More alerts than the prior period is the bad direction here (unlike a
+// revenue dashboard), so the color/arrow semantics are intentionally
+// inverted: up = red, down = green.
+function ChangeBadge({ pct }) {
+  if (pct === null) return <Tag>no prior period</Tag>;
+  if (pct === 0) return <Tag>flat</Tag>;
+  const up = pct > 0;
+  return (
+    <Tag color={up ? 'error' : 'success'}>
+      {up ? <ArrowUpOutlined style={{ fontSize: 10 }} /> : <ArrowDownOutlined style={{ fontSize: 10 }} />} {Math.abs(pct)}%
+    </Tag>
+  );
+}
+
+function SparkCard({ title, color, total, previousTotal, byDate, index }) {
+  const series = (byDate || []).map(d => d.count);
+  const pct = pctChange(total, previousTotal);
+  return (
+    <Card size="small" className="dashcard" style={{ animationDelay: `${index * 60}ms` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div>
+          <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
+          <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.3, color }}>{(total ?? 0).toLocaleString()}</div>
+        </div>
+        <ChangeBadge pct={pct} />
+      </div>
+      <div style={{ marginTop: 8, height: 46 }}>
+        {series.some(v => v > 0) ? (
+          <Tiny.Area data={series} height={46} smooth autoFit color={color} />
+        ) : (
+          <div style={{ height: 46, borderRadius: 4, background: 'rgba(140,140,140,0.08)' }} />
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function GaugeCard({ title, color, count, percent, sub1Label, sub1Value, sub2Label, sub2Value, index }) {
+  return (
+    <Card size="small" className="dashcard" style={{ animationDelay: `${index * 60}ms`, textAlign: 'center' }}>
+      <Text strong>{title}</Text>
+      <div style={{ margin: '12px 0' }}>
+        <Progress
+          type="circle"
+          percent={percent}
+          size={92}
+          strokeColor={color}
+          format={() => <span style={{ fontSize: 22, fontWeight: 700 }}>{(count ?? 0).toLocaleString()}</span>}
+        />
+      </div>
+      <Row>
+        <Col span={12} style={{ borderRight: '1px solid rgba(140,140,140,0.18)' }}>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{(sub1Value ?? 0).toLocaleString()}</div>
+          <Text type="secondary" style={{ fontSize: 11 }}>{sub1Label}</Text>
+        </Col>
+        <Col span={12}>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{(sub2Value ?? 0).toLocaleString()}</div>
+          <Text type="secondary" style={{ fontSize: 11 }}>{sub2Label}</Text>
+        </Col>
+      </Row>
+    </Card>
+  );
+}
+
+function PlatformAvatar({ platform }) {
+  return (
+    <Avatar size={22} style={{ backgroundColor: PLATFORM_COLOR[platform] || '#999', fontSize: 11, marginRight: 8 }}>
+      {platform?.[0]}
+    </Avatar>
+  );
+}
+
+const EMPTY = {
+  total: 0, byDate: [], previousByDate: [], hasPreviousPeriod: true,
+  platforms: { VMware: {}, Proxmox: {}, 'Hyper-V': {} },
+  discovery: { total: 0, previousTotal: 0, byDate: [] },
+};
+
 export default function ConnectivityAlerts() {
   const [days, setDays]       = useState(30);
   const [loading, setLoading] = useState(true);
-  const EMPTY = { byDate: [], byPlatform: [], total: 0, timedOut: { total: 0, byPlatform: [] } };
   const [data, setData]       = useState(EMPTY);
 
   const UTIL_EMPTY = { current: [], history: { total: 0, byDate: [], byPlatform: [] }, config: { cpu_threshold_pct: 85, memory_threshold_pct: 85, disk_threshold_pct: 85 } };
@@ -79,17 +168,28 @@ export default function ConnectivityAlerts() {
       .finally(() => setListLoading(false));
   }, [days, listPage, listPageSize]);
 
-  const sortByPlatform = (rows) => rows
-    .slice()
-    .sort((a, b) => PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform));
+  const platformTotal = (p) => data.platforms[p]?.total ?? 0;
+  const grandTotal = PLATFORMS.reduce((s, p) => s + platformTotal(p), 0) + (util.history.total || 0);
+  const ringPct = (n) => grandTotal ? Math.round((n / grandTotal) * 100) : 0;
 
-  const dateData = data.byDate.map(r => ({ date: fmtDate(r.date), count: r.count }));
-  const platformData = sortByPlatform(data.byPlatform);
-  const platformColors = platformData.map(r => PLATFORM_COLOR[r.platform] || '#999');
-  const timedOutByPlatform = sortByPlatform(data.timedOut.byPlatform);
-  const timedOutPct = data.total ? Math.round((data.timedOut.total / data.total) * 100) : 0;
+  // Two of a host's CPU/Memory/Disk breaching threshold at once, right now —
+  // a rough "how bad" signal computed client-side from data already fetched
+  // for the High Utilization table, no extra backend call needed.
+  const criticalNow = util.current.filter(h => {
+    const breaches = [
+      h.cpu_pct    != null && h.cpu_pct    >= util.config.cpu_threshold_pct,
+      h.memory_pct != null && h.memory_pct >= util.config.memory_threshold_pct,
+      h.disk_pct   != null && h.disk_pct   >= util.config.disk_threshold_pct,
+    ].filter(Boolean).length;
+    return breaches >= 2;
+  }).length;
 
-  const utilHistoryByPlatform = sortByPlatform(util.history.byPlatform);
+  const trendRows = data.hasPreviousPeriod
+    ? data.byDate.flatMap((d, i) => ([
+        { day: fmtDate(d.date), series: 'This period', count: d.count },
+        { day: fmtDate(d.date), series: 'Previous period', count: data.previousByDate[i]?.count ?? 0 },
+      ]))
+    : data.byDate.map(d => ({ day: fmtDate(d.date), series: 'Alerts', count: d.count }));
 
   const ALERT_COLUMNS = [
     {
@@ -97,10 +197,9 @@ export default function ConnectivityAlerts() {
       render: v => new Date(v).toLocaleString(),
     },
     {
-      title: 'Platform', dataIndex: 'platform', key: 'platform', width: 100,
-      render: v => <Tag color={PLATFORM_COLOR[v]}>{v}</Tag>,
+      title: 'Host / IP', key: 'host',
+      render: (_, r) => <span><PlatformAvatar platform={r.platform} />{r.host}</span>,
     },
-    { title: 'Host / IP', dataIndex: 'host', key: 'host', ellipsis: true },
     {
       title: 'Alert Type', key: 'type', width: 150,
       render: (_, r) => <Tag color={r.source === 'discovery' ? 'purple' : 'red'}>{alertTypeLabel(r)}</Tag>,
@@ -123,10 +222,9 @@ export default function ConnectivityAlerts() {
 
   const UTIL_COLUMNS = [
     {
-      title: 'Platform', dataIndex: 'platform', key: 'platform', width: 100,
-      render: v => <Tag color={PLATFORM_COLOR[v]}>{v}</Tag>,
+      title: 'Host', key: 'host',
+      render: (_, r) => <span><PlatformAvatar platform={r.platform} />{r.host}</span>,
     },
-    { title: 'Host', dataIndex: 'host', key: 'host', ellipsis: true },
     {
       title: 'CPU', dataIndex: 'cpu_pct', key: 'cpu_pct', width: 90, align: 'right',
       render: v => v == null ? '—' : (
@@ -157,6 +255,7 @@ export default function ConnectivityAlerts() {
 
   return (
     <div>
+      <style>{DASH_CSS}</style>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>
@@ -171,105 +270,102 @@ export default function ConnectivityAlerts() {
         <Segmented options={RANGE_OPTIONS} value={days} onChange={setDays} />
       </div>
 
-      <Row gutter={[16, 16]}>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+      ) : (
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          {PLATFORMS.map((p, i) => (
+            <Col key={p} xs={12} lg={6}>
+              <SparkCard
+                title={`${p} Alerts`}
+                color={PLATFORM_COLOR[p]}
+                total={platformTotal(p)}
+                previousTotal={data.platforms[p]?.previousTotal}
+                byDate={data.platforms[p]?.byDate}
+                index={i}
+              />
+            </Col>
+          ))}
+          <Col xs={12} lg={6}>
+            <SparkCard
+              title="Discovery Failures"
+              color={DISCOVERY_COLOR}
+              total={data.discovery.total}
+              previousTotal={data.discovery.previousTotal}
+              byDate={data.discovery.byDate}
+              index={3}
+            />
+          </Col>
+        </Row>
+      )}
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24}>
           <Card
-            title="Alerts by Date"
+            title="Alert Trend"
             extra={<Tag>{data.total.toLocaleString()} total</Tag>}
           >
             {loading ? (
               <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
-            ) : dateData.length === 0 ? (
+            ) : trendRows.length === 0 ? (
               <Empty description="No connectivity alerts in this range" style={{ padding: '40px 0' }} />
             ) : (
               <Column
-                data={dateData}
-                xField="date"
+                data={trendRows}
+                xField="day"
                 yField="count"
+                colorField="series"
                 height={300}
+                scale={{ color: { range: data.hasPreviousPeriod ? ['#13c2c2', '#d9d9d9'] : ['#13c2c2'] } }}
+                legend={data.hasPreviousPeriod ? { color: { position: 'top' } } : false}
+                axis={{ y: { title: false }, x: { title: false } }}
                 label={{ position: 'top' }}
-                color="#ff4d4f"
               />
             )}
           </Card>
         </Col>
+      </Row>
 
+      {utilLoading ? (
+        <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+      ) : (
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          {PLATFORMS.map((p, i) => (
+            <Col key={p} xs={12} lg={6}>
+              <GaugeCard
+                title={p}
+                color={PLATFORM_COLOR[p]}
+                count={platformTotal(p)}
+                percent={ringPct(platformTotal(p))}
+                sub1Label="Ping Failed" sub1Value={data.platforms[p]?.pingFailed}
+                sub2Label="Discovery Unreachable" sub2Value={data.platforms[p]?.discoveryUnreachable}
+                index={i}
+              />
+            </Col>
+          ))}
+          <Col xs={12} lg={6}>
+            <GaugeCard
+              title="High Utilization"
+              color={UTIL_COLOR}
+              count={util.history.total}
+              percent={ringPct(util.history.total)}
+              sub1Label="Hosts Now" sub1Value={util.current.length}
+              sub2Label="Critical (2+ metrics)" sub2Value={criticalNow}
+              index={3}
+            />
+          </Col>
+        </Row>
+      )}
+
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
-          <Card title="Alerts by Platform">
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
-            ) : platformData.length === 0 ? (
-              <Empty description="No connectivity alerts in this range" style={{ padding: '40px 0' }} />
-            ) : (
-              <>
-                <Pie
-                  data={platformData}
-                  angleField="count"
-                  colorField="platform"
-                  color={platformColors}
-                  radius={0.85}
-                  height={260}
-                  label={{ text: 'platform', position: 'outside' }}
-                />
-                <Space size={8} style={{ marginTop: 12 }} wrap>
-                  {platformData.map(r => (
-                    <Tag key={r.platform} color={PLATFORM_COLOR[r.platform]}>
-                      {r.platform}: {r.count.toLocaleString()}
-                    </Tag>
-                  ))}
-                </Space>
-              </>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card title="Timed Out Reaching">
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
-            ) : data.total === 0 ? (
-              <Empty description="No connectivity alerts in this range" style={{ padding: '40px 0' }} />
-            ) : (
-              <>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-                  Alerts where the host never responded at all within the check's timeout window
-                  (as opposed to actively refusing the connection or rejecting the login).
-                </Text>
-                <Space size={40} wrap>
-                  <Statistic
-                    title="Timed out"
-                    value={data.timedOut.total}
-                    prefix={<ClockCircleOutlined />}
-                    valueStyle={{ color: '#fa8c16' }}
-                  />
-                  <Statistic
-                    title="Of all alerts"
-                    value={timedOutPct}
-                    suffix="%"
-                  />
-                </Space>
-                {timedOutByPlatform.length > 0 && (
-                  <Space size={8} style={{ marginTop: 20 }} wrap>
-                    {timedOutByPlatform.map(r => (
-                      <Tag key={r.platform} color={PLATFORM_COLOR[r.platform]}>
-                        {r.platform}: {r.count.toLocaleString()}
-                      </Tag>
-                    ))}
-                  </Space>
-                )}
-              </>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24}>
           <Card
             title="Alert Details"
             extra={<Tag>{list.total.toLocaleString()} total</Tag>}
           >
             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-              Every logged connectivity failure — host, platform, what kind of check failed, and for
-              ping/SSH-monitor alerts, how often that host is checked and how long it's been down.
+              Every logged connectivity failure — host, alert type, and for ping/SSH-monitor alerts, how
+              often that host is checked and how long it's been down.
             </Text>
             <Table
               rowKey={(r, i) => `${r.platform}-${r.host_id}-${r.created_at}-${i}`}
@@ -291,46 +387,33 @@ export default function ConnectivityAlerts() {
           </Card>
         </Col>
 
-        <Col xs={24}>
+        <Col xs={24} lg={12}>
           <Card
-            title="High Utilization"
-            extra={<Tag>CPU ≥ {util.config.cpu_threshold_pct}% · Memory ≥ {util.config.memory_threshold_pct}% · Disk ≥ {util.config.disk_threshold_pct}%</Tag>}
+            title="High Utilization Hosts"
+            extra={<Tag>CPU ≥ {util.config.cpu_threshold_pct}% · Mem ≥ {util.config.memory_threshold_pct}% · Disk ≥ {util.config.disk_threshold_pct}%</Tag>}
           >
-            {utilLoading ? (
-              <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+              Hosts currently over threshold, right now — Assigned User / Department come from Physical &amp; ESXi Servers where a matching IP exists.
+            </Text>
+            {util.current.length === 0 ? (
+              <Empty
+                image={<DashboardOutlined style={{ fontSize: 32, color: '#52c41a' }} />}
+                description="No hosts currently over threshold"
+                style={{ padding: '24px 0' }}
+              />
             ) : (
-              <>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                  Hosts currently over threshold, right now — Assigned User / Department come from Physical &amp; ESXi Servers where a matching IP exists.
-                </Text>
-                {util.current.length === 0 ? (
-                  <Empty
-                    image={<DashboardOutlined style={{ fontSize: 32, color: '#52c41a' }} />}
-                    description="No hosts currently over threshold"
-                    style={{ padding: '24px 0' }}
-                  />
-                ) : (
-                  <Table
-                    rowKey={(r, i) => `${r.platform}-${r.host}-${i}`}
-                    dataSource={util.current}
-                    columns={UTIL_COLUMNS}
-                    pagination={false}
-                    size="small"
-                    scroll={{ x: 'max-content' }}
-                  />
-                )}
-                <Space size={16} style={{ marginTop: 16 }} wrap>
-                  <Text type="secondary">
-                    {util.history.total.toLocaleString()} high-utilization alert{util.history.total === 1 ? '' : 's'} logged in this range
-                  </Text>
-                  {utilHistoryByPlatform.map(r => (
-                    <Tag key={r.platform} color={PLATFORM_COLOR[r.platform]}>
-                      {r.platform}: {r.count.toLocaleString()}
-                    </Tag>
-                  ))}
-                </Space>
-              </>
+              <Table
+                rowKey={(r, i) => `${r.platform}-${r.host}-${i}`}
+                dataSource={util.current}
+                columns={UTIL_COLUMNS}
+                pagination={false}
+                size="small"
+                scroll={{ x: 'max-content' }}
+              />
             )}
+            <Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
+              {util.history.total.toLocaleString()} high-utilization alert{util.history.total === 1 ? '' : 's'} logged in this range
+            </Text>
           </Card>
         </Col>
       </Row>

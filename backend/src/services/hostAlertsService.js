@@ -34,48 +34,111 @@ async function logDiscoveryFailure({ platform, hostId, host, errorMessage, failC
   );
 }
 
-// days = 0 means all-time (no lower bound on created_at).
+const PLATFORMS = ['VMware', 'Proxmox', 'Hyper-V'];
+
+// A zero-filled (no missing days) daily count series between two "days ago"
+// offsets, inclusive — e.g. (6, 0) is the last 7 days including today. Both
+// the generated date spine and the count subquery key off CURRENT_DATE so
+// they can never disagree by a day, unlike mixing DATE(created_at) against a
+// NOW() - INTERVAL timestamp bound would risk. Needed (rather than a plain
+// GROUP BY) because the dashboard's sparklines and period-over-period chart
+// zip two series together positionally — a day with zero alerts has to still
+// occupy a slot, or everything after it would line up against the wrong day.
+function zeroFillBetween(startOffsetDays, endOffsetDays, extraWhere) {
+  const extra = extraWhere ? `AND ${extraWhere}` : '';
+  return db.query(
+    `SELECT gs.d::date AS date, COALESCE(c.count, 0)::int AS count
+       FROM generate_series((CURRENT_DATE - ${startOffsetDays}::int), (CURRENT_DATE - ${endOffsetDays}::int), INTERVAL '1 day') AS gs(d)
+       LEFT JOIN (
+         SELECT DATE(created_at) AS date, COUNT(*)::int AS count
+           FROM host_connectivity_alerts
+          WHERE DATE(created_at) BETWEEN (CURRENT_DATE - ${startOffsetDays}::int) AND (CURRENT_DATE - ${endOffsetDays}::int)
+          ${extra}
+          GROUP BY DATE(created_at)
+       ) c ON c.date = gs.d::date
+      ORDER BY gs.d`,
+  );
+}
+
+function newPlatformBucket() {
+  return { total: 0, previousTotal: null, pingFailed: 0, discoveryUnreachable: 0, byDate: [] };
+}
+
+// days = 0 means all-time — there's no well-defined "previous period" for an
+// unbounded range, so previousTotal/previousByDate come back null/empty and
+// the frontend skips the period-over-period comparison for that case.
 async function summary({ days = 30 } = {}) {
   const n = parseInt(days, 10);
-  const since = n > 0 ? `created_at >= NOW() - INTERVAL '${n} days'` : null;
-  const where = (extra) => {
-    const conds = [since, extra].filter(Boolean);
-    return conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-  };
+  const hasWindow = n > 0;
+  const platforms = {};
+  for (const p of PLATFORMS) platforms[p] = newPlatformBucket();
 
-  const [byDate, byPlatform, totalRow, timedOutTotalRow, timedOutByPlatform] = await Promise.all([
-    db.query(
-      `SELECT DATE(created_at) AS date, COUNT(*)::int AS count
-         FROM host_connectivity_alerts
-         ${where()}
-        GROUP BY DATE(created_at)
-        ORDER BY DATE(created_at)`,
-    ),
-    db.query(
-      `SELECT platform, COUNT(*)::int AS count
-         FROM host_connectivity_alerts
-         ${where()}
-        GROUP BY platform
-        ORDER BY platform`,
-    ),
-    db.query(`SELECT COUNT(*)::int AS total FROM host_connectivity_alerts ${where()}`),
-    db.query(`SELECT COUNT(*)::int AS total FROM host_connectivity_alerts ${where('timed_out')}`),
-    db.query(
-      `SELECT platform, COUNT(*)::int AS count
-         FROM host_connectivity_alerts
-         ${where('timed_out')}
-        GROUP BY platform
-        ORDER BY platform`,
-    ),
+  if (!hasWindow) {
+    const [byDateRes, bySourceRes, byDatePlatformRes, discoveryByDateRes] = await Promise.all([
+      db.query(`SELECT DATE(created_at) AS date, COUNT(*)::int AS count FROM host_connectivity_alerts GROUP BY DATE(created_at) ORDER BY DATE(created_at)`),
+      db.query(`SELECT platform, source, COUNT(*)::int AS count FROM host_connectivity_alerts GROUP BY platform, source`),
+      db.query(`SELECT platform, DATE(created_at) AS date, COUNT(*)::int AS count FROM host_connectivity_alerts GROUP BY platform, DATE(created_at) ORDER BY platform, DATE(created_at)`),
+      db.query(`SELECT DATE(created_at) AS date, COUNT(*)::int AS count FROM host_connectivity_alerts WHERE source = 'discovery' GROUP BY DATE(created_at) ORDER BY DATE(created_at)`),
+    ]);
+    for (const r of bySourceRes.rows) {
+      const b = platforms[r.platform]; if (!b) continue;
+      b.total += r.count;
+      if (r.source === 'discovery') b.discoveryUnreachable += r.count; else b.pingFailed += r.count;
+    }
+    for (const r of byDatePlatformRes.rows) {
+      const b = platforms[r.platform]; if (b) b.byDate.push({ date: r.date, count: r.count });
+    }
+    return {
+      total: byDateRes.rows.reduce((s, r) => s + r.count, 0),
+      byDate: byDateRes.rows.map(r => ({ date: r.date, count: r.count })),
+      previousByDate: [],
+      hasPreviousPeriod: false,
+      platforms,
+      discovery: {
+        total: PLATFORMS.reduce((s, p) => s + platforms[p].discoveryUnreachable, 0),
+        previousTotal: null,
+        byDate: discoveryByDateRes.rows.map(r => ({ date: r.date, count: r.count })),
+      },
+    };
+  }
+
+  const [
+    curAgg, prevAgg, curVMware, curProxmox, curHyperV, curDiscovery,
+    bySourceRes, prevBySourceRes,
+  ] = await Promise.all([
+    zeroFillBetween(n - 1, 0),
+    zeroFillBetween(2 * n - 1, n),
+    zeroFillBetween(n - 1, 0, `platform = 'VMware'`),
+    zeroFillBetween(n - 1, 0, `platform = 'Proxmox'`),
+    zeroFillBetween(n - 1, 0, `platform = 'Hyper-V'`),
+    zeroFillBetween(n - 1, 0, `source = 'discovery'`),
+    db.query(`SELECT platform, source, COUNT(*)::int AS count FROM host_connectivity_alerts WHERE created_at >= NOW() - INTERVAL '${n} days' GROUP BY platform, source`),
+    db.query(`SELECT platform, source, COUNT(*)::int AS count FROM host_connectivity_alerts WHERE created_at >= NOW() - INTERVAL '${2 * n} days' AND created_at < NOW() - INTERVAL '${n} days' GROUP BY platform, source`),
   ]);
 
+  for (const r of bySourceRes.rows) {
+    const b = platforms[r.platform]; if (!b) continue;
+    b.total += r.count;
+    if (r.source === 'discovery') b.discoveryUnreachable += r.count; else b.pingFailed += r.count;
+  }
+  for (const p of PLATFORMS) platforms[p].previousTotal = 0;
+  for (const r of prevBySourceRes.rows) {
+    const b = platforms[r.platform]; if (b) b.previousTotal += r.count;
+  }
+  platforms.VMware.byDate     = curVMware.rows.map(r => ({ date: r.date, count: r.count }));
+  platforms.Proxmox.byDate    = curProxmox.rows.map(r => ({ date: r.date, count: r.count }));
+  platforms['Hyper-V'].byDate = curHyperV.rows.map(r => ({ date: r.date, count: r.count }));
+
   return {
-    byDate: byDate.rows.map(r => ({ date: r.date, count: r.count })),
-    byPlatform: byPlatform.rows.map(r => ({ platform: r.platform, count: r.count })),
-    total: totalRow.rows[0]?.total ?? 0,
-    timedOut: {
-      total: timedOutTotalRow.rows[0]?.total ?? 0,
-      byPlatform: timedOutByPlatform.rows.map(r => ({ platform: r.platform, count: r.count })),
+    total: curAgg.rows.reduce((s, r) => s + r.count, 0),
+    byDate: curAgg.rows.map(r => ({ date: r.date, count: r.count })),
+    previousByDate: prevAgg.rows.map(r => ({ date: r.date, count: r.count })),
+    hasPreviousPeriod: true,
+    platforms,
+    discovery: {
+      total: PLATFORMS.reduce((s, p) => s + platforms[p].discoveryUnreachable, 0),
+      previousTotal: prevBySourceRes.rows.filter(r => r.source === 'discovery').reduce((s, r) => s + r.count, 0),
+      byDate: curDiscovery.rows.map(r => ({ date: r.date, count: r.count })),
     },
   };
 }
