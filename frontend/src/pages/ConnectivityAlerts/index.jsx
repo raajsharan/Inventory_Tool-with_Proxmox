@@ -3,12 +3,11 @@ import { Card, Col, Row, Segmented, Typography, Empty, Spin, Tag, Table, Progres
 import {
   AlertOutlined, ClockCircleOutlined, DashboardOutlined, ArrowUpOutlined, ArrowDownOutlined,
 } from '@ant-design/icons';
-import { Column, Tiny } from '@ant-design/plots';
+import { Tiny } from '@ant-design/plots';
 import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 import UtilizationThresholds from '../../components/UtilizationThresholds.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { useAppTheme } from '../../context/ThemeContext.jsx';
 
 const { Title, Text } = Typography;
 
@@ -25,10 +24,6 @@ const RANGE_OPTIONS = [
   { label: '90 days', value: 90 },
   { label: 'All time', value: 0 },
 ];
-
-function fmtDate(iso) {
-  return iso ? String(iso).slice(0, 10) : iso;
-}
 
 // discovery-sourced alerts mean a poll couldn't reach the host's management
 // API at all — ssh_ok is never true here (an alert only gets logged when the
@@ -136,25 +131,6 @@ export default function ConnectivityAlerts() {
   const { user } = useAuth();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
-  // @ant-design/plots defaults to dark text on a light background — on this
-  // app's dark theme that renders axis/legend/label text nearly invisible
-  // (as seen on the Alert Trend chart). Same fix already used by
-  // Dashboard.jsx / VMDrift.jsx / PVEDrift.jsx / HVDrift.jsx: swap to G2's
-  // dark theme and recolor axis/label/legend text explicitly.
-  const { mode } = useAppTheme() || { mode: 'light' };
-  const isDark = mode === 'dark';
-  const axisColor = isDark ? '#d9d9d9' : '#595959';
-  const labelColor = isDark ? '#f0f0f0' : '#262626';
-  const chartTheme = isDark ? 'classicDark' : 'classic';
-  const labelStyle = { fill: labelColor, fontWeight: 500 };
-  const axisStyle = {
-    label: { style: { fill: axisColor } },
-    title: { style: { fill: axisColor } },
-    line: { style: { stroke: isDark ? '#434343' : '#d9d9d9' } },
-    tickLine: { style: { stroke: isDark ? '#434343' : '#d9d9d9' } },
-  };
-  const legendStyle = { itemName: { style: { fill: labelColor } } };
-
   const [days, setDays]       = useState(30);
   const [loading, setLoading] = useState(true);
   const [data, setData]       = useState(EMPTY);
@@ -208,13 +184,6 @@ export default function ConnectivityAlerts() {
     ].filter(Boolean).length;
     return breaches >= 2;
   }).length;
-
-  const trendRows = data.hasPreviousPeriod
-    ? data.byDate.flatMap((d, i) => ([
-        { day: fmtDate(d.date), series: 'This period', count: d.count },
-        { day: fmtDate(d.date), series: 'Previous period', count: data.previousByDate[i]?.count ?? 0 },
-      ]))
-    : data.byDate.map(d => ({ day: fmtDate(d.date), series: 'Alerts', count: d.count }));
 
   const ALERT_COLUMNS = [
     {
@@ -323,37 +292,6 @@ export default function ConnectivityAlerts() {
           </Col>
         </Row>
       )}
-
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24}>
-          <Card
-            title="Alert Trend"
-            extra={<Tag>{data.total.toLocaleString()} total</Tag>}
-          >
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
-            ) : trendRows.length === 0 ? (
-              <Empty description="No connectivity alerts in this range" style={{ padding: '40px 0' }} />
-            ) : (
-              <Column
-                data={trendRows}
-                xField="day"
-                yField="count"
-                colorField="series"
-                height={300}
-                theme={chartTheme}
-                scale={{ color: { range: data.hasPreviousPeriod ? ['#13c2c2', isDark ? '#595959' : '#d9d9d9'] : ['#13c2c2'] } }}
-                legend={data.hasPreviousPeriod ? { color: { position: 'top', itemName: legendStyle.itemName } } : false}
-                axis={{
-                  y: { title: false, ...axisStyle },
-                  x: { title: false, ...axisStyle },
-                }}
-                label={{ position: 'top', style: labelStyle }}
-              />
-            )}
-          </Card>
-        </Col>
-      </Row>
 
       {utilLoading ? (
         <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
