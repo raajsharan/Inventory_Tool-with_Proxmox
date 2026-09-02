@@ -34,7 +34,7 @@ function AssetInventorySection({ data }) {
         <li><strong>{(data.nameConflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
       </ul>
       <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>Location-wise endpoint count:</Text>
-      <div className="weekly-breakdown-card" style={{ maxWidth: 320 }}>
+      <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="location"
           size="small"
@@ -67,7 +67,7 @@ function NessusSection({ data }) {
   ];
   return (
     <>
-      <div className="weekly-breakdown-card">
+      <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="key"
           size="small"
@@ -135,12 +135,12 @@ function PatchManagementSection({ data }) {
       </Space>
 
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Location-wise Auto/Manual patching status:</Text>
-      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20 }}>
+      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.locationPatching} groupLabel="Location" />
       </Card>
 
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Departments Patching Onboarding Status:</Text>
-      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20 }}>
+      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.departmentPatching} groupLabel="Department" />
       </Card>
 
@@ -150,7 +150,7 @@ function PatchManagementSection({ data }) {
         {pctText(data.meCompliance?.combinedYes, data.meCompliance?.combinedDen, data.meCompliance?.combinedPct)}
       </Paragraph>
       <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{data.meCompliance?.footnote}</Text>
-      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }}>
+      <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="bucket"
           size="small"
