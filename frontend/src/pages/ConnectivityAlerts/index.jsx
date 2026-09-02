@@ -6,6 +6,8 @@ import {
 import { Column, Tiny } from '@ant-design/plots';
 import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
+import UtilizationThresholds from '../../components/UtilizationThresholds.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const { Title, Text } = Typography;
 
@@ -130,6 +132,8 @@ const EMPTY = {
 };
 
 export default function ConnectivityAlerts() {
+  const { user } = useAuth();
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
   const [days, setDays]       = useState(30);
   const [loading, setLoading] = useState(true);
   const [data, setData]       = useState(EMPTY);
@@ -353,6 +357,14 @@ export default function ConnectivityAlerts() {
               sub2Label="Critical (2+ metrics)" sub2Value={criticalNow}
               index={3}
             />
+          </Col>
+        </Row>
+      )}
+
+      {isAdmin && (
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col xs={24}>
+            <UtilizationThresholds />
           </Col>
         </Row>
       )}
