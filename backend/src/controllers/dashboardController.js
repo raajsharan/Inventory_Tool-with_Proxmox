@@ -434,42 +434,37 @@ async function summary(_req, res, next) {
         ) AS name_conflicts;
     `);
 
-    // Weekly Report: Nessus applicability breakdown — same status-eligible
-    // Asset+Physical/Ext/Beijing population as combinedDenominator (mslQ,
-    // extComplianceQ, beijingRawQ), so Applicable + Not Applicable
-    // reconciles with the Combined Inventory Count and the Location-wise
-    // Grand Total. Grouped by source too, so the report can show which
-    // inventory (MSL Assets / Ext. Assets / Beijing Assets / Physical
-    // Servers) each bucket's count comes from. Applicable = Windows (any
-    // version) or Linux (any distro) other than CentOS, Proxmox, or
-    // vCenter/ESXi/VMware (these are excluded even if os_type happens to
-    // also contain a Linux-sounding substring, e.g. a VCSA appliance
-    // reporting a Photon/Linux base). Not Applicable is the complement
-    // (CentOS, Appliances, EVE-NG, MacOS, Cisco, VMware ESXi/vCenter,
-    // Proxmox, unknown/blank OS, etc.) so the buckets always sum to the
-    // total.
+    // Weekly Report: Nessus applicability breakdown. Population is every
+    // active (not deleted/decommissioned) asset, full stop — deliberately
+    // NOT the compliance_config-driven status/EOL whitelist used by mslQ /
+    // assetExtLocationCountQ for MSL Compliance %. Those exist to scope
+    // *compliance eligibility*; this table answers a different question
+    // ("can Nessus even run on this OS"), which doesn't stop being true just
+    // because an asset's status/EOL flag falls outside that other whitelist
+    // — a CentOS box that's e.g. status "Retired" is still CentOS, and was
+    // previously vanishing from this table (neither bucket) instead of
+    // landing in Not Applicable. This does mean the total here can exceed
+    // the MSL-compliance-scoped Grand Total shown elsewhere in the report;
+    // that's expected now that the two are answering different questions.
+    // Grouped by source too, so the report can show which inventory (MSL
+    // Assets / Ext. Assets / Beijing Assets / Physical Servers) each
+    // bucket's count comes from. Applicable = Windows (any version) or
+    // Linux (any distro) other than CentOS, Proxmox, or vCenter/ESXi/VMware
+    // (these are excluded even if os_type happens to also contain a
+    // Linux-sounding substring, e.g. a VCSA appliance reporting a
+    // Photon/Linux base). Not Applicable is the complement (CentOS,
+    // Appliances, EVE-NG, MacOS, Cisco, VMware ESXi/vCenter, Proxmox,
+    // unknown/blank OS, etc.) so the buckets always sum to the total.
     const weeklyNessusApplicabilityQ = db.query(`
       WITH pop AS (
         SELECT server_status, os_type, tenable_installed, 'MSL Assets'::text AS source
           FROM assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-           AND (
-             array_length($1::text[], 1) IS NULL
-             OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
-           )
-           AND (
-             array_length($2::text[], 1) IS NULL
-             OR NOT (LOWER(COALESCE(eol_status,'')) = ANY(SELECT LOWER(x) FROM unnest($2::text[]) AS x))
-           )
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
         SELECT server_status, os_type, false AS tenable_installed, 'Physical Servers'
           FROM physical_esxi_servers
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-           AND (
-             array_length($1::text[], 1) IS NULL
-             OR LOWER(COALESCE(server_status,'')) = ANY(SELECT LOWER(x) FROM unnest($1::text[]) AS x)
-           )
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
         SELECT server_status, os_type, tenable_installed, 'Ext. Assets'
@@ -520,7 +515,7 @@ async function summary(_req, res, next) {
         COUNT(*) FILTER (WHERE tenable_installed)::int       AS installed
       FROM classified
       GROUP BY 1, 2
-    `, [mslInclStatuses, mslExclEol]);
+    `);
 
     // ---------------------------------------------------------------
     // Weekly Report extras: location-wise + department-wise patching
