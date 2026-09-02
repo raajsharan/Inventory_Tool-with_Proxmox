@@ -22,6 +22,23 @@ function fmtDate(iso) {
   return iso ? String(iso).slice(0, 10) : iso;
 }
 
+// discovery-sourced alerts mean a poll couldn't reach the host's management
+// API at all — ssh_ok is never true here (an alert only gets logged when the
+// combined check decided "unreachable"), so it's always false or null
+// (not applicable / no stored credentials to try).
+function alertTypeLabel(r) {
+  if (r.source === 'discovery') return 'Discovery Unreachable';
+  return r.ssh_ok === false ? 'Ping + SSH Down' : 'Ping Failed';
+}
+
+function alertDetail(r, intervals) {
+  if (r.source !== 'ping_monitor') return 'Failed while a discovery poll tried to reach this host’s management API.';
+  const interval = intervals?.[r.platform] ?? 5;
+  const downMins = interval * (r.fail_count || 1);
+  const n = r.fail_count || 1;
+  return `Checked every ${interval} min — failing ${n} consecutive check${n === 1 ? '' : 's'} (~${downMins} min down)`;
+}
+
 export default function ConnectivityAlerts() {
   const [days, setDays]       = useState(30);
   const [loading, setLoading] = useState(true);
@@ -31,6 +48,12 @@ export default function ConnectivityAlerts() {
   const UTIL_EMPTY = { current: [], history: { total: 0, byDate: [], byPlatform: [] }, config: { cpu_threshold_pct: 85, memory_threshold_pct: 85, disk_threshold_pct: 85 } };
   const [utilLoading, setUtilLoading] = useState(true);
   const [util, setUtil]               = useState(UTIL_EMPTY);
+
+  const LIST_EMPTY = { rows: [], total: 0, intervals: {} };
+  const [listLoading, setListLoading] = useState(true);
+  const [list, setList]               = useState(LIST_EMPTY);
+  const [listPage, setListPage]       = useState(1);
+  const [listPageSize, setListPageSize] = useState(20);
 
   useEffect(() => {
     setLoading(true);
@@ -46,6 +69,16 @@ export default function ConnectivityAlerts() {
       .finally(() => setUtilLoading(false));
   }, [days]);
 
+  useEffect(() => { setListPage(1); }, [days]);
+
+  useEffect(() => {
+    setListLoading(true);
+    api.get('/connectivity-alerts/list', { params: { days, page: listPage, pageSize: listPageSize } })
+      .then(r => setList(r.data))
+      .catch(() => setList(LIST_EMPTY))
+      .finally(() => setListLoading(false));
+  }, [days, listPage, listPageSize]);
+
   const sortByPlatform = (rows) => rows
     .slice()
     .sort((a, b) => PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform));
@@ -57,6 +90,36 @@ export default function ConnectivityAlerts() {
   const timedOutPct = data.total ? Math.round((data.timedOut.total / data.total) * 100) : 0;
 
   const utilHistoryByPlatform = sortByPlatform(util.history.byPlatform);
+
+  const ALERT_COLUMNS = [
+    {
+      title: 'Time', dataIndex: 'created_at', key: 'created_at', width: 170,
+      render: v => new Date(v).toLocaleString(),
+    },
+    {
+      title: 'Platform', dataIndex: 'platform', key: 'platform', width: 100,
+      render: v => <Tag color={PLATFORM_COLOR[v]}>{v}</Tag>,
+    },
+    { title: 'Host / IP', dataIndex: 'host', key: 'host', ellipsis: true },
+    {
+      title: 'Alert Type', key: 'type', width: 150,
+      render: (_, r) => <Tag color={r.source === 'discovery' ? 'purple' : 'red'}>{alertTypeLabel(r)}</Tag>,
+    },
+    {
+      title: 'Response', dataIndex: 'timed_out', key: 'timed_out', width: 120,
+      render: v => v
+        ? <Tag color="orange" icon={<ClockCircleOutlined />}>Timed Out</Tag>
+        : <Tag color="default">Rejected</Tag>,
+    },
+    {
+      title: 'Severity', dataIndex: 'severity', key: 'severity', width: 100,
+      render: v => <Tag color={v === 'critical' ? 'error' : 'warning'}>{v === 'critical' ? 'Critical' : 'Warning'}</Tag>,
+    },
+    {
+      title: 'Detail', key: 'detail',
+      render: (_, r) => <Text type="secondary" style={{ fontSize: 12.5 }}>{alertDetail(r, list.intervals)}</Text>,
+    },
+  ];
 
   const UTIL_COLUMNS = [
     {
@@ -196,6 +259,35 @@ export default function ConnectivityAlerts() {
                 )}
               </>
             )}
+          </Card>
+        </Col>
+
+        <Col xs={24}>
+          <Card
+            title="Alert Details"
+            extra={<Tag>{list.total.toLocaleString()} total</Tag>}
+          >
+            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+              Every logged connectivity failure — host, platform, what kind of check failed, and for
+              ping/SSH-monitor alerts, how often that host is checked and how long it's been down.
+            </Text>
+            <Table
+              rowKey={(r, i) => `${r.platform}-${r.host_id}-${r.created_at}-${i}`}
+              dataSource={list.rows}
+              columns={ALERT_COLUMNS}
+              loading={listLoading}
+              size="small"
+              scroll={{ x: 'max-content' }}
+              pagination={{
+                current: listPage,
+                pageSize: listPageSize,
+                total: list.total,
+                showSizeChanger: true,
+                pageSizeOptions: [20, 50, 100],
+                onChange: (p, ps) => { setListPage(p); setListPageSize(ps); },
+              }}
+              locale={{ emptyText: <Empty description="No connectivity alerts in this range" style={{ padding: '20px 0' }} /> }}
+            />
           </Card>
         </Col>
 

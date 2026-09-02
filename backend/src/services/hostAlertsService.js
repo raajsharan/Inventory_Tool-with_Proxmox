@@ -9,6 +9,12 @@
  */
 const db = require('../config/db');
 const { AUTH_PATTERN } = require('./alertsService');
+const pingMonitorService = require('./pingMonitorService');
+
+// Platform -> its configured check interval field in ping_monitor_config,
+// used to turn a ping-monitor alert's bare fail_count into a "checked every
+// N min, down for ~N*fail_count min" detail on the alert list.
+const INTERVAL_FIELD = { VMware: 'vmware_interval_minutes', Proxmox: 'proxmox_interval_minutes', 'Hyper-V': 'hyperv_interval_minutes' };
 
 // Logs a discovery-run connection failure as a connectivity alert — but only
 // when it actually IS one. A bad password/expired token is a credential
@@ -74,4 +80,38 @@ async function summary({ days = 30 } = {}) {
   };
 }
 
-module.exports = { summary, logDiscoveryFailure };
+// Paginated, most-recent-first raw alert rows — backs the Connectivity
+// Alerts page's detail table (host, alert type, timing) underneath the
+// aggregate cards. `intervals` is each platform's currently configured
+// ping-monitor check interval, so the frontend can render "checked every N
+// min, ~N*fail_count min down" for ping_monitor-sourced rows without a
+// second round trip.
+async function list({ days = 30, page = 1, pageSize = 50 } = {}) {
+  const n = parseInt(days, 10);
+  const since = n > 0 ? `WHERE created_at >= NOW() - INTERVAL '${n} days'` : '';
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const size = Math.min(200, Math.max(1, parseInt(pageSize, 10) || 50));
+  const offset = (p - 1) * size;
+
+  const [rowsRes, totalRes, cfg] = await Promise.all([
+    db.query(
+      `SELECT platform, host_id, host, severity, ping_ok, ssh_ok, fail_count, timed_out, source, created_at
+         FROM host_connectivity_alerts
+         ${since}
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2`,
+      [size, offset],
+    ),
+    db.query(`SELECT COUNT(*)::int AS total FROM host_connectivity_alerts ${since}`),
+    pingMonitorService.getConfig(),
+  ]);
+
+  const intervals = {};
+  for (const [platform, field] of Object.entries(INTERVAL_FIELD)) {
+    intervals[platform] = cfg[field] ?? 5;
+  }
+
+  return { rows: rowsRes.rows, total: totalRes.rows[0]?.total ?? 0, intervals };
+}
+
+module.exports = { summary, logDiscoveryFailure, list };

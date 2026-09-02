@@ -6,4 +6,10 @@ async function getSummary(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { getSummary };
+async function getList(req, res, next) {
+  try {
+    res.json(await svc.list({ days: req.query.days, page: req.query.page, pageSize: req.query.pageSize }));
+  } catch (e) { next(e); }
+}
+
+module.exports = { getSummary, getList };
