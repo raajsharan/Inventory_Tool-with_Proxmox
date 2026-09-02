@@ -8,6 +8,7 @@ import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 import UtilizationThresholds from '../../components/UtilizationThresholds.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useAppTheme } from '../../context/ThemeContext.jsx';
 
 const { Title, Text } = Typography;
 
@@ -134,6 +135,26 @@ const EMPTY = {
 export default function ConnectivityAlerts() {
   const { user } = useAuth();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
+
+  // @ant-design/plots defaults to dark text on a light background — on this
+  // app's dark theme that renders axis/legend/label text nearly invisible
+  // (as seen on the Alert Trend chart). Same fix already used by
+  // Dashboard.jsx / VMDrift.jsx / PVEDrift.jsx / HVDrift.jsx: swap to G2's
+  // dark theme and recolor axis/label/legend text explicitly.
+  const { mode } = useAppTheme() || { mode: 'light' };
+  const isDark = mode === 'dark';
+  const axisColor = isDark ? '#d9d9d9' : '#595959';
+  const labelColor = isDark ? '#f0f0f0' : '#262626';
+  const chartTheme = isDark ? 'classicDark' : 'classic';
+  const labelStyle = { fill: labelColor, fontWeight: 500 };
+  const axisStyle = {
+    label: { style: { fill: axisColor } },
+    title: { style: { fill: axisColor } },
+    line: { style: { stroke: isDark ? '#434343' : '#d9d9d9' } },
+    tickLine: { style: { stroke: isDark ? '#434343' : '#d9d9d9' } },
+  };
+  const legendStyle = { itemName: { style: { fill: labelColor } } };
+
   const [days, setDays]       = useState(30);
   const [loading, setLoading] = useState(true);
   const [data, setData]       = useState(EMPTY);
@@ -320,10 +341,14 @@ export default function ConnectivityAlerts() {
                 yField="count"
                 colorField="series"
                 height={300}
-                scale={{ color: { range: data.hasPreviousPeriod ? ['#13c2c2', '#d9d9d9'] : ['#13c2c2'] } }}
-                legend={data.hasPreviousPeriod ? { color: { position: 'top' } } : false}
-                axis={{ y: { title: false }, x: { title: false } }}
-                label={{ position: 'top' }}
+                theme={chartTheme}
+                scale={{ color: { range: data.hasPreviousPeriod ? ['#13c2c2', isDark ? '#595959' : '#d9d9d9'] : ['#13c2c2'] } }}
+                legend={data.hasPreviousPeriod ? { color: { position: 'top', itemName: legendStyle.itemName } } : false}
+                axis={{
+                  y: { title: false, ...axisStyle },
+                  x: { title: false, ...axisStyle },
+                }}
+                label={{ position: 'top', style: labelStyle }}
               />
             )}
           </Card>
