@@ -38,6 +38,7 @@ const STATIC_PAGES = [
   { key: 'admin/compliance-config',   label: 'Compliance Config',     group: 'Administration' },
   { key: 'admin/migration-config',   label: 'Migration Config',      group: 'Administration' },
   { key: 'admin/teams-notifications', label: 'Teams Notifications',  group: 'Administration' },
+  { key: 'admin/weekly-report-config', label: 'Weekly Report Admin', group: 'Administration' },
   { key: 'admin/imports',         label: 'Import History',           group: 'Administration' },
   { key: 'admin/audit',           label: 'Audit Log',                group: 'Administration' },
   { key: 'admin/nav-order',          label: 'Menu Order',               group: 'Administration' },

@@ -373,17 +373,116 @@ function weeklyReportFigures(sections) {
   ];
 }
 
+// ── Adaptive Card Table helpers (schema 1.5) — used only by the Weekly
+// Report card, which needs actual rows/columns rather than a flat FactSet.
+
+function tableCell(text, bold = false) {
+  return { type: 'TableCell', items: [{ type: 'TextBlock', text: String(text ?? '—'), wrap: true, size: 'Small', weight: bold ? 'Bolder' : 'Default' }] };
+}
+
+function adaptiveTable(headers, rows) {
+  return {
+    type: 'Table',
+    firstRowAsHeaders: true,
+    columns: headers.map(() => ({ width: 1 })),
+    rows: [
+      { type: 'TableRow', cells: headers.map(h => tableCell(h, true)) },
+      ...rows.map(r => ({ type: 'TableRow', cells: r.map(c => tableCell(c)) })),
+    ],
+  };
+}
+
+function sectionHeading(text) {
+  return { type: 'TextBlock', text, weight: 'Bolder', size: 'Small', spacing: 'Medium', wrap: true };
+}
+
+// Mirrors BreakdownTable in WeeklyReport/index.jsx: dynamic per-metric
+// columns (only metrics with a non-zero value anywhere are present), plus a
+// Total row.
+function breakdownTable(breakdown, groupLabel) {
+  if (!breakdown?.rows?.length) return null;
+  const headers = [groupLabel, ...breakdown.columns, 'Total', '%'];
+  const rows = breakdown.rows.map(r => [r.bucket, ...r.values, r.total, `${r.pct}%`]);
+  rows.push(['Total', ...breakdown.totals.values, breakdown.totals.total, `${breakdown.totals.pct}%`]);
+  return adaptiveTable(headers, rows);
+}
+
+// Builds the full report card body: headline FactSet for a fast glance,
+// then every auto-computed section's actual data table (columns + rows) —
+// asset locations, Nessus breakdown, ME patching breakdown, migration by
+// source. Manual/narrative sections (BAU notes, SOP, licenses, etc.) are
+// prose, not tabular, so they're left out of the card by design.
+function buildWeeklyReportCard(report) {
+  const byKey = Object.fromEntries((report.sections || []).map(s => [s.section_key, s.data]));
+  const asset = byKey.asset_inventory;
+  const nessus = byKey.nessus_agent;
+  const patch = byKey.patch_management;
+  const migration = byKey.migration_project;
+
+  const body = [
+    { type: 'TextBlock', text: `Weekly Report Generated — ${report.reportDate}`, weight: 'Bolder', size: 'Medium', color: 'Accent', wrap: true },
+    { type: 'FactSet', facts: weeklyReportFigures(report.sections) },
+  ];
+
+  if (asset?.locations?.length) {
+    body.push(sectionHeading('Assets Inventory — Location-wise count'));
+    body.push(adaptiveTable(
+      ['Location', 'Count'],
+      asset.locations.map(l => [l.location, l.count]),
+    ));
+  }
+
+  if (nessus) {
+    body.push(sectionHeading('Nessus Agent Install'));
+    body.push(adaptiveTable(
+      ['Sl. No', 'Description', 'MSL', 'Ext.', 'Beijing', 'Physical/ESXi', 'Total'],
+      [
+        ['1', 'Nessus Applicable',     nessus.applicable?.mslAssets,     nessus.applicable?.extAssets,     nessus.applicable?.beijingAssets,     nessus.applicable?.physicalEsxi,     nessus.applicable?.total ?? 0],
+        ['2', 'Nessus Not Applicable', nessus.notApplicable?.mslAssets,  nessus.notApplicable?.extAssets,  nessus.notApplicable?.beijingAssets,  nessus.notApplicable?.physicalEsxi,  nessus.notApplicable?.total ?? 0],
+      ],
+    ));
+  }
+
+  if (patch) {
+    const locTable = breakdownTable(patch.locationPatching, 'Location');
+    const deptTable = breakdownTable(patch.departmentPatching, 'Department');
+    if (locTable) { body.push(sectionHeading('Location-wise Auto/Manual Patching Status')); body.push(locTable); }
+    if (deptTable) { body.push(sectionHeading('Department Patching Onboarding Status')); body.push(deptTable); }
+    if (patch.meCompliance?.rows?.length) {
+      body.push(sectionHeading('ManageEngine Compliance'));
+      body.push(adaptiveTable(
+        ['Patching Type', 'No', 'Yes', 'Total'],
+        patch.meCompliance.rows.map(r => [r.bucket, r.no_me, r.yes_me, r.total]),
+      ));
+    }
+  }
+
+  if (migration) {
+    const groups = [
+      ['Bomgar VMs', migration.bomgar], ['Security VMs', migration.security], ['Standalone ESXi', migration.standalone],
+    ].filter(([, d]) => d && d.total);
+    if (groups.length) {
+      body.push(sectionHeading('Migration Project — VMs by Source'));
+      body.push(adaptiveTable(
+        ['Source', 'Total', 'Migrated'],
+        groups.map(([label, d]) => [label, d.total ?? 0, d.migrated ?? 0]),
+      ));
+    }
+  }
+
+  return {
+    type: 'message',
+    attachments: [{
+      contentType: 'application/vnd.microsoft.card.adaptive',
+      content: { $schema: 'http://adaptivecards.io/schemas/adaptive-card.json', type: 'AdaptiveCard', version: '1.5', body },
+    }],
+  };
+}
+
 async function notifyWeeklyReport(report) {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.notify_weekly_report || !cfg.webhook_url) return;
-
-  const card = buildCard({
-    subtitle: '📊 Weekly Report',
-    title: `Weekly Report Generated — ${report.reportDate}`,
-    color: 'Accent',
-    facts: weeklyReportFigures(report.sections),
-  });
-  await send(card);
+  await postJson(cfg.webhook_url, buildWeeklyReportCard(report));
 }
 
 // Platform name (as passed by each scheduler) -> its own config toggle.

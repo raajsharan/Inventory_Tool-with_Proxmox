@@ -197,6 +197,7 @@ export default function AppLayout() {
       can('admin/compliance-config')  && { key: '/admin/compliance-config',  icon: <ControlOutlined />,         label: <Link to="/admin/compliance-config">Compliance Config</Link> },
       can('admin/migration-config')   && { key: '/admin/migration-config',   icon: <ProjectOutlined />,          label: <Link to="/admin/migration-config">Migration Config</Link> },
       can('admin/teams-notifications') && { key: '/admin/teams-notifications', icon: <NotificationOutlined />,    label: <Link to="/admin/teams-notifications">Teams Notifications</Link> },
+      can('admin/weekly-report-config') && { key: '/admin/weekly-report-config', icon: <FileTextOutlined />,       label: <Link to="/admin/weekly-report-config">Weekly Report Admin</Link> },
       can('admin/imports')          && { key: '/admin/imports',           icon: <HistoryOutlined />,           label: <Link to="/admin/imports">Import History</Link> },
       can('admin/imports')          && { key: '/admin/db-import',         icon: <DatabaseOutlined />,          label: <Link to="/admin/db-import">DB Import</Link> },
       can('admin/audit')            && { key: '/admin/audit',             icon: <FileSearchOutlined />,        label: <Link to="/admin/audit">Audit Log</Link> },

@@ -924,6 +924,18 @@ const STATEMENTS = [
      ) AS v(section_key, sort_order)
      WHERE weekly_report_manual_sections.section_key = v.section_key
        AND weekly_report_manual_sections.sort_order <> v.sort_order`,
+  // Admin-configurable day/time for the automatic Wednesday-08:00 snapshot
+  // (weeklyReportScheduler.js) — day_of_week matches JS Date#getDay() /
+  // node-cron convention (0=Sunday..6=Saturday).
+  `CREATE TABLE IF NOT EXISTS weekly_report_schedule_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      day_of_week INTEGER NOT NULL DEFAULT 3,
+      hour        INTEGER NOT NULL DEFAULT 8,
+      minute      INTEGER NOT NULL DEFAULT 0,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO weekly_report_schedule_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get

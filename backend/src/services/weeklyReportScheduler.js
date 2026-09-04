@@ -1,16 +1,19 @@
 /**
  * weeklyReportScheduler.js
  * --------------------------
- * Fixed weekly schedule (no per-user config, unlike ping-monitor) — every
- * Wednesday 08:00 server local time, matching how every other scheduler in
- * this codebase runs (no TZ option is set anywhere).
+ * Day/time comes from weekly_report_schedule_config (admin-editable under
+ * Admin -> Weekly Report Admin), defaulting to Wednesday 08:00 server local
+ * time. reload() is called by the controller right after a schedule save so
+ * the new time takes effect immediately, same start/reload shape as
+ * backupScheduler.js.
  */
 let cron;
 try { cron = require('node-cron'); } catch { cron = null; }
 
 const weeklyReportService = require('./weeklyReportService');
+const scheduleSvc = require('./weeklyReportScheduleService');
 
-const CRON_EXPR = '0 8 * * 3'; // minute=0 hour=8 * * Wednesday(3)
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 let task = null;
 
@@ -21,12 +24,15 @@ async function start() {
     return;
   }
   if (task) { try { task.stop(); } catch { /* ignore */ } task = null; }
-  if (!cron.validate(CRON_EXPR)) {
+
+  const cfg = await scheduleSvc.getConfig();
+  const expr = `${cfg.minute} ${cfg.hour} * * ${cfg.day_of_week}`;
+  if (!cron.validate(expr)) {
     // eslint-disable-next-line no-console
-    console.warn(`[weekly-report-scheduler] invalid cron expr: ${CRON_EXPR}`);
+    console.warn(`[weekly-report-scheduler] invalid cron expr: ${expr}`);
     return;
   }
-  task = cron.schedule(CRON_EXPR, async () => {
+  task = cron.schedule(expr, async () => {
     try {
       const snap = await weeklyReportService.generateAndSaveSnapshot();
       // eslint-disable-next-line no-console
@@ -37,7 +43,7 @@ async function start() {
     }
   });
   // eslint-disable-next-line no-console
-  console.log(`[weekly-report-scheduler] scheduled: ${CRON_EXPR} (every Wednesday 08:00)`);
+  console.log(`[weekly-report-scheduler] scheduled: ${expr} (every ${DAY_NAMES[cfg.day_of_week]} ${String(cfg.hour).padStart(2, '0')}:${String(cfg.minute).padStart(2, '0')})`);
 }
 
-module.exports = { start };
+module.exports = { start, reload: start };

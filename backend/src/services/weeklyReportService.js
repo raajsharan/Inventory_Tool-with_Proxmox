@@ -80,6 +80,14 @@ async function listSnapshots() {
   return rows;
 }
 
+async function deleteSnapshot(id) {
+  const { rows } = await db.query(
+    `DELETE FROM weekly_report_snapshots WHERE id = $1 RETURNING id`,
+    [id],
+  );
+  return !!rows[0];
+}
+
 async function getSnapshot(id) {
   const { rows } = await db.query(
     `SELECT id, report_date, sections, generated_by, created_at
@@ -89,4 +97,4 @@ async function getSnapshot(id) {
   return rows[0] || null;
 }
 
-module.exports = { buildCurrentReport, generateAndSaveSnapshot, listSnapshots, getSnapshot };
+module.exports = { buildCurrentReport, generateAndSaveSnapshot, listSnapshots, getSnapshot, deleteSnapshot };
