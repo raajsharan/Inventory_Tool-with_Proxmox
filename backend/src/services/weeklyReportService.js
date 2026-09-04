@@ -10,6 +10,7 @@
 const db = require('../config/db');
 const autoSvc = require('./weeklyReportAutoService');
 const manualSvc = require('./weeklyReportManualService');
+const teamsNotificationService = require('./teamsNotificationService');
 
 // Local calendar date (not UTC — every scheduler in this codebase runs in
 // server local time with no TZ conversion; toISOString() would shift the
@@ -55,6 +56,18 @@ async function generateAndSaveSnapshot(generatedBy = 'scheduler') {
      RETURNING id, report_date, created_at`,
     [report.reportDate, JSON.stringify(report.sections), generatedBy],
   );
+
+  // Single choke point for both the Wednesday scheduler and an admin's
+  // manual "Generate Now" — either way a real snapshot was just produced,
+  // so Teams should hear about it. Never let a bad/unreachable webhook fail
+  // the snapshot that was just successfully saved.
+  try {
+    await teamsNotificationService.notifyWeeklyReport(report);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[weekly-report] Teams webhook notification failed:', e.message);
+  }
+
   return rows[0];
 }
 

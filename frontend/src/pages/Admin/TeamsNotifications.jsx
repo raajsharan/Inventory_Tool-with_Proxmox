@@ -279,6 +279,7 @@ export default function TeamsNotifications() {
           notify_host_down_vmware:  r.data.notify_host_down_vmware ?? true,
           notify_host_down_proxmox: r.data.notify_host_down_proxmox ?? true,
           notify_host_down_hyperv:  r.data.notify_host_down_hyperv ?? true,
+          notify_weekly_report:     r.data.notify_weekly_report ?? true,
           alert_window_enabled: r.data.alert_window_enabled ?? false,
           alert_window_start:   dayjs(r.data.alert_window_start || '00:00', 'HH:mm'),
           alert_window_end:     dayjs(r.data.alert_window_end   || '23:59', 'HH:mm'),
@@ -378,6 +379,10 @@ export default function TeamsNotifications() {
           </Form.Item>
 
           <Form.Item name="notify_migration_status" valuePropName="checked" label="Migration status changed">
+            <Switch />
+          </Form.Item>
+
+          <Form.Item name="notify_weekly_report" valuePropName="checked" label="Weekly Report generated">
             <Switch />
           </Form.Item>
 

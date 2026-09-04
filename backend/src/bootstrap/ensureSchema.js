@@ -766,6 +766,9 @@ const STATEMENTS = [
   // Applies regardless of alert_window_enabled — a day left unchecked here
   // drops connectivity alerts entirely for that day.
   `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS alert_active_days INTEGER[] NOT NULL DEFAULT ARRAY[0,1,2,3,4,5,6]`,
+  // Weekly Report snapshot notification — its own toggle alongside the other
+  // notify_* event flags, sharing this table's single webhook_url/enabled.
+  `ALTER TABLE teams_notification_config ADD COLUMN IF NOT EXISTS notify_weekly_report BOOLEAN NOT NULL DEFAULT TRUE`,
 
   // ── Microsoft Hyper-V discovery ──────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS hyperv_hosts (

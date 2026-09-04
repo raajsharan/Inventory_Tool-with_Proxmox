@@ -55,6 +55,7 @@ const DEFAULTS = {
   notify_host_down_vmware:  true,
   notify_host_down_proxmox: true,
   notify_host_down_hyperv:  true,
+  notify_weekly_report:  true,
   alert_window_enabled:  false,
   alert_window_start:    '00:00',
   alert_window_end:      '23:59',
@@ -80,6 +81,7 @@ async function saveConfig(fields) {
     notify_host_down_vmware  = cfg.notify_host_down_vmware,
     notify_host_down_proxmox = cfg.notify_host_down_proxmox,
     notify_host_down_hyperv  = cfg.notify_host_down_hyperv,
+    notify_weekly_report     = cfg.notify_weekly_report,
     alert_window_enabled     = cfg.alert_window_enabled,
     alert_window_start       = cfg.alert_window_start,
     alert_window_end         = cfg.alert_window_end,
@@ -100,8 +102,9 @@ async function saveConfig(fields) {
         (webhook_url, enabled, notify_new_asset, notify_asset_update,
          notify_decommission, notify_migration_status,
          notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv,
+         notify_weekly_report,
          alert_window_enabled, alert_window_start, alert_window_end, alert_active_days, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
      ON CONFLICT (singleton) DO UPDATE SET
         webhook_url              = EXCLUDED.webhook_url,
         enabled                  = EXCLUDED.enabled,
@@ -112,6 +115,7 @@ async function saveConfig(fields) {
         notify_host_down_vmware  = EXCLUDED.notify_host_down_vmware,
         notify_host_down_proxmox = EXCLUDED.notify_host_down_proxmox,
         notify_host_down_hyperv  = EXCLUDED.notify_host_down_hyperv,
+        notify_weekly_report     = EXCLUDED.notify_weekly_report,
         alert_window_enabled     = EXCLUDED.alert_window_enabled,
         alert_window_start       = EXCLUDED.alert_window_start,
         alert_window_end         = EXCLUDED.alert_window_end,
@@ -120,6 +124,7 @@ async function saveConfig(fields) {
     [webhook_url, enabled, notify_new_asset, notify_asset_update,
      notify_decommission, notify_migration_status,
      notify_host_down_vmware, notify_host_down_proxmox, notify_host_down_hyperv,
+     notify_weekly_report,
      alert_window_enabled, alert_window_start, alert_window_end, alert_active_days],
   );
   return getConfig();
@@ -349,6 +354,38 @@ async function notifyMigrationStatus(vmName, category, newStatus, updatedBy = nu
   await send(card);
 }
 
+// Same four headline figures as the Weekly Report page's own masthead
+// (WeeklyReport/index.jsx reportFigures()) — kept in sync by hand since one
+// feeds a Teams card and the other a React render, not worth sharing code
+// across that boundary for four numbers.
+function weeklyReportFigures(sections) {
+  const byKey = Object.fromEntries((sections || []).map(s => [s.section_key, s.data]));
+  const asset = byKey.asset_inventory;
+  const nessus = byKey.nessus_agent;
+  const patch = byKey.patch_management;
+  const hosts = byKey.migration_project?.hosts || {};
+  const migrationPct = hosts.total_hosts ? Math.round((hosts.fully_migrated / hosts.total_hosts) * 100) : 0;
+  return [
+    { title: 'Asset Inventory',    value: `${asset?.combinedPct ?? 0}%` },
+    { title: 'Nessus Compliance',  value: `${nessus?.compliancePct ?? 0}%` },
+    { title: 'ME Compliance',      value: `${patch?.meCompliance?.combinedPct ?? 0}%` },
+    { title: 'Migration Progress', value: `${migrationPct}%` },
+  ];
+}
+
+async function notifyWeeklyReport(report) {
+  const cfg = await getConfig();
+  if (!cfg.enabled || !cfg.notify_weekly_report || !cfg.webhook_url) return;
+
+  const card = buildCard({
+    subtitle: '📊 Weekly Report',
+    title: `Weekly Report Generated — ${report.reportDate}`,
+    color: 'Accent',
+    facts: weeklyReportFigures(report.sections),
+  });
+  await send(card);
+}
+
 // Platform name (as passed by each scheduler) -> its own config toggle.
 const HOST_DOWN_FLAG_FOR = {
   VMware:    'notify_host_down_vmware',
@@ -527,5 +564,6 @@ module.exports = {
   notifyPingWarning,
   notifyPingCritical,
   notifyPingRecovered,
+  notifyWeeklyReport,
   testNotification,
 };

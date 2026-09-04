@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Card, Col, Row, Select, Typography, Empty, Spin, Table, Tag, Space, Statistic, Button, App,
-  Tabs, Input, Modal, Popconfirm, Progress, Popover, List, theme,
+  Tabs, Input, Modal, Popconfirm, Progress, Popover, List, theme, Switch, Alert,
 } from 'antd';
 import {
   FileTextOutlined, ReloadOutlined, EditOutlined, SaveOutlined, PlusOutlined, DeleteOutlined,
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, DatabaseOutlined, ClusterOutlined, StopOutlined,
+  NotificationOutlined, SendOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -521,6 +523,103 @@ function ManageInputsPanel() {
   );
 }
 
+// ── Teams Notification tab — this app already has one shared Teams webhook
+// (Admin → Teams Notifications: URL, master enable switch, per-event
+// toggles) used for asset changes, migration status, and host connectivity
+// alerts. Rather than a second, separate webhook to configure, this panel
+// just adds the Weekly Report's own on/off toggle to that shared config and
+// surfaces its status here — the actual POST to Teams happens from
+// weeklyReportService.js -> teamsNotificationService.notifyWeeklyReport()
+// whenever a snapshot is generated (scheduled or "Generate Now").
+function WebhookSettingsPanel() {
+  const { message } = App.useApp();
+  const [cfg, setCfg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get('/teams-notification')
+      .then(r => setCfg(r.data))
+      .catch(() => message.error('Failed to load Teams notification settings'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  const toggle = async (notify_weekly_report) => {
+    setCfg(prev => ({ ...prev, notify_weekly_report }));
+    setSaving(true);
+    try {
+      const { data } = await api.put('/teams-notification', { notify_weekly_report });
+      setCfg(data);
+      message.success(notify_weekly_report ? 'Weekly Report notifications enabled' : 'Weekly Report notifications disabled');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save');
+      load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      await api.post('/teams-notification/test', {});
+      message.success('Test notification sent — check the Teams channel');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to send test notification');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Spin /></div>;
+
+  const globallyReady = !!(cfg?.enabled && cfg?.webhook_url);
+
+  return (
+    <Card className="dashcard" style={{ maxWidth: 640 }}>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 20 }}>
+        A Teams notification is posted whenever a Weekly Report snapshot is generated — automatically
+        every Wednesday, and immediately if an admin clicks "Generate Now" — using the webhook already
+        configured for this app's Teams notifications.
+      </Text>
+
+      {!globallyReady && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 20 }}
+          message="Teams notifications aren't fully configured yet"
+          description={
+            <span>
+              {cfg?.webhook_url ? 'Notifications are currently turned off.' : 'No webhook URL is set.'}{' '}
+              Set it up under <Link to="/admin/teams-notifications">Admin → Teams Notifications</Link>,
+              then come back here.
+            </span>
+          }
+        />
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <Switch checked={!!cfg?.notify_weekly_report} loading={saving} onChange={toggle} />
+        <Text>{cfg?.notify_weekly_report ? 'Weekly Report notifications enabled' : 'Weekly Report notifications disabled'}</Text>
+      </div>
+
+      <Space>
+        <Button icon={<SendOutlined />} loading={testing} disabled={!globallyReady} onClick={sendTest}>
+          Send Test Notification
+        </Button>
+        <Link to="/admin/teams-notifications">
+          <Button icon={<SettingOutlined />}>Manage Webhook &amp; Other Alerts</Button>
+        </Link>
+      </Space>
+    </Card>
+  );
+}
+
 function ReportPanel({ report, loading }) {
   if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Spin /></div>;
   if (!report) return <Empty description="No report available" />;
@@ -665,6 +764,11 @@ export default function WeeklyReport() {
         items={[
           { key: 'report', label: 'Report', children: reportTab },
           { key: 'inputs', label: <span><EditOutlined /> Manage Inputs</span>, children: <ManageInputsPanel /> },
+          ...(isAdmin ? [{
+            key: 'webhook',
+            label: <span><NotificationOutlined /> Teams Notification</span>,
+            children: <WebhookSettingsPanel />,
+          }] : []),
         ]}
       />
     </div>
