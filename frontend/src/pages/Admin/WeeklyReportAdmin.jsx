@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Card, Typography, Select, TimePicker, Button, Table, Popconfirm, Space, App, Spin, Tag,
 } from 'antd';
 import {
-  FileTextOutlined, DeleteOutlined, ClockCircleOutlined, SaveOutlined, CheckCircleOutlined,
+  FileTextOutlined, DeleteOutlined, ClockCircleOutlined, SaveOutlined, CheckCircleOutlined, EyeOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
@@ -142,17 +143,22 @@ function SnapshotHistoryCard() {
     {
       title: '',
       key: 'actions',
-      width: 80,
+      width: 110,
       render: (_, row) => (
-        <Popconfirm
-          title="Delete this snapshot?"
-          description="This cannot be undone."
-          okText="Delete"
-          okButtonProps={{ danger: true }}
-          onConfirm={() => remove(row.id)}
-        >
-          <Button size="small" danger icon={<DeleteOutlined />} loading={deletingId === row.id} />
-        </Popconfirm>
+        <Space size={4}>
+          <Link to={`/weekly-report?snapshot=${row.id}`}>
+            <Button size="small" icon={<EyeOutlined />} title="View this snapshot" />
+          </Link>
+          <Popconfirm
+            title="Delete this snapshot?"
+            description="This cannot be undone."
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => remove(row.id)}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} loading={deletingId === row.id} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

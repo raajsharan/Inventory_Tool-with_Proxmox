@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Card, Col, Row, Select, Typography, Empty, Spin, Table, Tag, Space, Statistic, Button, App,
   Tabs, Input, Modal, Popconfirm, Progress, Popover, List, theme, Switch, Alert,
@@ -691,7 +691,13 @@ export default function WeeklyReport() {
   const { message } = App.useApp();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
   const [snapshots, setSnapshots] = useState([]);
-  const [selectedId, setSelectedId] = useState('current');
+  // Supports deep-linking a specific snapshot from Admin -> Weekly Report
+  // Admin's snapshot history ("View" opens /weekly-report?snapshot=<id>).
+  const [searchParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState(() => {
+    const sp = searchParams.get('snapshot');
+    return sp ? Number(sp) : 'current';
+  });
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
