@@ -28,6 +28,7 @@ router.use('/vmware',              require('./vmwareRoutes'));
 router.use('/proxmox',             require('./proxmoxRoutes'));
 router.use('/hyperv',              require('./hypervRoutes'));
 router.use('/user-page-control',   authenticate, require('./userPageAccessRoutes'));
+router.use('/external-link-credentials', authenticate, require('./externalLinkCredentialRoutes'));
 router.use('/roles',               require('./customRolesRoutes'));
 router.use('/software-status',     require('./softwareStatusRoutes'));
 router.use('/nessus-status',       require('./nessusStatusRoutes'));
