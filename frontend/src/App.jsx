@@ -70,6 +70,7 @@ const ServerModels           = lazy(() => import('./pages/Admin/ServerModels.jsx
 const TeamsNotifications     = lazy(() => import('./pages/Admin/TeamsNotifications.jsx'));
 const WeeklyReport           = lazy(() => import('./pages/WeeklyReport/index.jsx'));
 const WeeklyReportAdmin      = lazy(() => import('./pages/Admin/WeeklyReportAdmin.jsx'));
+const ExternalPortal         = lazy(() => import('./pages/ExternalPortal.jsx'));
 
 function RouteFallback() {
   return (
@@ -130,6 +131,7 @@ export default function App() {
             <Route path="/weekly-report"       element={<WeeklyReport />} />
             <Route path="/migration-tracker"  element={<MigrationTracker />} />
             <Route path="/endpoint-central"   element={<EndpointCentral />} />
+            <Route path="/external-portal"    element={<ExternalPortal />} />
 
             <Route path="/admin/users" element={<Users />} />
             <Route path="/admin/dropdowns" element={<Dropdowns />} />

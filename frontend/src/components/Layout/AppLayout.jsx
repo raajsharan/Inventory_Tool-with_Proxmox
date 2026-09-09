@@ -13,7 +13,7 @@ import {
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
   ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
-  CalendarOutlined, AlertOutlined, FileTextOutlined,
+  CalendarOutlined, AlertOutlined, FileTextOutlined, LinkOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -209,7 +209,13 @@ export default function AppLayout() {
     ].filter(Boolean),
   };
 
-  const items = [...mainItems, adminItem].filter(Boolean);
+  // Plain static link — not role-gated, not part of the orderable/renameable
+  // nav system the other items use, just a fixed shortcut to another system.
+  const externalPortalItem = {
+    key: '/external-portal', icon: <LinkOutlined />, label: <Link to="/external-portal">External Portal</Link>,
+  };
+
+  const items = [...mainItems, externalPortalItem, adminItem].filter(Boolean);
   const rootSubmenuKeys = items.filter(i => i?.children).map(i => i.key);
 
   function onMenuOpenChange(keys) {
