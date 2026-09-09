@@ -394,7 +394,7 @@ function ReportTable({ sections }) {
       dataSource={sections}
       pagination={false}
       bordered
-      scroll={{ x: 'max-content' }}
+      tableLayout="fixed"
       onRow={(_, index) => ({
         style: { animation: 'dashcard-fadein 0.4s cubic-bezier(0.22,1,0.36,1) both', animationDelay: `${Math.min(index, 14) * 40}ms` },
       })}
