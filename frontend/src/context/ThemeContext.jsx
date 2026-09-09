@@ -11,7 +11,7 @@ const DEFAULT_FONT_PX = 14;
 // of the app instead of stopping at the login screen. "Plus Jakarta Sans"
 // replaces "Inter", which was never actually loaded (no @font-face/import
 // for it) and was silently falling back to the system font stack.
-const BASE_TOKEN = {
+export const BASE_TOKEN = {
   colorPrimary: '#2F6FED',
   colorInfo: '#2F6FED',
   colorLink: '#2F6FED',
@@ -28,7 +28,7 @@ const BASE_TOKEN = {
   boxShadowSecondary: '0 6px 16px 0 rgba(11,21,48,0.08)',
 };
 
-const LIGHT_COMPONENTS = {
+export const LIGHT_COMPONENTS = {
   Layout: { headerBg: '#ffffff', siderBg: '#0B1530', triggerBg: '#0A122A' },
   Menu:   { darkItemBg: '#0B1530', darkSubMenuItemBg: '#0A122A', darkItemSelectedBg: '#2F6FED' },
 };

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Form, Input, Button, Alert } from 'antd';
+import { Form, Input, Button, Alert, ConfigProvider, theme as antdTheme } from 'antd';
 import { LockOutlined, MailOutlined, ClusterOutlined } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext.jsx';
+import { BASE_TOKEN, LIGHT_COMPONENTS } from '../context/ThemeContext.jsx';
 
 /**
  * Living network topology background — drifting glowing nodes, links between
@@ -161,7 +162,13 @@ export default function Login() {
   const words = toolName.trim().split(' ');
   const last  = words.pop();
 
+  // The card is a fixed light surface with its own dark hero backdrop — it
+  // doesn't have a theme toggle of its own, so it shouldn't inherit a
+  // dark-mode preference left over from a previous session (that flipped
+  // every antd input/label to a light-on-dark palette, unreadable on this
+  // always-light card).
   return (
+    <ConfigProvider theme={{ algorithm: antdTheme.defaultAlgorithm, token: BASE_TOKEN, components: LIGHT_COMPONENTS }}>
     <div className="login-stage">
       <canvas ref={canvasRef} className="login-canvas" aria-hidden="true" />
       <div className="login-stage-inner">
@@ -225,5 +232,6 @@ export default function Login() {
         </div>
       </div>
     </div>
+    </ConfigProvider>
   );
 }

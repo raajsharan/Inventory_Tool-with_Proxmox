@@ -781,6 +781,10 @@ body[data-theme="dark"] canvas + div .g2-tooltip-list-item-value { color: #f1f5f
   color: var(--ink-900);
   margin: 0 0 4px;
 }
+/* The card stays a fixed light surface even when a previous session left
+   dark mode on — win back the title's color from the global
+   body[data-theme="dark"] h1..h6 rule, which otherwise washes it out. */
+body[data-theme="dark"] .login-form-title { color: var(--ink-900); }
 .login-form-sub {
   color: var(--slate);
   font-size: 13px;
