@@ -41,18 +41,6 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_user_page_access_user ON user_page_access(user_id)`,
   `ALTER TABLE page_access ALTER COLUMN role TYPE VARCHAR(64)`,
 
-  // ── per-user saved logins for external-link nav pages (DCIM-IPAM Link,
-  // ME Deploy Link, etc.) — each user stores their own credentials for a
-  // given link_key; password_encrypted is AES-256-GCM via utils/crypto.js.
-  `CREATE TABLE IF NOT EXISTS external_link_credentials (
-      user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      link_key            VARCHAR(64) NOT NULL,
-      username            VARCHAR(255) NOT NULL DEFAULT '',
-      password_encrypted  TEXT NOT NULL DEFAULT '',
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (user_id, link_key)
-   )`,
-
   // ── Proxmox discovery: MAC addresses (proxmox_schema.sql predates this column)
   `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS macs TEXT[]`,
 

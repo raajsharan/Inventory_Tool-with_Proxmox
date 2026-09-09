@@ -131,8 +131,8 @@ export default function App() {
             <Route path="/weekly-report"       element={<WeeklyReport />} />
             <Route path="/migration-tracker"  element={<MigrationTracker />} />
             <Route path="/endpoint-central"   element={<EndpointCentral />} />
-            <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" linkKey="external-portal" />} />
-            <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://192.168.180.207:5000/login" linkKey="me-deploy-link" />} />
+            <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
+            <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://192.168.180.207:5000/login" />} />
 
             <Route path="/admin/users" element={<Users />} />
             <Route path="/admin/dropdowns" element={<Dropdowns />} />
