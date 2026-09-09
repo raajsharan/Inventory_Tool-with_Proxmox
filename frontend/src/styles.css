@@ -860,6 +860,12 @@ body[data-theme="dark"] .wr-editor .ql-editor.ql-blank::before { color: rgba(255
 body[data-theme="dark"] .wr-editor .ql-snow .ql-stroke { stroke: rgba(255,255,255,0.65); }
 body[data-theme="dark"] .wr-editor .ql-snow .ql-picker { color: rgba(255,255,255,0.65); }
 
+/* Report tab — renders the same formatting saved in Manage Inputs. */
+.wr-report-content p { margin: 0 0 8px; }
+.wr-report-content p:last-child { margin-bottom: 0; }
+.wr-report-content ul, .wr-report-content ol { margin: 0 0 8px; padding-left: 22px; }
+.wr-report-content ul:last-child, .wr-report-content ol:last-child { margin-bottom: 0; }
+
 /* ════════════════════════════════════════════════════════════════════
    Weekly Report — document masthead + figures. The tab reads as a formal
    ops report: eyebrow, week stamp, four compliance figures set large.

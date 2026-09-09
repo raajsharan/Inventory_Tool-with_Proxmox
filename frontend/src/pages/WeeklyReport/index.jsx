@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
@@ -50,18 +51,16 @@ function isQuillEmpty(html) {
   return !html || html.replace(/<(.|\n)*?>/g, '').trim() === '';
 }
 
-// The read-only Report tab shows manual content as plain text — strip the
-// editor's formatting back down, keeping paragraph breaks and turning list
-// items into "- " lines so structure still comes through.
-function htmlToPlainText(html) {
-  if (!html) return '';
-  if (!isHtmlContent(html)) return html;
-  const container = document.createElement('div');
-  container.innerHTML = html;
-  container.querySelectorAll('li').forEach(li => li.prepend('- '));
-  container.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-  container.querySelectorAll('p, li, div').forEach(el => el.append('\n'));
-  return (container.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+// The Report tab renders the same formatting saved in Manage Inputs — sanitize
+// before injecting since section content is arbitrary HTML from the editor
+// (or, in principle, a direct API call), scoped to the formats the toolbar
+// actually offers.
+const SANITIZE_OPTS = {
+  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li'],
+  ALLOWED_ATTR: [],
+};
+function sanitizeSectionHtml(html) {
+  return DOMPurify.sanitize(plainTextToHtml(html), SANITIZE_OPTS);
 }
 
 function AssetInventorySection({ data }) {
@@ -353,10 +352,15 @@ const AUTO_RENDERERS = {
 function SectionContent({ section }) {
   const Renderer = section.kind === 'auto' ? AUTO_RENDERERS[section.section_key] : null;
   if (Renderer) return <Renderer data={section.data} />;
-  const plain = htmlToPlainText(section.data?.content);
-  return plain
-    ? <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{plain}</div>
-    : <Text type="secondary" italic>No content yet.</Text>;
+  const content = section.data?.content;
+  if (isQuillEmpty(content)) return <Text type="secondary" italic>No content yet.</Text>;
+  return (
+    <div
+      className="wr-report-content"
+      style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+      dangerouslySetInnerHTML={{ __html: sanitizeSectionHtml(content) }}
+    />
+  );
 }
 
 // ── The report itself: one row per section (Sl. No / Section / Content),
