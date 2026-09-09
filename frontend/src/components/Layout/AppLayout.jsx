@@ -212,7 +212,7 @@ export default function AppLayout() {
   // Plain static link — not role-gated, not part of the orderable/renameable
   // nav system the other items use, just a fixed shortcut to another system.
   const externalPortalItem = {
-    key: '/external-portal', icon: <LinkOutlined />, label: <Link to="/external-portal">External Portal</Link>,
+    key: '/external-portal', icon: <LinkOutlined />, label: <Link to="/external-portal">DCIM-IPAM Link</Link>,
   };
 
   const items = [...mainItems, externalPortalItem, adminItem].filter(Boolean);

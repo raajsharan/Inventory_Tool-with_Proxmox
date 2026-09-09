@@ -12,7 +12,7 @@ export default function ExternalPortal() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Title level={4} style={{ margin: 0 }}>
             <GlobalOutlined style={{ marginRight: 8 }} />
-            External Portal
+            DCIM-IPAM Link
           </Title>
           <Tooltip title="If the page below stays blank, the site is refusing to be embedded — use “Open in new tab” instead.">
             <InfoCircleOutlined style={{ color: '#8c8c8c', fontSize: 15 }} />
@@ -24,7 +24,7 @@ export default function ExternalPortal() {
       </div>
 
       <iframe
-        title="External Portal"
+        title="DCIM-IPAM Link"
         src={EXTERNAL_URL}
         style={{ flex: 1, width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff' }}
       />
