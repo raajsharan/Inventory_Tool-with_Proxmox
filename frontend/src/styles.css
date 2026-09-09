@@ -819,6 +819,48 @@ body[data-theme="dark"] canvas + div .g2-tooltip-list-item-value { color: #f1f5f
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   Weekly Report — Manage Inputs rich text editor (react-quill). Height is
+   capped and scrolls once full instead of growing without bound, and long
+   unbroken runs of text (a URL, a hash) wrap inside the box instead of
+   stretching it. ════════════════════════════════════════════════════ */
+.wr-editor .ql-toolbar.ql-snow {
+  border-color: var(--line);
+  border-radius: 8px 8px 0 0;
+  background: #fafafa;
+}
+.wr-editor .ql-container.ql-snow {
+  border-color: var(--line);
+  border-radius: 0 0 8px 8px;
+  font-family: inherit;
+}
+.wr-editor .ql-editor {
+  min-height: 110px;
+  max-height: 420px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.wr-editor--compact .ql-editor {
+  min-height: 70px;
+  max-height: 260px;
+}
+.wr-editor .ql-editor.ql-blank::before {
+  font-style: normal;
+  color: #999;
+}
+body[data-theme="dark"] .wr-editor .ql-toolbar.ql-snow,
+body[data-theme="dark"] .wr-editor .ql-container.ql-snow {
+  border-color: #303030;
+}
+body[data-theme="dark"] .wr-editor .ql-toolbar.ql-snow { background: #1c1c1c; }
+body[data-theme="dark"] .wr-editor .ql-editor { color: rgba(255,255,255,0.85); }
+body[data-theme="dark"] .wr-editor .ql-editor.ql-blank::before { color: rgba(255,255,255,0.45); }
+body[data-theme="dark"] .wr-editor .ql-snow .ql-stroke { stroke: rgba(255,255,255,0.65); }
+body[data-theme="dark"] .wr-editor .ql-snow .ql-picker { color: rgba(255,255,255,0.65); }
+
+/* ════════════════════════════════════════════════════════════════════
    Weekly Report — document masthead + figures. The tab reads as a formal
    ops report: eyebrow, week stamp, four compliance figures set large.
    ════════════════════════════════════════════════════════════════════ */

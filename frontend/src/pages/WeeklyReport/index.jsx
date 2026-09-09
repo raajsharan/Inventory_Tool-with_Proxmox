@@ -9,14 +9,59 @@ import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, DatabaseOutlined, ClusterOutlined, StopOutlined,
   NotificationOutlined, SendOutlined, SettingOutlined,
 } from '@ant-design/icons';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const { Title, Text, Paragraph } = Typography;
 
+const QUILL_MODULES = {
+  toolbar: [
+    ['bold', 'italic', 'underline'],
+    [{ list: 'bullet' }, { list: 'ordered' }],
+    ['clean'],
+  ],
+};
+const QUILL_FORMATS = ['bold', 'italic', 'underline', 'list'];
+
 function pctText(n, d, p) {
   return `${(n ?? 0).toLocaleString()} / ${(d ?? 0).toLocaleString()} = ${p ?? 0}%`;
+}
+
+function isHtmlContent(content) {
+  return /<\/?[a-z][\s\S]*>/i.test(content || '');
+}
+
+// Sections saved before the rich text editor was added hold plain text
+// (rendered with white-space: pre-wrap) — wrap each line in its own <p> so
+// Quill preserves the original line breaks instead of collapsing them.
+function plainTextToHtml(content) {
+  if (!content) return '';
+  if (isHtmlContent(content)) return content;
+  return content
+    .split('\n')
+    .map(line => `<p>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '<br>'}</p>`)
+    .join('');
+}
+
+function isQuillEmpty(html) {
+  return !html || html.replace(/<(.|\n)*?>/g, '').trim() === '';
+}
+
+// The read-only Report tab shows manual content as plain text — strip the
+// editor's formatting back down, keeping paragraph breaks and turning list
+// items into "- " lines so structure still comes through.
+function htmlToPlainText(html) {
+  if (!html) return '';
+  if (!isHtmlContent(html)) return html;
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  container.querySelectorAll('li').forEach(li => li.prepend('- '));
+  container.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  container.querySelectorAll('p, li, div').forEach(el => el.append('\n'));
+  return (container.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function AssetInventorySection({ data }) {
@@ -308,8 +353,9 @@ const AUTO_RENDERERS = {
 function SectionContent({ section }) {
   const Renderer = section.kind === 'auto' ? AUTO_RENDERERS[section.section_key] : null;
   if (Renderer) return <Renderer data={section.data} />;
-  return section.data?.content
-    ? <div style={{ whiteSpace: 'pre-wrap' }}>{section.data.content}</div>
+  const plain = htmlToPlainText(section.data?.content);
+  return plain
+    ? <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{plain}</div>
     : <Text type="secondary" italic>No content yet.</Text>;
 }
 
@@ -362,14 +408,15 @@ function ReportTable({ sections }) {
 // else on the Weekly Report.
 function SectionEditor({ section, index, onSaved, onDeleted }) {
   const { message } = App.useApp();
-  const [value, setValue] = useState(section.content || '');
+  const [value, setValue] = useState(() => plainTextToHtml(section.content || ''));
   const [saving, setSaving] = useState(false);
-  const dirty = value !== (section.content || '');
+  const dirty = value !== plainTextToHtml(section.content || '');
 
   const save = async () => {
     setSaving(true);
     try {
-      const { data } = await api.put(`/weekly-report/manual-sections/${section.section_key}`, { content: value });
+      const content = isQuillEmpty(value) ? '' : value;
+      const { data } = await api.put(`/weekly-report/manual-sections/${section.section_key}`, { content });
       message.success(`"${section.title}" saved`);
       onSaved(data);
     } catch (e) {
@@ -409,12 +456,16 @@ function SectionEditor({ section, index, onSaved, onDeleted }) {
         </Space>
       }
     >
-      <Input.TextArea
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        autoSize={{ minRows: 4, maxRows: 20 }}
-        placeholder="Type this section's content — bullet lines, notes, links, or a small table typed as plain text."
-      />
+      <div className="wr-editor">
+        <ReactQuill
+          theme="snow"
+          value={value}
+          onChange={setValue}
+          modules={QUILL_MODULES}
+          formats={QUILL_FORMATS}
+          placeholder="Type this section's content — bullet lines, notes, links, or a small table typed as plain text."
+        />
+      </div>
       <Space style={{ marginTop: 12 }}>
         <Button type="primary" icon={<SaveOutlined />} loading={saving} disabled={!dirty} onClick={save}>
           Save
@@ -434,7 +485,7 @@ function AddSectionModal({ open, onClose, onCreated }) {
     if (!title.trim()) { message.error('Title is required'); return; }
     setSaving(true);
     try {
-      const { data } = await api.post('/weekly-report/manual-sections', { title: title.trim(), content });
+      const { data } = await api.post('/weekly-report/manual-sections', { title: title.trim(), content: isQuillEmpty(content) ? '' : content });
       message.success(`"${data.title}" added`);
       onCreated(data);
       setTitle('');
@@ -464,7 +515,9 @@ function AddSectionModal({ open, onClose, onCreated }) {
         </div>
         <div>
           <Text strong style={{ display: 'block', marginBottom: 4 }}>Content (optional — can be filled in later)</Text>
-          <Input.TextArea value={content} onChange={e => setContent(e.target.value)} autoSize={{ minRows: 3, maxRows: 10 }} />
+          <div className="wr-editor wr-editor--compact">
+            <ReactQuill theme="snow" value={content} onChange={setContent} modules={QUILL_MODULES} formats={QUILL_FORMATS} />
+          </div>
         </div>
       </Space>
     </Modal>
