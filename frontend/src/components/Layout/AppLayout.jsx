@@ -209,13 +209,14 @@ export default function AppLayout() {
     ].filter(Boolean),
   };
 
-  // Plain static link — not role-gated, not part of the orderable/renameable
-  // nav system the other items use, just a fixed shortcut to another system.
-  const externalPortalItem = {
-    key: '/external-portal', icon: <LinkOutlined />, label: <Link to="/external-portal">DCIM-IPAM Link</Link>,
-  };
+  // Plain static links — not role-gated, not part of the orderable/renameable
+  // nav system the other items use, just fixed shortcuts to other systems.
+  const externalLinkItems = [
+    { key: '/external-portal', icon: <LinkOutlined />, label: <Link to="/external-portal">DCIM-IPAM Link</Link> },
+    { key: '/me-deploy-link',  icon: <LinkOutlined />, label: <Link to="/me-deploy-link">ME Deploy Link</Link> },
+  ];
 
-  const items = [...mainItems, externalPortalItem, adminItem].filter(Boolean);
+  const items = [...mainItems, ...externalLinkItems, adminItem].filter(Boolean);
   const rootSubmenuKeys = items.filter(i => i?.children).map(i => i.key);
 
   function onMenuOpenChange(keys) {

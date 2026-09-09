@@ -70,7 +70,7 @@ const ServerModels           = lazy(() => import('./pages/Admin/ServerModels.jsx
 const TeamsNotifications     = lazy(() => import('./pages/Admin/TeamsNotifications.jsx'));
 const WeeklyReport           = lazy(() => import('./pages/WeeklyReport/index.jsx'));
 const WeeklyReportAdmin      = lazy(() => import('./pages/Admin/WeeklyReportAdmin.jsx'));
-const ExternalPortal         = lazy(() => import('./pages/ExternalPortal.jsx'));
+const ExternalLinkPage       = lazy(() => import('./pages/ExternalLinkPage.jsx'));
 
 function RouteFallback() {
   return (
@@ -131,7 +131,8 @@ export default function App() {
             <Route path="/weekly-report"       element={<WeeklyReport />} />
             <Route path="/migration-tracker"  element={<MigrationTracker />} />
             <Route path="/endpoint-central"   element={<EndpointCentral />} />
-            <Route path="/external-portal"    element={<ExternalPortal />} />
+            <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
+            <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local:5000/login" />} />
 
             <Route path="/admin/users" element={<Users />} />
             <Route path="/admin/dropdowns" element={<Dropdowns />} />
