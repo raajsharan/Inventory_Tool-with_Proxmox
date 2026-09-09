@@ -430,7 +430,10 @@ async function overview(projectId = null) {
     vmSummary('migration_standalone_esxi', projectId),
   ]);
   const totalVMs = (bomgar.total || 0) + (security.total || 0) + (standalone.total || 0);
-  const migrated = (bomgar.migrated || 0) + (security.migrated || 0) + (standalone.migrated || 0);
+  // Cleaned-up VMs count toward completion too — matches the per-source
+  // progress bars, which already fold cleaned_up into their percent.
+  const migrated = (bomgar.migrated || 0) + (security.migrated || 0) + (standalone.migrated || 0)
+    + (bomgar.cleaned_up || 0) + (security.cleaned_up || 0) + (standalone.cleaned_up || 0);
   return { hosts, bomgar, security, standalone, totalVMs, migrated, remaining: Math.max(0, totalVMs - migrated) };
 }
 
