@@ -97,11 +97,19 @@ export default function TestDeployConfig() {
               { value: DEFAULT_SCOPE, label: 'Default (all locations)' },
               ...locations.map(l => ({
                 value: l.location,
-                label: <Space size={6}>{l.location}<Tag color="blue" style={{ margin: 0, fontSize: 10 }}>custom</Tag></Space>,
+                label: (
+                  <Space size={6}>
+                    {l.location}
+                    {l.has_override && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>custom</Tag>}
+                  </Space>
+                ),
               })),
             ]}
           />
-          {isLocationScope && locations.some(l => l.location === scope) && (
+          {isLocationScope && !locations.find(l => l.location === scope)?.has_override && (
+            <Tag color="default">no custom config yet — saves as new</Tag>
+          )}
+          {isLocationScope && locations.find(l => l.location === scope)?.has_override && (
             <Button size="small" danger icon={<DeleteOutlined />} onClick={removeOverride}>Remove override</Button>
           )}
         </Space>

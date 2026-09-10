@@ -54,9 +54,24 @@ async function getMergedConfig(location) {
   return mergeLocationConfig(globalCfg, locCfg);
 }
 
+// Every distinct asset location (so an admin can add a config for one that
+// doesn't have an override yet), flagged with which ones already do —
+// mirrors Software Status's own install-config/locations endpoint.
 async function listLocations() {
-  const { rows } = await db.query(`SELECT location, updated_at FROM test_deploy_location_config ORDER BY location`);
-  return rows;
+  const [assetLocs, overrides] = await Promise.all([
+    db.query(`
+      SELECT DISTINCT TRIM(location) AS location FROM (
+        SELECT location FROM assets                WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT location FROM beijing_assets        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT location FROM ext_assets            WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT location FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+      ) _l WHERE NULLIF(TRIM(location), '') IS NOT NULL
+    `),
+    db.query(`SELECT location FROM test_deploy_location_config`),
+  ]);
+  const overrideSet = new Set(overrides.rows.map(r => r.location));
+  const all = new Set([...assetLocs.rows.map(r => r.location), ...overrideSet]);
+  return [...all].sort().map(location => ({ location, has_override: overrideSet.has(location) }));
 }
 
 // NULL/empty override fields inherit the default — same merge rule Software
