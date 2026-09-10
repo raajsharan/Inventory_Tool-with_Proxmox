@@ -116,8 +116,18 @@ export default function TestDeployConfig() {
         <Row gutter={24}>
           <Col xs={24} xl={12}>
             <Card title={<Space><WindowsOutlined style={{ color: '#1677ff' }} /><Text strong>Windows</Text></Space>} style={{ marginBottom: 16 }}>
-              <Form.Item name="windows_share_path" label="Installer share path (UNC)">
-                <Input placeholder="\\fileserver\me-agents\windows" style={{ fontFamily: 'monospace' }} />
+              <Form.Item
+                name="windows_share_path"
+                label={
+                  <Space>
+                    Installer share path (UNC)
+                    <Tooltip title="Point this at the source server's admin share (e.g. \\fileserver\C$\...). The target re-authenticates to it with its own asset-record credentials, working around WinRM's double-hop limitation — see me_agent_deploy.yml.">
+                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <Input placeholder="\\fileserver\C$\me-agents\windows" style={{ fontFamily: 'monospace' }} />
               </Form.Item>
               <Form.Item name="windows_installer_file" label="Installer filename">
                 <Input placeholder="ME_UEMS_Agent.exe" style={{ fontFamily: 'monospace' }} />

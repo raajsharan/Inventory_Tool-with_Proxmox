@@ -19,6 +19,9 @@ Prerequisites this doesn't and can't set up for you:
 - Fill in the real silent-install command for the ME Agent installer in
   the Test Deploy Config admin page (Windows/Linux, default + per-location)
   — `me_agent_deploy.yml` ships with a placeholder switch until then.
-- If Copy-Item from the network share fails with Access Denied on Windows
-  targets even with correct credentials, see the "double hop" note at the
-  top of `me_agent_deploy.yml`.
+- Windows share paths should point at the source server's **admin share**
+  (e.g. `\\fileserver\C$\me-agents\windows`). The target re-authenticates
+  to it with its own asset-record credentials before copying (see
+  `me_agent_deploy.yml`) — this is the double-hop workaround, and it means
+  that account needs admin rights on the source file server too, not just
+  on the target itself.
