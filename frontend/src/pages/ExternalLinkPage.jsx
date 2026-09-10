@@ -1,9 +1,15 @@
-import { Typography, Button, Tooltip } from 'antd';
+import { Typography, Button, Tooltip, Result } from 'antd';
 import { GlobalOutlined, ExportOutlined, InfoCircleOutlined } from '@ant-design/icons';
 
 const { Title } = Typography;
 
-export default function ExternalLinkPage({ title, url }) {
+// Signing in inside the iframe silently fails for a plain-http target: its
+// session cookie can only be SameSite=Lax/Strict (SameSite=None requires
+// Secure, which requires HTTPS), and browsers block that cookie in a
+// cross-site iframe. There's no code-side fix for that — the page has to
+// actually navigate there for login to work, so `embeddable: false` skips
+// the iframe and leads with the one path that does.
+export default function ExternalLinkPage({ title, url, embeddable = true }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 104px)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
@@ -12,20 +18,36 @@ export default function ExternalLinkPage({ title, url }) {
             <GlobalOutlined style={{ marginRight: 8 }} />
             {title}
           </Title>
-          <Tooltip title="If the page below stays blank, the site is refusing to be embedded — use “Open in new tab” instead.">
-            <InfoCircleOutlined style={{ color: '#8c8c8c', fontSize: 15 }} />
-          </Tooltip>
+          {embeddable && (
+            <Tooltip title="If the page below stays blank, the site is refusing to be embedded — use “Open in new tab” instead.">
+              <InfoCircleOutlined style={{ color: '#8c8c8c', fontSize: 15 }} />
+            </Tooltip>
+          )}
         </div>
         <Button icon={<ExportOutlined />} href={url} target="_blank" rel="noreferrer">
           Open in new tab
         </Button>
       </div>
 
-      <iframe
-        title={title}
-        src={url}
-        style={{ flex: 1, width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff' }}
-      />
+      {embeddable ? (
+        <iframe
+          title={title}
+          src={url}
+          style={{ flex: 1, width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff' }}
+        />
+      ) : (
+        <Result
+          icon={<GlobalOutlined />}
+          title="Sign-in has to happen in its own tab"
+          subTitle="This site's login only works on a real page load — embedded here, the browser blocks its session cookie and sign-in silently fails."
+          extra={
+            <Button type="primary" size="large" icon={<ExportOutlined />} href={url} target="_blank" rel="noreferrer">
+              Open {title}
+            </Button>
+          }
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff' }}
+        />
+      )}
     </div>
   );
 }
