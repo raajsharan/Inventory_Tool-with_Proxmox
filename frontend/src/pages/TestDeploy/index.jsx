@@ -228,7 +228,7 @@ export default function TestDeploy() {
           </Tooltip>
         </Space>
       ),
-      width: 420,
+      width: 210,
       render: (_, vm) => {
         const vs = verifyMap[vmKey(vm)] || { state: 'idle' };
         const r  = vs.result;
@@ -238,31 +238,39 @@ export default function TestDeploy() {
           const transferOk = r.connected && r.success;
           const agent      = r.agent;
           const sm         = agent?.connected ? (SVC_META[agent.service?.status] || SVC_META.unknown) : null;
+          const items = [
+            {
+              ok: pingOk, label: pingOk ? 'Ping OK' : 'No ping',
+              title: pingOk ? `Reachable${r.ping.time_ms != null ? ` · ${r.ping.time_ms} ms` : ''}` : 'No ping response',
+            },
+            {
+              ok: !!r.hostInfo, label: r.hostInfo ? r.hostInfo.split('::')[0] : 'OS unknown',
+              title: r.hostInfo || 'Could not determine OS/version',
+            },
+            {
+              ok: !!sm, label: sm ? `Agent: ${sm.label}` : 'Agent check failed',
+              title: agent?.connected ? `Service: ${sm.label}` : (agent?.error || 'Could not check the agent'),
+            },
+            {
+              ok: transferOk, label: transferOk ? 'Transfer OK' : 'Transfer failed',
+              title: r.error || (transferOk ? 'File transfer succeeded' : 'File transfer failed'),
+            },
+          ];
           return (
-            <Space wrap size={4}>
-              <Tooltip title={pingOk ? `Reachable${r.ping.time_ms != null ? ` · ${r.ping.time_ms} ms` : ''}` : 'No ping response'}>
-                <Tag color={pingOk ? 'success' : 'error'} icon={pingOk ? <CheckCircleFilled /> : <ExclamationCircleFilled />}>
-                  {pingOk ? 'Ping OK' : 'No ping'}
-                </Tag>
-              </Tooltip>
-              <Tooltip title={r.hostInfo || 'Could not determine OS/version'}>
-                <Tag color={r.hostInfo ? 'blue' : 'default'} icon={r.hostInfo ? <CheckCircleFilled /> : <QuestionCircleOutlined />}>
-                  {r.hostInfo ? r.hostInfo.split('::')[0] : 'OS unknown'}
-                </Tag>
-              </Tooltip>
-              <Tooltip title={agent?.connected ? `Service: ${sm.label}` : (agent?.error || 'Could not check the agent')}>
-                <Tag color={sm ? sm.color : 'warning'} icon={sm ? sm.icon : <ExclamationCircleFilled />}>
-                  {sm ? `Agent: ${sm.label}` : 'Agent check failed'}
-                </Tag>
-              </Tooltip>
-              <Tooltip title={r.error || (transferOk ? 'File transfer succeeded' : 'File transfer failed')}>
-                <Tag color={transferOk ? 'success' : 'error'} icon={transferOk ? <CheckCircleFilled /> : <ExclamationCircleFilled />}>
-                  {transferOk ? 'Transfer OK' : 'Transfer failed'}
-                </Tag>
-              </Tooltip>
-              <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setVerifyDetail({ open: true, vm, result: r })}>Details</Button>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => runVerify(vm)} />
-            </Space>
+            <div>
+              {items.map(it => (
+                <Tooltip key={it.label} title={it.title} placement="left">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, lineHeight: '20px' }}>
+                    {it.ok ? <CheckCircleFilled style={{ color: '#52c41a', fontSize: 12 }} /> : <ExclamationCircleFilled style={{ color: '#ff4d4f', fontSize: 12 }} />}
+                    <span>{it.label}</span>
+                  </div>
+                </Tooltip>
+              ))}
+              <Space size={4} style={{ marginTop: 4 }}>
+                <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setVerifyDetail({ open: true, vm, result: r })}>Details</Button>
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => runVerify(vm)} />
+              </Space>
+            </div>
           );
         }
         return <Button size="small" icon={<ThunderboltOutlined />} onClick={() => runVerify(vm)}>Verify</Button>;
@@ -433,7 +441,7 @@ export default function TestDeploy() {
             <Table
               rowKey={vmKey} dataSource={r.vms} columns={vmColumns}
               pagination={r.vms.length > 50 ? { pageSize: 50, size: 'small' } : false}
-              size="small" style={{ margin: '0 0 8px 0' }} scroll={{ x: 'max-content' }}
+              size="small" style={{ margin: '0 0 8px 0' }} tableLayout="fixed"
               rowClassName={v => !v.me_installed ? 'row-warning' : ''}
             />
           ),
