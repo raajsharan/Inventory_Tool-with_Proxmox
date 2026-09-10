@@ -9,6 +9,20 @@ pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 ```
 
+Also install `sshpass` via the OS package manager (not pip) — Ansible's
+`ssh` connection plugin (used for Linux targets) requires it whenever
+authenticating with a password instead of a key, which is what Test
+Deploy always does (the asset record's stored password):
+
+```
+sudo apt-get install -y sshpass   # Debian/Ubuntu
+sudo yum install -y sshpass       # RHEL/CentOS
+sudo dnf install -y sshpass       # Fedora
+```
+
+Without it, Linux targets fail immediately with: `to use the 'ssh'
+connection type with passwords ..., you must install the sshpass program`.
+
 Then confirm `ansible-playbook` is on the `PATH` the Node backend process
 runs with (`ansible-playbook --version`).
 
