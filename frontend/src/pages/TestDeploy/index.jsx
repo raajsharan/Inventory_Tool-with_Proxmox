@@ -197,23 +197,34 @@ export default function TestDeploy() {
       title: (
         <Space>
           Verify
-          <Tooltip title="Proves the installer copy from the network share will succeed, without installing anything">
+          <Tooltip title="Checks ping, host OS/version, and whether the installer copy from the network share will succeed — without installing anything">
             <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
           </Tooltip>
         </Space>
       ),
-      width: 200,
+      width: 340,
       render: (_, vm) => {
         const vs = verifyMap[vmKey(vm)] || { state: 'idle' };
         const r  = vs.result;
         if (vs.state === 'loading') return <Spin size="small" />;
         if (vs.state === 'done' && r) {
-          const ok = r.connected && r.success;
+          const pingOk    = !!r.ping?.reachable;
+          const transferOk = r.connected && r.success;
           return (
             <Space wrap size={4}>
-              <Tooltip title={r.error || (ok ? 'File transfer succeeded' : 'File transfer failed')}>
-                <Tag color={ok ? 'success' : 'error'} icon={ok ? <CheckCircleFilled /> : <ExclamationCircleFilled />}>
-                  {ok ? 'Transfer OK' : 'Transfer failed'}
+              <Tooltip title={pingOk ? `Reachable${r.ping.time_ms != null ? ` · ${r.ping.time_ms} ms` : ''}` : 'No ping response'}>
+                <Tag color={pingOk ? 'success' : 'error'} icon={pingOk ? <CheckCircleFilled /> : <ExclamationCircleFilled />}>
+                  {pingOk ? 'Ping OK' : 'No ping'}
+                </Tag>
+              </Tooltip>
+              <Tooltip title={r.hostInfo || 'Could not determine OS/version'}>
+                <Tag color={r.hostInfo ? 'blue' : 'default'} icon={r.hostInfo ? <CheckCircleFilled /> : <QuestionCircleOutlined />}>
+                  {r.hostInfo ? r.hostInfo.split('::')[0] : 'OS unknown'}
+                </Tag>
+              </Tooltip>
+              <Tooltip title={r.error || (transferOk ? 'File transfer succeeded' : 'File transfer failed')}>
+                <Tag color={transferOk ? 'success' : 'error'} icon={transferOk ? <CheckCircleFilled /> : <ExclamationCircleFilled />}>
+                  {transferOk ? 'Transfer OK' : 'Transfer failed'}
                 </Tag>
               </Tooltip>
               <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setVerifyDetail({ open: true, vm, result: r })}>Details</Button>
@@ -411,7 +422,7 @@ export default function TestDeploy() {
         ]}
         width={680} destroyOnClose
       >
-        {verifyDetail.result && <RunOutputDetail result={verifyDetail.result} />}
+        {verifyDetail.result && <VerifyResultDetail result={verifyDetail.result} />}
       </Modal>
 
       <Modal
@@ -434,6 +445,55 @@ export default function TestDeploy() {
         body[data-theme="dark"] .row-warning:hover td { background: rgba(255,77,79,0.22) !important; }
       `}</style>
     </div>
+  );
+}
+
+// Three independent checks, each its own success/failure — a failed ping
+// or an undetermined OS never hides the others.
+function VerifyResultDetail({ result }) {
+  const pingOk     = !!result.ping?.reachable;
+  const hasHostInfo = !!result.hostInfo;
+  const transferOk  = result.connected && result.success;
+
+  const rows = [
+    {
+      label: 'Ping', ok: pingOk,
+      detail: pingOk ? `Reachable${result.ping.time_ms != null ? ` · ${result.ping.time_ms} ms` : ''}` : 'No ping response',
+    },
+    {
+      label: 'Host details', ok: hasHostInfo,
+      detail: hasHostInfo ? result.hostInfo : 'Could not determine OS/version',
+    },
+    {
+      label: 'File transfer', ok: transferOk,
+      detail: transferOk ? 'Installer copy from the network share succeeded' : (result.error || 'Installer copy failed'),
+    },
+  ];
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={16}>
+      {rows.map(row => (
+        <Alert
+          key={row.label}
+          type={row.ok ? 'success' : 'error'}
+          showIcon
+          message={<Space><Typography.Text strong>{row.label}</Typography.Text><Tag color={row.ok ? 'success' : 'error'}>{row.ok ? 'Success' : 'Failure'}</Tag></Space>}
+          description={row.detail}
+        />
+      ))}
+      {result.output && (
+        <>
+          <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>Ansible output</Typography.Text>
+          <pre style={{
+            background: '#1a1a2e', color: '#e0e0e0', borderRadius: 6,
+            padding: '10px 14px', fontSize: 12, lineHeight: 1.6, margin: 0,
+            maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            {result.output}
+          </pre>
+        </>
+      )}
+    </Space>
   );
 }
 

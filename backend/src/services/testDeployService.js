@@ -2,6 +2,7 @@ const db = require('../config/db');
 const fs = require('fs');
 const crypto = require('../utils/crypto');
 const ansible = require('../utils/ansibleRunner');
+const { ping } = require('../utils/ping');
 
 const SOURCE_TABLE = {
   'MSL Assets':       'assets',
@@ -178,6 +179,34 @@ function parseRecap(output) {
   return recap;
 }
 
+// Parses the "Show OS details" debug task's output — ansible-playbook's
+// default stdout callback prints registered debug messages as:
+//   ok: [<host>] => {
+//       "msg": "OSINFO::..."
+//   }
+// so this scans for that block per host and pulls the msg value out of it,
+// tolerating the failed_when:false "Report OS details" task above it never
+// affecting this task's own success.
+function parseDebugMessages(output) {
+  const messages = {};
+  const lines = output.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(?:ok|changed):\s*\[(\S+)\]\s*=>\s*\{\s*$/);
+    if (!m) continue;
+    const host = m[1];
+    let block = '{';
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim() !== '}') { block += lines[j] + '\n'; j++; }
+    block += '}';
+    try {
+      const parsed = JSON.parse(block);
+      if (parsed.msg) (messages[host] = messages[host] || []).push(String(parsed.msg));
+    } catch {}
+    i = j;
+  }
+  return messages;
+}
+
 // Resolves one {source, ip_address} ref into everything the playbook needs
 // (credentials + effective share/installer/command config) — shared by
 // startRun (bulk) and verifyTarget (single, check_only). Returns null if the
@@ -197,25 +226,38 @@ async function buildAnsibleTarget(ref, globalCfg) {
   };
 }
 
-// ── verify: proves the file transfer step alone, without installing ───────
+// ── verify: ping, host OS/version, and the file transfer step — each its
+// own success/failure, none blocking the others from being reported.
 async function verifyTarget(ref) {
+  const pingPromise = ping(ref.ip_address);
   const globalCfg = await getConfig();
   const target = await buildAnsibleTarget(ref, globalCfg);
-  if (!target) return { connected: false, error: 'No stored username/password on the asset record.' };
+  if (!target) {
+    return {
+      connected: false, error: 'No stored username/password on the asset record.',
+      ping: await pingPromise, hostInfo: null,
+    };
+  }
 
   let inventoryPath;
   try {
     inventoryPath = await ansible.writeTempInventory([target]);
-    const { output } = await ansible.runPlaybook(inventoryPath, { check_only: true });
+    const [{ output }, pingResult] = await Promise.all([
+      ansible.runPlaybook(inventoryPath, { check_only: true }),
+      pingPromise,
+    ]);
     const recap = parseRecap(output)[ref.ip_address];
     const connected = !!recap && recap.unreachable === 0;
     const success = connected && recap.failed === 0;
+    const osMsg = (parseDebugMessages(output)[ref.ip_address] || []).find(m => m.startsWith('OSINFO::'));
     return {
       connected, error: connected ? null : 'Could not reach the host.',
       success, output,
+      ping: pingResult,
+      hostInfo: osMsg ? osMsg.slice('OSINFO::'.length) : null,
     };
   } catch (e) {
-    return { connected: false, error: e.message, output: '' };
+    return { connected: false, error: e.message, output: '', ping: await pingPromise, hostInfo: null };
   } finally {
     if (inventoryPath) fs.promises.unlink(inventoryPath).catch(() => {});
   }
