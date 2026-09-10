@@ -3,6 +3,18 @@
 # invocation covers whichever OS groups actually have hosts in this run's
 # inventory (an empty group is simply skipped, no error).
 #
+# Every shell/win_shell task below uses the explicit `cmd:` sub-parameter
+# instead of the free_form shorthand (`win_shell: |`  directly). Ansible's
+# free_form parsing runs the whole command through a shlex-like argument
+# splitter (to separate the command from modifiers like chdir=/creates=),
+# and that splitter can misread a backslash sitting right before a closing
+# quote (e.g. "\\") as an escaped quote rather than an escaped backslash —
+# producing "failed at splitting arguments, unbalanced jinja2 block or
+# quotes" even though the YAML/PowerShell itself is fine. cmd: bypasses
+# that splitter entirely (plain templated string, passed straight to the
+# module), which is the documented fix for exactly this failure mode —
+# needed here since these commands are full of literal backslashes.
+#
 # install_cmd is a per-host inventory var (Test Deploy Config, resolved per
 # location) — a PLACEHOLDER until the real silent-install switches for the
 # ME Agent installer are filled in there.
@@ -29,9 +41,10 @@
   gather_facts: false
   tasks:
     - name: Report OS details
-      ansible.windows.win_shell: |
-        $os = Get-CimInstance Win32_OperatingSystem
-        Write-Output "$($os.Caption)::$($os.Version)"
+      ansible.windows.win_shell:
+        cmd: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Output "$($os.Caption)::$($os.Version)"
       register: os_info
       failed_when: false
       changed_when: false
@@ -41,8 +54,9 @@
         msg: "OSINFO::{{ (os_info.stdout | default('unknown')) | trim }}"
 
     - name: Check the configured share path looks like a UNC path (\\server\share\...)
-      ansible.windows.win_shell: |
-        if ("{{ share_path }}".StartsWith("\\")) { "VALID" } else { "INVALID" }
+      ansible.windows.win_shell:
+        cmd: |
+          if ("{{ share_path }}".StartsWith("\\")) { "VALID" } else { "INVALID" }
       register: share_path_check
       changed_when: false
 
@@ -56,30 +70,35 @@
       when: "'INVALID' in share_path_check.stdout"
 
     - name: Determine the source's \\server\share root (works for a named share or an admin share like \\server\C$)
-      ansible.windows.win_shell: |
-        if ("{{ share_path }}" -match '^(\\\\[^\\]+\\[^\\]+)') { $matches[1] } else { "{{ share_path }}" }
+      ansible.windows.win_shell:
+        cmd: |
+          if ("{{ share_path }}" -match '^(\\\\[^\\]+\\[^\\]+)') { $matches[1] } else { "{{ share_path }}" }
       register: share_root
       changed_when: false
 
     - name: Map the source share with this account's own credentials (works around the WinRM double-hop limitation)
-      ansible.windows.win_shell: |
-        net use "{{ share_root.stdout | trim }}" "{{ ansible_password }}" /user:"{{ ansible_user }}"
+      ansible.windows.win_shell:
+        cmd: |
+          net use "{{ share_root.stdout | trim }}" "{{ ansible_password }}" /user:"{{ ansible_user }}"
       failed_when: false
 
     - name: Copy installer from the network share to a local temp folder
-      ansible.windows.win_shell: |
-        Copy-Item -Path "{{ share_path }}\{{ installer_file }}" -Destination "$env:TEMP\{{ installer_file }}" -Force
+      ansible.windows.win_shell:
+        cmd: |
+          Copy-Item -Path "{{ share_path }}\{{ installer_file }}" -Destination "$env:TEMP\{{ installer_file }}" -Force
       register: copy_result
 
     - name: Unmap the source share
-      ansible.windows.win_shell: |
-        net use "{{ share_root.stdout | trim }}" /delete /y
+      ansible.windows.win_shell:
+        cmd: |
+          net use "{{ share_root.stdout | trim }}" /delete /y
       failed_when: false
       changed_when: false
 
     - name: Run the ME Agent installer
-      ansible.windows.win_shell: |
-        & "$env:TEMP\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
+      ansible.windows.win_shell:
+        cmd: |
+          & "$env:TEMP\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)
 
@@ -89,8 +108,9 @@
   become: true
   tasks:
     - name: Report OS details
-      ansible.builtin.shell: |
-        . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-$(uname -s)}::$(uname -r)"
+      ansible.builtin.shell:
+        cmd: |
+          . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-$(uname -s)}::$(uname -r)"
       register: os_info
       failed_when: false
       changed_when: false
@@ -100,12 +120,14 @@
         msg: "OSINFO::{{ (os_info.stdout | default('unknown')) | trim }}"
 
     - name: Copy installer from the network share to /tmp
-      ansible.builtin.shell: |
-        cp "{{ share_path }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
+      ansible.builtin.shell:
+        cmd: |
+          cp "{{ share_path }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
       register: copy_result
 
     - name: Run the ME Agent installer
-      ansible.builtin.shell: |
-        /tmp/{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
+      ansible.builtin.shell:
+        cmd: |
+          /tmp/{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)
