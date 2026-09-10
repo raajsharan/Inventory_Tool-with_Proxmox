@@ -53,6 +53,7 @@ const STATIC_PAGES = [
   { key: 'hyperv',                  label: 'Hyper-V Discovery',              group: 'General' },
   { key: 'connectivity_alerts',      label: 'Connectivity Alerts',            group: 'General' },
   { key: 'weekly_report',            label: 'Weekly Report',                  group: 'General' },
+  { key: 'test_deploy',              label: 'Test Deploy',                    group: 'General' },
 ];
 
 async function dynamicCustomPages() {

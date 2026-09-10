@@ -13,7 +13,7 @@ import {
   RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
   ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
-  CalendarOutlined, AlertOutlined, FileTextOutlined, LinkOutlined,
+  CalendarOutlined, AlertOutlined, FileTextOutlined, LinkOutlined, RocketOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAppTheme } from '../../context/ThemeContext.jsx';
@@ -28,6 +28,7 @@ const { Sider, Header, Content, Footer } = Layout;
 const DEFAULT_NAV_KEYS = [
   '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
   'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', 'migration-tracker',
+  '/test-deploy',
 ];
 
 export default function AppLayout() {
@@ -166,6 +167,10 @@ export default function AppLayout() {
         return can('migration_tracker')
           ? [{ key: '/migration-tracker', icon: <ControlOutlined />, label: <Link to="/migration-tracker">Migration Tracker</Link> }]
           : [];
+      case '/test-deploy':
+        return can('test_deploy')
+          ? [{ key: '/test-deploy', icon: <RocketOutlined />, label: <Link to="/test-deploy">Test Deploy</Link> }]
+          : [];
       default:
         return [];
     }
@@ -206,6 +211,7 @@ export default function AppLayout() {
       can('admin/roles')                && { key: '/admin/roles',              icon: <KeyOutlined />,               label: <Link to="/admin/roles">Role Management</Link> },
       isAdmin                           && { key: '/admin/install-config',        icon: <CloudDownloadOutlined />,      label: <Link to="/admin/install-config">ME Install Config</Link> },
       isAdmin                           && { key: '/admin/nessus-install-config', icon: <CloudDownloadOutlined />,      label: <Link to="/admin/nessus-install-config">Nessus Install Config</Link> },
+      isAdmin                           && { key: '/admin/test-deploy-config',    icon: <RocketOutlined />,             label: <Link to="/admin/test-deploy-config">Test Deploy Config</Link> },
     ].filter(Boolean),
   };
 

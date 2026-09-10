@@ -1,0 +1,45 @@
+# ME Agent deploy pilot (Test Deploy page) — copies the installer from a
+# network share the TARGET itself already has access to, then runs it.
+# Two separate plays so one ansible-playbook invocation covers whichever
+# OS groups actually have hosts in this run's inventory (an empty group is
+# simply skipped, no error).
+#
+# install_cmd is a per-host inventory var (Test Deploy Config, resolved per
+# location) — a PLACEHOLDER until the real silent-install switches for the
+# ME Agent installer are filled in there.
+#
+# Known caveat — Windows "double hop": default WinRM auth (NTLM/Negotiate)
+# cannot forward the login credential on to a THIRD machine (the file
+# share). If the Copy-Item task below fails with Access Denied even though
+# the credentials are correct, that's almost certainly it — the fix is on
+# the Windows/AD side (CredSSP auth, Kerberos delegation, or hosting the
+# share on the target itself), not in this playbook.
+---
+- name: Deploy ME Agent — Windows targets
+  hosts: windows
+  gather_facts: false
+  tasks:
+    - name: Copy installer from the network share to a local temp folder
+      ansible.windows.win_shell: |
+        Copy-Item -Path "{{ share_path }}\{{ installer_file }}" -Destination "$env:TEMP\{{ installer_file }}" -Force
+      register: copy_result
+
+    - name: Run the ME Agent installer
+      ansible.windows.win_shell: |
+        & "$env:TEMP\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
+      register: install_result
+
+- name: Deploy ME Agent — Linux targets
+  hosts: linux
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Copy installer from the network share to /tmp
+      ansible.builtin.shell: |
+        cp "{{ share_path }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
+      register: copy_result
+
+    - name: Run the ME Agent installer
+      ansible.builtin.shell: |
+        /tmp/{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
+      register: install_result

@@ -41,6 +41,49 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_user_page_access_user ON user_page_access(user_id)`,
   `ALTER TABLE page_access ALTER COLUMN role TYPE VARCHAR(64)`,
 
+  // ── Test Deploy — Ansible-based ME Agent deployment pilot ────────────────
+  `CREATE TABLE IF NOT EXISTS test_deploy_config (
+      id                     INTEGER PRIMARY KEY DEFAULT 1,
+      windows_share_path     TEXT,
+      windows_installer_file VARCHAR(255),
+      windows_install_cmd    TEXT,
+      linux_share_path       TEXT,
+      linux_installer_file   VARCHAR(255),
+      linux_install_cmd      TEXT,
+      updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO test_deploy_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS test_deploy_location_config (
+      location               VARCHAR(255) PRIMARY KEY,
+      windows_share_path     TEXT,
+      windows_installer_file VARCHAR(255),
+      windows_install_cmd    TEXT,
+      linux_share_path       TEXT,
+      linux_installer_file   VARCHAR(255),
+      linux_install_cmd      TEXT,
+      updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS test_deploy_runs (
+      id            SERIAL PRIMARY KEY,
+      status        VARCHAR(16) NOT NULL DEFAULT 'running',
+      output        TEXT NOT NULL DEFAULT '',
+      created_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at   TIMESTAMPTZ
+   )`,
+  `CREATE TABLE IF NOT EXISTS test_deploy_run_targets (
+      id            SERIAL PRIMARY KEY,
+      run_id        INTEGER NOT NULL REFERENCES test_deploy_runs(id) ON DELETE CASCADE,
+      source        VARCHAR(32) NOT NULL,
+      ip_address    VARCHAR(64),
+      vm_name       VARCHAR(255),
+      os_type       VARCHAR(128),
+      status        VARCHAR(16) NOT NULL DEFAULT 'pending'
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_test_deploy_run_targets_run ON test_deploy_run_targets(run_id)`,
+
   // ── Proxmox discovery: MAC addresses (proxmox_schema.sql predates this column)
   `ALTER TABLE proxmox_discovered_vms ADD COLUMN IF NOT EXISTS macs TEXT[]`,
 
