@@ -134,6 +134,10 @@ export default function TestDeployConfig() {
                     </Tooltip>
                   </Space>
                 }
+                rules={[{
+                  pattern: /^\\\\[^\\]/,
+                  message: 'Needs two leading backslashes (\\\\fileserver\\share\\...) — one leading backslash resolves against the local C: drive instead of the network.',
+                }]}
               >
                 <Input placeholder="\\fileserver\C$\me-agents\windows" style={{ fontFamily: 'monospace' }} />
               </Form.Item>

@@ -40,6 +40,21 @@
       ansible.builtin.debug:
         msg: "OSINFO::{{ (os_info.stdout | default('unknown')) | trim }}"
 
+    - name: Check the configured share path looks like a UNC path (\\server\share\...)
+      ansible.windows.win_shell: |
+        if ("{{ share_path }}".StartsWith("\\")) { "VALID" } else { "INVALID" }
+      register: share_path_check
+      changed_when: false
+
+    - name: Fail early if the share path is missing its second leading backslash
+      ansible.builtin.fail:
+        msg: >-
+          windows_share_path ("{{ share_path }}") isn't a UNC path — it needs two leading
+          backslashes (\\fileserver\share\folder), not one, or Windows resolves it against the
+          local C: drive instead of the network. Fix it in Test Deploy Config for this location
+          (or the Default config).
+      when: "'INVALID' in share_path_check.stdout"
+
     - name: Determine the source's \\server\share root (works for a named share or an admin share like \\server\C$)
       ansible.windows.win_shell: |
         if ("{{ share_path }}" -match '^(\\\\[^\\]+\\[^\\]+)') { $matches[1] } else { "{{ share_path }}" }
