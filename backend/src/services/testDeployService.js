@@ -3,6 +3,7 @@ const fs = require('fs');
 const crypto = require('../utils/crypto');
 const ansible = require('../utils/ansibleRunner');
 const { ping } = require('../utils/ping');
+const { sshVerify, winrmVerify } = require('../utils/sshVerify');
 
 const SOURCE_TABLE = {
   'MSL Assets':       'assets',
@@ -226,8 +227,24 @@ async function buildAnsibleTarget(ref, globalCfg) {
   };
 }
 
-// ── verify: ping, host OS/version, and the file transfer step — each its
-// own success/failure, none blocking the others from being reported.
+// Is the ME Agent itself actually installed and running? Same check Software
+// Status already runs (winrmVerify for Windows, falling back to sshVerify if
+// WinRM specifically fails to connect; sshVerify directly for Linux).
+async function agentCheck({ ip_address, username, password, os_type }) {
+  if (isWindows(os_type)) {
+    let result = await winrmVerify({ host: ip_address, username, password, port: 5985 });
+    if (!result.connected) {
+      const sshResult = await sshVerify({ host: ip_address, port: 22, username, password, osType: os_type });
+      if (sshResult.connected) result = sshResult;
+    }
+    return result;
+  }
+  return sshVerify({ host: ip_address, port: 22, username, password, osType: os_type });
+}
+
+// ── verify: ping, host OS/version, whether the ME Agent is already
+// installed/running, and the file transfer step — each its own
+// success/failure, none blocking the others from being reported.
 async function verifyTarget(ref) {
   const pingPromise = ping(ref.ip_address);
   const globalCfg = await getConfig();
@@ -235,16 +252,21 @@ async function verifyTarget(ref) {
   if (!target) {
     return {
       connected: false, error: 'No stored username/password on the asset record.',
-      ping: await pingPromise, hostInfo: null,
+      ping: await pingPromise, hostInfo: null, agent: null,
     };
   }
+
+  const agentPromise = agentCheck({
+    ip_address: ref.ip_address, username: target.username, password: target.password, os_type: target.os_type,
+  });
 
   let inventoryPath;
   try {
     inventoryPath = await ansible.writeTempInventory([target]);
-    const [{ output }, pingResult] = await Promise.all([
+    const [{ output }, pingResult, agentResult] = await Promise.all([
       ansible.runPlaybook(inventoryPath, { check_only: true }),
       pingPromise,
+      agentPromise,
     ]);
     const recap = parseRecap(output)[ref.ip_address];
     const connected = !!recap && recap.unreachable === 0;
@@ -255,9 +277,13 @@ async function verifyTarget(ref) {
       success, output,
       ping: pingResult,
       hostInfo: osMsg ? osMsg.slice('OSINFO::'.length) : null,
+      agent: agentResult,
     };
   } catch (e) {
-    return { connected: false, error: e.message, output: '', ping: await pingPromise, hostInfo: null };
+    return {
+      connected: false, error: e.message, output: '',
+      ping: await pingPromise, hostInfo: null, agent: await agentPromise.catch(() => null),
+    };
   } finally {
     if (inventoryPath) fs.promises.unlink(inventoryPath).catch(() => {});
   }

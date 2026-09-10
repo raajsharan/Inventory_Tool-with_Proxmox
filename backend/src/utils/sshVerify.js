@@ -1,6 +1,7 @@
 const { Client } = require('ssh2');
 const path = require('path');
 const fs   = require('fs');
+const { winrmInstall } = require('./winInstall');
 
 // ── OS-specific constants ─────────────────────────────────────────────────────
 const LINUX_CONFIG = {
@@ -341,8 +342,45 @@ function sshUploadAndRun({ host, port = 22, username, password, files, remoteDir
   });
 }
 
+// Checks the ManageEngine service + binary over WinRM instead of SSH — most
+// Windows hosts don't run an SSH server, so sshVerify alone would report
+// "Unreachable" for a perfectly healthy, pingable Windows machine (it was
+// only ever testing whether SSH specifically was open, not the host itself).
+// Shared by Software Status and Test Deploy's Verify.
+async function winrmVerify({ host, username, password, port, cfg = WINDOWS_CONFIG }) {
+  const svcName = cfg.serviceName.replace(/'/g, "''");
+  const binPath = cfg.binaryPath.replace(/'/g, "''");
+  const script = [
+    `$svc = Get-Service '${svcName}' -ErrorAction SilentlyContinue`,
+    `if ($svc) { Write-Output $svc.Status.ToString() } else { Write-Output 'NOT_FOUND' }`,
+    `Write-Output '${SEP}'`,
+    `if (Test-Path '${binPath}') { Write-Output 'FILE_EXISTS' } else { Write-Output 'FILE_NOT_FOUND' }`,
+  ].join('; ');
+
+  const r = await winrmInstall({ host, username, password, port: port || 5985, command: script, timeout: 15000 });
+  if (!r.connected) {
+    return { connected: false, error: r.error, service: null, file: null, platform: 'windows' };
+  }
+
+  const raw     = r.output || '';
+  const sepIdx  = raw.indexOf(SEP);
+  const svcRaw  = (sepIdx >= 0 ? raw.slice(0, sepIdx) : raw).trim();
+  const fileRaw = (sepIdx >= 0 ? raw.slice(sepIdx + SEP.length) : '').trim();
+  const serviceStatus = parseWindowsService(svcRaw);
+  const fileExists    = fileRaw.includes('FILE_EXISTS');
+
+  return {
+    connected: true,
+    error: null,
+    service: { status: serviceStatus, output: svcRaw, name: cfg.serviceName },
+    file:    { exists: fileExists, path: cfg.binaryPath },
+    installed: serviceStatus === 'running' || fileExists,
+    platform: 'windows',
+  };
+}
+
 module.exports = {
-  sshVerify, sshRunCommand, sshUploadAndRun,
+  sshVerify, sshRunCommand, sshUploadAndRun, winrmVerify,
   getConfig, getNessusConfig, isWindows,
   LINUX_CONFIG, WINDOWS_CONFIG, NESSUS_LINUX_CONFIG, NESSUS_WINDOWS_CONFIG,
   buildLinuxCmdFor, parseLinuxService,

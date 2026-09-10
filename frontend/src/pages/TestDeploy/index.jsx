@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   CheckCircleFilled, CloseCircleFilled, ExclamationCircleFilled,
-  FileSearchOutlined, InfoCircleOutlined, QuestionCircleOutlined, ReloadOutlined,
+  FileSearchOutlined, InfoCircleOutlined, PlayCircleOutlined, QuestionCircleOutlined, ReloadOutlined,
   RocketOutlined, SearchOutlined, SettingOutlined, ThunderboltOutlined,
   WarningFilled, WindowsOutlined,
 } from '@ant-design/icons';
@@ -22,9 +22,35 @@ const SOURCE_COLOR = {
 };
 const ALL_SOURCES = ['MSL Assets', 'Beijing Assets', 'Ext. Assets', 'Physical Servers'];
 
+// Same service-status vocabulary Software Status uses for this exact agent.
+const SVC_META = {
+  running:    { color: 'success',    label: 'Running',   icon: <CheckCircleFilled /> },
+  exited:     { color: 'warning',    label: 'Exited',    icon: <ExclamationCircleFilled /> },
+  inactive:   { color: 'default',    label: 'Inactive',  icon: <CloseCircleFilled /> },
+  stopped:    { color: 'default',    label: 'Stopped',   icon: <CloseCircleFilled /> },
+  paused:     { color: 'warning',    label: 'Paused',    icon: <ExclamationCircleFilled /> },
+  activating: { color: 'processing', label: 'Starting…', icon: null },
+  stopping:   { color: 'processing', label: 'Stopping…', icon: null },
+  failed:     { color: 'error',      label: 'Failed',    icon: <CloseCircleFilled /> },
+  not_found:  { color: 'default',    label: 'Not Found', icon: <QuestionCircleOutlined /> },
+  unknown:    { color: 'default',    label: 'Unknown',   icon: <QuestionCircleOutlined /> },
+};
+
 const isWindows = (t) => /windows/i.test(t || '');
 const complianceColor = (p) => p >= 90 ? '#52c41a' : p >= 70 ? '#faad14' : '#ff4d4f';
 const vmKey = (v) => `${v.source}||${v.ip_address}`;
+
+function TerminalBox({ children }) {
+  return (
+    <pre style={{
+      background: '#1a1a2e', color: '#e0e0e0', borderRadius: 6,
+      padding: '10px 14px', fontSize: 12, lineHeight: 1.6, margin: 0,
+      maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+    }}>
+      {children}
+    </pre>
+  );
+}
 
 function pollRunUntilDone(id) {
   return new Promise((resolve, reject) => {
@@ -197,19 +223,21 @@ export default function TestDeploy() {
       title: (
         <Space>
           Verify
-          <Tooltip title="Checks ping, host OS/version, and whether the installer copy from the network share will succeed — without installing anything">
+          <Tooltip title="Checks ping, host OS/version, whether the ME Agent is already installed/running, and whether the installer copy from the network share will succeed">
             <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
           </Tooltip>
         </Space>
       ),
-      width: 340,
+      width: 420,
       render: (_, vm) => {
         const vs = verifyMap[vmKey(vm)] || { state: 'idle' };
         const r  = vs.result;
         if (vs.state === 'loading') return <Spin size="small" />;
         if (vs.state === 'done' && r) {
-          const pingOk    = !!r.ping?.reachable;
+          const pingOk     = !!r.ping?.reachable;
           const transferOk = r.connected && r.success;
+          const agent      = r.agent;
+          const sm         = agent?.connected ? (SVC_META[agent.service?.status] || SVC_META.unknown) : null;
           return (
             <Space wrap size={4}>
               <Tooltip title={pingOk ? `Reachable${r.ping.time_ms != null ? ` · ${r.ping.time_ms} ms` : ''}` : 'No ping response'}>
@@ -220,6 +248,11 @@ export default function TestDeploy() {
               <Tooltip title={r.hostInfo || 'Could not determine OS/version'}>
                 <Tag color={r.hostInfo ? 'blue' : 'default'} icon={r.hostInfo ? <CheckCircleFilled /> : <QuestionCircleOutlined />}>
                   {r.hostInfo ? r.hostInfo.split('::')[0] : 'OS unknown'}
+                </Tag>
+              </Tooltip>
+              <Tooltip title={agent?.connected ? `Service: ${sm.label}` : (agent?.error || 'Could not check the agent')}>
+                <Tag color={sm ? sm.color : 'warning'} icon={sm ? sm.icon : <ExclamationCircleFilled />}>
+                  {sm ? `Agent: ${sm.label}` : 'Agent check failed'}
                 </Tag>
               </Tooltip>
               <Tooltip title={r.error || (transferOk ? 'File transfer succeeded' : 'File transfer failed')}>
@@ -448,10 +481,10 @@ export default function TestDeploy() {
   );
 }
 
-// Three independent checks, each its own success/failure — a failed ping
-// or an undetermined OS never hides the others.
+// Four independent checks, each its own success/failure — a failed ping,
+// an undetermined OS, or an unreachable agent check never hides the others.
 function VerifyResultDetail({ result }) {
-  const pingOk     = !!result.ping?.reachable;
+  const pingOk      = !!result.ping?.reachable;
   const hasHostInfo = !!result.hostInfo;
   const transferOk  = result.connected && result.success;
 
@@ -481,16 +514,75 @@ function VerifyResultDetail({ result }) {
           description={row.detail}
         />
       ))}
+
+      {result.agent && <AgentCheckDetail agent={result.agent} />}
+
       {result.output && (
         <>
           <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>Ansible output</Typography.Text>
-          <pre style={{
-            background: '#1a1a2e', color: '#e0e0e0', borderRadius: 6,
-            padding: '10px 14px', fontSize: 12, lineHeight: 1.6, margin: 0,
-            maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>
-            {result.output}
-          </pre>
+          <TerminalBox>{result.output}</TerminalBox>
+        </>
+      )}
+    </Space>
+  );
+}
+
+// Is the ME Agent itself already installed and running — same Service +
+// Binary check Software Status runs, over WinRM (Windows) or SSH (Linux).
+function AgentCheckDetail({ agent }) {
+  const win = agent.platform === 'windows';
+
+  if (!agent.connected) {
+    return <Alert type="error" showIcon message="ME Agent check — could not connect" description={agent.error} />;
+  }
+
+  if (agent.restricted_shell) {
+    return (
+      <Alert
+        type="warning" showIcon
+        message="ME Agent check — connected, but can't run it"
+        description={`This account has a restricted shell, so the check command never ran. ${agent.restricted_reason || ''}`}
+      />
+    );
+  }
+
+  const svc  = agent.service || {};
+  const file = agent.file || {};
+  const sm   = SVC_META[svc.status] || SVC_META.unknown;
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={16}>
+      <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>ME Agent check</Typography.Text>
+      <Row gutter={16}>
+        <Col span={12}>
+          <Card size="small" title={<Space><PlayCircleOutlined />Service</Space>}>
+            <Tag color={sm.color} icon={sm.icon} style={{ fontSize: 13, padding: '2px 10px' }}>{sm.label}</Tag>
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11, wordBreak: 'break-all' }}>
+              {svc.name}
+            </Typography.Text>
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card size="small" title={<Space><FileSearchOutlined />Binary</Space>}>
+            <Tag color={file.exists ? 'success' : 'default'}
+              icon={file.exists ? <CheckCircleFilled /> : <CloseCircleFilled />}
+              style={{ fontSize: 13, padding: '2px 10px' }}>
+              {file.exists ? 'Found' : 'Not Found'}
+            </Tag>
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11, wordBreak: 'break-all' }}>
+              {file.path}
+            </Typography.Text>
+          </Card>
+        </Col>
+      </Row>
+      <Alert type={agent.installed ? 'success' : 'warning'} showIcon
+        message={agent.installed ? 'ManageEngine Agent is installed.' : 'ManageEngine Agent is not installed.'} />
+      {svc.output && (
+        <>
+          <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            {win ? 'PowerShell output' : 'systemctl output'}
+          </Typography.Text>
+          <TerminalBox>{svc.output}</TerminalBox>
         </>
       )}
     </Space>
@@ -510,13 +602,7 @@ function RunOutputDetail({ result }) {
       {result.output && (
         <>
           <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>Ansible output</Typography.Text>
-          <pre style={{
-            background: '#1a1a2e', color: '#e0e0e0', borderRadius: 6,
-            padding: '10px 14px', fontSize: 12, lineHeight: 1.6, margin: 0,
-            maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>
-            {result.output}
-          </pre>
+          <TerminalBox>{result.output}</TerminalBox>
         </>
       )}
     </Space>
