@@ -132,7 +132,7 @@ export default function App() {
             <Route path="/migration-tracker"  element={<MigrationTracker />} />
             <Route path="/endpoint-central"   element={<EndpointCentral />} />
             <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
-            <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local/login?next=%2F" />} />
+            <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local/login?next=%2F" embeddable={false} />} />
 
             <Route path="/admin/users" element={<Users />} />
             <Route path="/admin/dropdowns" element={<Dropdowns />} />
