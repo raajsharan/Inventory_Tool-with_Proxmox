@@ -12,6 +12,8 @@ async function listLocations(req, res, next) {
 async function getConfig(req, res, next) {
   try {
     const location = (req.query.location || '').trim();
+    const merged = String(req.query.merged || '') === 'true';
+    if (location && merged) return res.json(await svc.getMergedConfig(location));
     if (location) return res.json((await svc.getLocationConfig(location)) || { location });
     res.json(await svc.getConfig());
   } catch (e) { next(e); }
@@ -27,6 +29,14 @@ async function deleteConfig(req, res, next) {
     if (!location) throw new ApiError(400, 'location is required');
     await svc.deleteLocationConfig(location);
     res.json({ deleted: true, location });
+  } catch (e) { next(e); }
+}
+
+async function verify(req, res, next) {
+  try {
+    const { source, ip_address } = req.body || {};
+    if (!source || !ip_address) throw new ApiError(400, 'source and ip_address are required');
+    res.json(await svc.verifyTarget({ source, ip_address }));
   } catch (e) { next(e); }
 }
 
@@ -50,4 +60,4 @@ async function getRun(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { listAssets, listLocations, getConfig, saveConfig, deleteConfig, createRun, listRuns, getRun };
+module.exports = { listAssets, listLocations, getConfig, saveConfig, deleteConfig, verify, createRun, listRuns, getRun };

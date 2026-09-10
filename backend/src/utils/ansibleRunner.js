@@ -45,9 +45,13 @@ async function writeTempInventory(targets) {
 // Runs `ansible-playbook -i <inventory> me_agent_deploy.yml`, resolving once
 // the process exits with the full captured stdout+stderr (interleaved, in
 // arrival order) — one combined run log rather than per-host streams.
-function runPlaybook(inventoryPath) {
+// extraVars.check_only=true skips the install task (see me_agent_deploy.yml)
+// so a verify-only run just proves the file transfer step works.
+function runPlaybook(inventoryPath, extraVars = {}) {
   return new Promise((resolve) => {
-    const child = spawn('ansible-playbook', ['-i', inventoryPath, PLAYBOOK_PATH], {
+    const args = ['-i', inventoryPath, PLAYBOOK_PATH];
+    if (Object.keys(extraVars).length) args.push('--extra-vars', JSON.stringify(extraVars));
+    const child = spawn('ansible-playbook', args, {
       env: { ...process.env, ANSIBLE_HOST_KEY_CHECKING: 'False' },
     });
     let output = '';

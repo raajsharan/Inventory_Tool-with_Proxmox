@@ -13,13 +13,17 @@ const SOURCE_TABLE = {
 const isWindows = (t) => /windows/i.test(t || '');
 
 // ── candidate assets ──────────────────────────────────────────────────────
-// Same eligibility filter as Software Status — hypervisors/appliances can't
-// take an agent install.
+// Same eligibility filter (and me_installed flag) as Software Status —
+// hypervisors/appliances can't take an agent install, and both features
+// report on the same underlying ME Agent install state. physical_esxi_servers
+// has no manage_engine_installed column (matches Software Status's own query).
 async function listAssets() {
+  const meInstalledExpr = { physical_esxi_servers: 'false' };
   const unions = Object.entries(SOURCE_TABLE).map(([source, table]) => `
     SELECT vm_name, os_hostname, ip_address::text AS ip_address,
            COALESCE(os_type, '') AS os_type,
            COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location,
+           ${meInstalledExpr[table] || 'COALESCE(manage_engine_installed, false)'} AS me_installed,
            '${source}' AS source
       FROM ${table}
      WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND ip_address IS NOT NULL
@@ -43,6 +47,11 @@ async function getLocationConfig(location) {
   if (!location) return null;
   const { rows } = await db.query(`SELECT * FROM test_deploy_location_config WHERE location = $1`, [location]);
   return rows[0] || null;
+}
+
+async function getMergedConfig(location) {
+  const [globalCfg, locCfg] = await Promise.all([getConfig(), getLocationConfig(location)]);
+  return mergeLocationConfig(globalCfg, locCfg);
 }
 
 async function listLocations() {
@@ -154,6 +163,49 @@ function parseRecap(output) {
   return recap;
 }
 
+// Resolves one {source, ip_address} ref into everything the playbook needs
+// (credentials + effective share/installer/command config) — shared by
+// startRun (bulk) and verifyTarget (single, check_only). Returns null if the
+// asset record has no stored credentials.
+async function buildAnsibleTarget(ref, globalCfg) {
+  const t = await resolveTarget(ref);
+  if (!t || !t.username || !t.password) return null;
+  const locCfg = await getLocationConfig(t.location);
+  const cfg = mergeLocationConfig(globalCfg, locCfg);
+  const win = isWindows(t.os_type);
+  return {
+    source: ref.source, ip_address: ref.ip_address, vm_name: t.vm_name, os_type: t.os_type,
+    isWindows: win, username: t.username, password: t.password,
+    sharePath: win ? cfg.windows_share_path : cfg.linux_share_path,
+    installerFile: win ? cfg.windows_installer_file : cfg.linux_installer_file,
+    installCmd: win ? cfg.windows_install_cmd : cfg.linux_install_cmd,
+  };
+}
+
+// ── verify: proves the file transfer step alone, without installing ───────
+async function verifyTarget(ref) {
+  const globalCfg = await getConfig();
+  const target = await buildAnsibleTarget(ref, globalCfg);
+  if (!target) return { connected: false, error: 'No stored username/password on the asset record.' };
+
+  let inventoryPath;
+  try {
+    inventoryPath = await ansible.writeTempInventory([target]);
+    const { output } = await ansible.runPlaybook(inventoryPath, { check_only: true });
+    const recap = parseRecap(output)[ref.ip_address];
+    const connected = !!recap && recap.unreachable === 0;
+    const success = connected && recap.failed === 0;
+    return {
+      connected, error: connected ? null : 'Could not reach the host.',
+      success, output,
+    };
+  } catch (e) {
+    return { connected: false, error: e.message, output: '' };
+  } finally {
+    if (inventoryPath) fs.promises.unlink(inventoryPath).catch(() => {});
+  }
+}
+
 async function executeRun(runId, targets) {
   let inventoryPath;
   try {
@@ -188,20 +240,10 @@ async function startRun(targetRefs, userId) {
   const globalCfg = await getConfig();
   const resolved = [];
   for (const ref of targetRefs) {
-    const t = await resolveTarget(ref);
     // No stored credentials for this asset — surfaced in the run's summary
     // note below rather than failing the whole run.
-    if (!t || !t.username || !t.password) continue;
-    const locCfg = await getLocationConfig(t.location);
-    const cfg = mergeLocationConfig(globalCfg, locCfg);
-    const win = isWindows(t.os_type);
-    resolved.push({
-      source: ref.source, ip_address: ref.ip_address, vm_name: t.vm_name, os_type: t.os_type,
-      isWindows: win, username: t.username, password: t.password,
-      sharePath: win ? cfg.windows_share_path : cfg.linux_share_path,
-      installerFile: win ? cfg.windows_installer_file : cfg.linux_installer_file,
-      installCmd: win ? cfg.windows_install_cmd : cfg.linux_install_cmd,
-    });
+    const target = await buildAnsibleTarget(ref, globalCfg);
+    if (target) resolved.push(target);
   }
 
   const skippedCount = targetRefs.length - resolved.length;
@@ -262,6 +304,6 @@ async function listRuns() {
 }
 
 module.exports = {
-  listAssets, getConfig, getLocationConfig, saveConfig, deleteLocationConfig, listLocations,
-  startRun, getRun, listRuns,
+  listAssets, getConfig, getLocationConfig, getMergedConfig, saveConfig, deleteLocationConfig, listLocations,
+  startRun, getRun, listRuns, verifyTarget,
 };

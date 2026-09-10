@@ -14,6 +14,10 @@
 # forwarded token, which is the standard fix for double-hop. This requires
 # that account to also have admin rights on the SOURCE file server, not
 # just on the target.
+#
+# check_only=true (passed via --extra-vars) runs the copy step but skips
+# the actual install task — used by Test Deploy's per-VM "Verify" action to
+# prove the file transfer will succeed without deploying anything yet.
 ---
 - name: Deploy ME Agent — Windows targets
   hosts: windows
@@ -45,6 +49,7 @@
       ansible.windows.win_shell: |
         & "$env:TEMP\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
+      when: not (check_only | default(false) | bool)
 
 - name: Deploy ME Agent — Linux targets
   hosts: linux
@@ -60,3 +65,4 @@
       ansible.builtin.shell: |
         /tmp/{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
+      when: not (check_only | default(false) | bool)
