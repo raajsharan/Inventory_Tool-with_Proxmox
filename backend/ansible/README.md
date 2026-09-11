@@ -39,3 +39,10 @@ Prerequisites this doesn't and can't set up for you:
   `me_agent_deploy.yml`) — this is the double-hop workaround, and it means
   that account needs admin rights on the source file server too, not just
   on the target itself.
+- **`cifs-utils` (`mount.cifs`) must already be installed on every Linux
+  target.** Linux share paths are a Samba (SMB) share (e.g.
+  `//192.168.x.x/software/Linux/Burlington`) — the target mounts it via
+  CIFS using its own asset-record credentials, copies from the mount, then
+  unmounts (same shape as the Windows admin-share step). Without
+  `cifs-utils`, `mount -t cifs` fails with `mount: unknown filesystem type
+  'cifs'`.

@@ -27,6 +27,13 @@
 # that account to also have admin rights on the SOURCE file server, not
 # just on the target.
 #
+# Linux share is Samba (SMB) hosted on a Linux server, e.g.
+# //192.168.x.x/software/Linux/Burlington — the Linux play mounts it via
+# CIFS with this same account's credentials (needs `cifs-utils` /
+# mount.cifs installed on every Linux target), copies from the mount,
+# then unmounts. Same shape as the Windows admin-share step, different
+# protocol.
+#
 # check_only=true (passed via --extra-vars) runs the copy step but skips
 # the actual install task — used by Test Deploy's per-VM "Verify" action to
 # prove the file transfer will succeed without deploying anything yet.
@@ -119,18 +126,67 @@
       ansible.builtin.debug:
         msg: "OSINFO::{{ (os_info.stdout | default('unknown')) | trim }}"
 
-    - name: Copy installer from the network share to /tmp
+    - name: Split the share path into its //server/share root and remaining subpath (for CIFS mount)
       ansible.builtin.shell:
         cmd: |
-          cp "{{ share_path }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
+          share_path="{{ share_path }}"
+          share_path="${share_path%/}"
+          root=$(echo "$share_path" | grep -oE '^//[^/]+/[^/]+')
+          sub="${share_path#$root}"
+          echo "${root}::${sub}"
+      register: cifs_path_parts
+      changed_when: false
+
+    - name: Fail early if the share path isn't a //server/share CIFS path
+      ansible.builtin.fail:
+        msg: >-
+          linux_share_path ("{{ share_path }}") doesn't look like //samba-server/share/folder —
+          the target mounts it via CIFS, so it needs two leading forward slashes followed by the
+          Samba server and share name. Fix it in Test Deploy Config for this location (or the
+          Default config).
+      when: "(cifs_path_parts.stdout | trim).split('::')[0] == ''"
+
+    - name: Create a temp CIFS mount point
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: test_deploy_mnt_
+      register: cifs_mountpoint
+
+    - name: Write a temp CIFS credentials file (keeps the password out of the process list)
+      ansible.builtin.copy:
+        dest: "{{ cifs_mountpoint.path }}.creds"
+        content: |
+          username={{ ansible_user }}
+          password={{ ansible_password }}
+        mode: '0600'
+
+    - name: Mount the source Samba share
+      ansible.builtin.shell:
+        cmd: |
+          mount -t cifs "{{ (cifs_path_parts.stdout | trim).split('::')[0] }}" "{{ cifs_mountpoint.path }}" -o credentials={{ cifs_mountpoint.path }}.creds,vers=3.0
+      register: cifs_mount_result
+
+    - name: Copy installer from the mounted share to /tmp
+      ansible.builtin.shell:
+        cmd: |
+          cp "{{ cifs_mountpoint.path }}{{ (cifs_path_parts.stdout | trim).split('::')[1] }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
       register: copy_result
 
-    - name: Copy serverinfo.json from the network share to /tmp
+    - name: Copy serverinfo.json from the mounted share to /tmp
       ansible.builtin.shell:
         cmd: |
-          cp "{{ share_path }}/{{ serverinfo_file }}" "/tmp/{{ serverinfo_file }}"
+          cp "{{ cifs_mountpoint.path }}{{ (cifs_path_parts.stdout | trim).split('::')[1] }}/{{ serverinfo_file }}" "/tmp/{{ serverinfo_file }}"
       register: copy_serverinfo_result
       when: (serverinfo_file | default('')) | length > 0
+
+    - name: Unmount and clean up the temp mount
+      ansible.builtin.shell:
+        cmd: |
+          umount "{{ cifs_mountpoint.path }}" 2>/dev/null
+          rm -f "{{ cifs_mountpoint.path }}.creds"
+          rmdir "{{ cifs_mountpoint.path }}" 2>/dev/null
+      failed_when: false
+      changed_when: false
 
     - name: Run the ME Agent installer
       # Runs from /tmp (not by absolute path) so the installer finds

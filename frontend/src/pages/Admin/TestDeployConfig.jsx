@@ -159,8 +159,22 @@ export default function TestDeployConfig() {
           </Col>
           <Col xs={24} xl={12}>
             <Card title={<Tag color="default">Linux</Tag>} style={{ marginBottom: 16 }}>
-              <Form.Item name="linux_share_path" label="Installer share path">
-                <Input placeholder="/mnt/me-agents/linux" style={{ fontFamily: 'monospace' }} />
+              <Form.Item
+                name="linux_share_path"
+                label={
+                  <Space>
+                    Installer share path (Samba/CIFS)
+                    <Tooltip title="A //server/share path (Samba hosted on a Linux server) — the target mounts it via CIFS using its own asset-record credentials, then unmounts after copying. Needs cifs-utils installed on every Linux target.">
+                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                    </Tooltip>
+                  </Space>
+                }
+                rules={[{
+                  pattern: /^\/\/[^/]/,
+                  message: 'Needs two leading forward slashes (//samba-server/share/...) so the target can mount it via CIFS.',
+                }]}
+              >
+                <Input placeholder="//192.168.x.x/software/Linux/Burlington" style={{ fontFamily: 'monospace' }} />
               </Form.Item>
               <Form.Item name="linux_installer_file" label="Installer filename">
                 <Input placeholder="UEMS_LinuxAgent.bin" style={{ fontFamily: 'monospace' }} />
