@@ -192,9 +192,14 @@
       # Runs from /tmp (not by absolute path) so the installer finds
       # serverinfo.json — copied into the same directory above — via its
       # own working-directory lookup, same convention as Software Status's
-      # own Linux install.
+      # own Linux install. Confirmed: the UEMS Linux installer needs NO
+      # flags at all — it auto-detects serverinfo.json alongside it and
+      # installs silently on its own; it doesn't even support GNU-style
+      # --long-options, only a handful of single-dash ones (e.g. -d). So
+      # unlike Windows, an empty install_cmd here is the CORRECT default,
+      # not an unconfigured placeholder — never substitute one.
       ansible.builtin.shell:
         cmd: |
-          cd /tmp && ./{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
+          cd /tmp && ./{{ installer_file }} {{ install_cmd | default('', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)

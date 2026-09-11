@@ -196,12 +196,14 @@ export default function TestDeployConfig() {
                 name="linux_install_cmd"
                 label={
                   <Space>
-                    Install command
-                    <Tooltip title="Runs as: installer_file <this> (with sudo)"><InfoCircleOutlined style={{ color: '#8c8c8c' }} /></Tooltip>
+                    Install command (optional)
+                    <Tooltip title="Runs as: installer_file <this> (with sudo). Confirmed: the UEMS Linux installer needs no flags at all — it auto-detects serverinfo.json alongside it and installs silently on its own, and doesn't support --long-options anyway. Leave this blank unless you have a specific reason to add switches.">
+                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                    </Tooltip>
                   </Space>
                 }
               >
-                <Input placeholder="--PLACEHOLDER_SILENT_SWITCHES" style={{ fontFamily: 'monospace' }} />
+                <Input placeholder="(leave blank — no flags needed)" style={{ fontFamily: 'monospace' }} />
               </Form.Item>
             </Card>
           </Col>
