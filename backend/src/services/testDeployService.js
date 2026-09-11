@@ -324,43 +324,61 @@ async function executeRun(runId, targets) {
   }
 }
 
+async function insertRunTargets(runId, targets, status) {
+  if (!targets.length) return;
+  const values = targets.map((_, i) => `($1, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5}, $${i * 5 + 6})`).join(',');
+  const params = [runId];
+  for (const t of targets) params.push(t.source, t.ip_address, t.vm_name, t.os_type, status);
+  await db.query(
+    `INSERT INTO test_deploy_run_targets (run_id, source, ip_address, vm_name, os_type, status) VALUES ${values}`,
+    params,
+  );
+}
+
 async function startRun(targetRefs, userId) {
   const globalCfg = await getConfig();
-  const resolved = [];
+  const toInstall = [];
+  const alreadyInstalled = [];
+  let noCredsCount = 0;
+
   for (const ref of targetRefs) {
     // No stored credentials for this asset — surfaced in the run's summary
     // note below rather than failing the whole run.
     const target = await buildAnsibleTarget(ref, globalCfg);
-    if (target) resolved.push(target);
+    if (!target) { noCredsCount++; continue; }
+
+    // Skip the install if the agent is already there and running — same
+    // check (and same reasoning) as Software Status's skip_if_installed.
+    const agent = await agentCheck({
+      ip_address: target.ip_address, username: target.username, password: target.password, os_type: target.os_type,
+    });
+    if (agent.connected && agent.installed) alreadyInstalled.push(target);
+    else toInstall.push(target);
   }
 
-  const skippedCount = targetRefs.length - resolved.length;
-  const initialNote = skippedCount
-    ? `${skippedCount} target(s) skipped — no stored username/password on the asset record.\n`
-    : '';
+  const notes = [];
+  if (noCredsCount) notes.push(`${noCredsCount} target(s) skipped — no stored username/password on the asset record.`);
+  if (alreadyInstalled.length) notes.push(`${alreadyInstalled.length} target(s) skipped — ME Agent already installed and running.`);
+
   const { rows: runRows } = await db.query(
     `INSERT INTO test_deploy_runs (status, output, created_by) VALUES ('running', $1, $2) RETURNING id`,
-    [initialNote, userId],
+    [notes.length ? notes.join('\n') + '\n' : '', userId],
   );
   const runId = runRows[0].id;
 
-  if (resolved.length) {
-    const values = resolved.map((_, i) => `($1, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4}, $${i * 4 + 5})`).join(',');
-    const params = [runId];
-    for (const t of resolved) params.push(t.source, t.ip_address, t.vm_name, t.os_type);
-    await db.query(
-      `INSERT INTO test_deploy_run_targets (run_id, source, ip_address, vm_name, os_type) VALUES ${values}`,
-      params,
-    );
-  }
+  await insertRunTargets(runId, toInstall, 'pending');
+  await insertRunTargets(runId, alreadyInstalled, 'skipped');
 
-  if (!resolved.length) {
-    await db.query(`UPDATE test_deploy_runs SET status = 'failed', finished_at = NOW() WHERE id = $1`, [runId]);
+  if (!toInstall.length) {
+    // Nothing left to actually install — a run where everything was
+    // already-installed is a successful outcome, not a failure.
+    const finalStatus = alreadyInstalled.length ? 'completed' : 'failed';
+    await db.query(`UPDATE test_deploy_runs SET status = $1, finished_at = NOW() WHERE id = $2`, [finalStatus, runId]);
     return { id: runId };
   }
 
   // Fire-and-forget — the caller polls GET /test-deploy/runs/:id for status.
-  executeRun(runId, resolved).catch(() => {});
+  executeRun(runId, toInstall).catch(() => {});
   return { id: runId };
 }
 

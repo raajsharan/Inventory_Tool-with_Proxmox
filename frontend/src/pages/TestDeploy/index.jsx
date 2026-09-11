@@ -284,10 +284,15 @@ export default function TestDeploy() {
         const ok  = configReady(vm);
         if (is.state === 'loading') return <Space size={4}><Spin size="small" /><Typography.Text type="secondary" style={{ fontSize: 11 }}>Deploying…</Typography.Text></Space>;
         if (is.state === 'done' && is.result) {
+          const skipped = is.result.status === 'skipped';
           const success = is.result.connected && is.result.success;
           return (
             <Space size={4} wrap>
-              <Tag color={success ? 'success' : 'warning'}>{success ? 'Done' : is.result.connected ? 'Check output' : 'Failed'}</Tag>
+              <Tooltip title={skipped ? 'ME Agent was already installed and running — install step skipped' : undefined}>
+                <Tag color={skipped ? 'blue' : success ? 'success' : 'warning'}>
+                  {skipped ? 'Already installed' : success ? 'Done' : is.result.connected ? 'Check output' : 'Failed'}
+                </Tag>
+              </Tooltip>
               <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setInstallDetail({ open: true, vm, result: is.result })}>Output</Button>
               <Button size="small" icon={<ReloadOutlined />} onClick={() => runInstall(vm)} />
             </Space>
@@ -598,6 +603,9 @@ function AgentCheckDetail({ agent }) {
 }
 
 function RunOutputDetail({ result }) {
+  if (result.status === 'skipped') {
+    return <Alert type="info" showIcon message="Install skipped" description="The ME Agent was already installed and running on this VM, so nothing was deployed." />;
+  }
   if (!result.connected) {
     return <Alert type="error" showIcon message="Could not run" description={result.error} />;
   }
