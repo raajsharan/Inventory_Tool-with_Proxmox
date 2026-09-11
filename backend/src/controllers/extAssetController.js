@@ -62,6 +62,7 @@ async function list(req, res, next) {
       osType: req.query.osType,
       serverStatus: req.query.serverStatus,
       location: req.query.location,
+      department: req.query.department,
       eolStatus: req.query.eolStatus,
       page: Number(req.query.page) || 1,
       pageSize: Math.min(Number(req.query.pageSize) || 20, 200),
@@ -183,6 +184,7 @@ async function exportAssets(req, res, next) {
       osType: req.query.osType,
       serverStatus: req.query.serverStatus,
       location: req.query.location,
+      department: req.query.department,
       eolStatus: req.query.eolStatus,
       page: 1, pageSize: 100000,
     });

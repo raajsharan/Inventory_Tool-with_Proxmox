@@ -102,6 +102,19 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
   const [esxiHostId,    setEsxiHostId]    = useState(undefined);
   const esxiSearchRef = useRef(null);
 
+  // Same dropdown-managed lists (OS Type, Location) and department/tag-range
+  // list the real asset forms use, instead of freetext boxes here.
+  const [dd, setDd] = useState({});
+  const [departments, setDepartments] = useState([]);
+  useEffect(() => {
+    api.get('/dropdowns').then(r => setDd(r.data.grouped || {})).catch(() => {});
+    api.get('/departments', { params: { activeOnly: 1 } })
+      .then(r => setDepartments(r.data.items || []))
+      .catch(() => {});
+  }, []);
+  const opts = (cat) => (dd[cat] || []).map(d => ({ label: d.value, value: d.value }));
+  const departmentOptions = departments.map(d => ({ label: d.name, value: d.name }));
+
   useEffect(() => {
     if (open && prefill) {
       setTarget(DEFAULT_TARGET);
@@ -325,7 +338,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
               </Col>
               <Col span={8}>
                 <Form.Item name="os_type" label="OS Type">
-                  <Input placeholder="e.g. Windows, Linux" />
+                  <Select allowClear showSearch optionFilterProp="label" placeholder="Select OS Type" options={opts('os_type')} />
                 </Form.Item>
               </Col>
               <Col span={8}>
@@ -350,7 +363,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
               </Col>
               <Col span={8}>
                 <Form.Item name="department" label="Department">
-                  <Input placeholder="e.g. IT / Platform" />
+                  <Select allowClear showSearch optionFilterProp="label" placeholder="Select department" options={departmentOptions} />
                 </Form.Item>
               </Col>
             </Row>
@@ -358,7 +371,7 @@ export default function AddToInventoryModal({ open, prefill, onClose }) {
             <Row gutter={16}>
               <Col span={8}>
                 <Form.Item name="location" label="Location">
-                  <Input placeholder="e.g. US-East, HQ" />
+                  <Select allowClear showSearch optionFilterProp="label" placeholder="Select location" options={opts('location')} />
                 </Form.Item>
               </Col>
             </Row>
