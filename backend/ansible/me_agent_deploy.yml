@@ -125,9 +125,20 @@
           cp "{{ share_path }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
       register: copy_result
 
-    - name: Run the ME Agent installer
+    - name: Copy serverinfo.json from the network share to /tmp
       ansible.builtin.shell:
         cmd: |
-          /tmp/{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
+          cp "{{ share_path }}/{{ serverinfo_file }}" "/tmp/{{ serverinfo_file }}"
+      register: copy_serverinfo_result
+      when: (serverinfo_file | default('')) | length > 0
+
+    - name: Run the ME Agent installer
+      # Runs from /tmp (not by absolute path) so the installer finds
+      # serverinfo.json — copied into the same directory above — via its
+      # own working-directory lookup, same convention as Software Status's
+      # own Linux install.
+      ansible.builtin.shell:
+        cmd: |
+          cd /tmp && ./{{ installer_file }} {{ install_cmd | default('--PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)

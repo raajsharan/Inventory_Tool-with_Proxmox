@@ -49,10 +49,12 @@ const STATEMENTS = [
       windows_install_cmd    TEXT,
       linux_share_path       TEXT,
       linux_installer_file   VARCHAR(255),
+      linux_serverinfo_file  VARCHAR(255),
       linux_install_cmd      TEXT,
       updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
       updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  `ALTER TABLE test_deploy_config ADD COLUMN IF NOT EXISTS linux_serverinfo_file VARCHAR(255)`,
   `INSERT INTO test_deploy_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS test_deploy_location_config (
       location               VARCHAR(255) PRIMARY KEY,
@@ -61,10 +63,12 @@ const STATEMENTS = [
       windows_install_cmd    TEXT,
       linux_share_path       TEXT,
       linux_installer_file   VARCHAR(255),
+      linux_serverinfo_file  VARCHAR(255),
       linux_install_cmd      TEXT,
       updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
       updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  `ALTER TABLE test_deploy_location_config ADD COLUMN IF NOT EXISTS linux_serverinfo_file VARCHAR(255)`,
   `CREATE TABLE IF NOT EXISTS test_deploy_runs (
       id            SERIAL PRIMARY KEY,
       status        VARCHAR(16) NOT NULL DEFAULT 'running',

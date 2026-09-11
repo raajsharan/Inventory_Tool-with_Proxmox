@@ -31,6 +31,7 @@ function buildInventory(targets) {
       share_path: t.sharePath || '',
       installer_file: t.installerFile || '',
       install_cmd: t.installCmd || '',
+      serverinfo_file: t.serverinfoFile || '',
     };
   }
   return JSON.stringify(groups, null, 2);

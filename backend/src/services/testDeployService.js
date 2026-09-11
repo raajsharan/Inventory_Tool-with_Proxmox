@@ -91,7 +91,7 @@ function mergeLocationConfig(globalCfg, locCfg) {
 async function saveConfig(body, userId) {
   const {
     windows_share_path, windows_installer_file, windows_install_cmd,
-    linux_share_path, linux_installer_file, linux_install_cmd,
+    linux_share_path, linux_installer_file, linux_serverinfo_file, linux_install_cmd,
   } = body;
   const location = (body.location || '').trim();
 
@@ -99,21 +99,22 @@ async function saveConfig(body, userId) {
     const { rows } = await db.query(
       `INSERT INTO test_deploy_location_config
          (location, windows_share_path, windows_installer_file, windows_install_cmd,
-          linux_share_path, linux_installer_file, linux_install_cmd, updated_by, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+          linux_share_path, linux_installer_file, linux_serverinfo_file, linux_install_cmd, updated_by, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
        ON CONFLICT (location) DO UPDATE SET
          windows_share_path     = EXCLUDED.windows_share_path,
          windows_installer_file = EXCLUDED.windows_installer_file,
          windows_install_cmd    = EXCLUDED.windows_install_cmd,
          linux_share_path       = EXCLUDED.linux_share_path,
          linux_installer_file   = EXCLUDED.linux_installer_file,
+         linux_serverinfo_file  = EXCLUDED.linux_serverinfo_file,
          linux_install_cmd      = EXCLUDED.linux_install_cmd,
          updated_by             = EXCLUDED.updated_by,
          updated_at             = NOW()
        RETURNING *`,
       [
         location, windows_share_path || null, windows_installer_file || null, windows_install_cmd || null,
-        linux_share_path || null, linux_installer_file || null, linux_install_cmd || null, userId,
+        linux_share_path || null, linux_installer_file || null, linux_serverinfo_file || null, linux_install_cmd || null, userId,
       ],
     );
     return rows[0];
@@ -122,21 +123,22 @@ async function saveConfig(body, userId) {
   const { rows } = await db.query(
     `INSERT INTO test_deploy_config
        (id, windows_share_path, windows_installer_file, windows_install_cmd,
-        linux_share_path, linux_installer_file, linux_install_cmd, updated_by, updated_at)
-     VALUES (1,$1,$2,$3,$4,$5,$6,$7,NOW())
+        linux_share_path, linux_installer_file, linux_serverinfo_file, linux_install_cmd, updated_by, updated_at)
+     VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,NOW())
      ON CONFLICT (id) DO UPDATE SET
        windows_share_path     = EXCLUDED.windows_share_path,
        windows_installer_file = EXCLUDED.windows_installer_file,
        windows_install_cmd    = EXCLUDED.windows_install_cmd,
        linux_share_path       = EXCLUDED.linux_share_path,
        linux_installer_file   = EXCLUDED.linux_installer_file,
+       linux_serverinfo_file  = EXCLUDED.linux_serverinfo_file,
        linux_install_cmd      = EXCLUDED.linux_install_cmd,
        updated_by             = EXCLUDED.updated_by,
        updated_at             = NOW()
      RETURNING *`,
     [
       windows_share_path || null, windows_installer_file || null, windows_install_cmd || null,
-      linux_share_path || null, linux_installer_file || null, linux_install_cmd || null, userId,
+      linux_share_path || null, linux_installer_file || null, linux_serverinfo_file || null, linux_install_cmd || null, userId,
     ],
   );
   return rows[0];
@@ -224,6 +226,9 @@ async function buildAnsibleTarget(ref, globalCfg) {
     sharePath: win ? cfg.windows_share_path : cfg.linux_share_path,
     installerFile: win ? cfg.windows_installer_file : cfg.linux_installer_file,
     installCmd: win ? cfg.windows_install_cmd : cfg.linux_install_cmd,
+    // Linux only — the UEMS Linux agent installer needs serverinfo.json
+    // copied alongside it, same as Software Status's own Linux install.
+    serverinfoFile: win ? '' : (cfg.linux_serverinfo_file || ''),
   };
 }
 

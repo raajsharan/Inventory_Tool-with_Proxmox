@@ -166,6 +166,19 @@ export default function TestDeployConfig() {
                 <Input placeholder="UEMS_LinuxAgent.bin" style={{ fontFamily: 'monospace' }} />
               </Form.Item>
               <Form.Item
+                name="linux_serverinfo_file"
+                label={
+                  <Space>
+                    serverinfo.json filename
+                    <Tooltip title="The UEMS Linux agent installer needs this file copied alongside it, in the same share folder as the installer above. Leave blank if this location's installer doesn't need one.">
+                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <Input placeholder="serverinfo.json" style={{ fontFamily: 'monospace' }} />
+              </Form.Item>
+              <Form.Item
                 name="linux_install_cmd"
                 label={
                   <Space>
