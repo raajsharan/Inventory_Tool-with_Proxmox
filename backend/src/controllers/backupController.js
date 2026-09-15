@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const os = require('os');
+const zlib = require('zlib');
 const svc = require('../services/backupService');
 const scheduler = require('../services/backupScheduler');
 const audit = require('../services/auditService');
@@ -40,7 +41,7 @@ async function runPgNow(req, res, next) {
     });
     await audit.log({ user: req.user, action: 'EXPORT', entityType: 'pg_dump', ipAddress: req.ip });
 
-    res.setHeader('Content-Type', 'application/sql');
+    res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
     fs.createReadStream(result.filePath).pipe(res).on('close', () => {
       fsp.unlink(result.filePath).catch(() => {});
@@ -95,7 +96,9 @@ async function restoreDump(req, res, next) {
     await fsp.mkdir(tmpDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const tmpFile = path.join(tmpDir, `restore_${stamp}.sql`);
-    await fsp.writeFile(tmpFile, req.file.buffer);
+    const isGzip = /\.gz$/i.test(req.file.originalname || '');
+    const contents = isGzip ? zlib.gunzipSync(req.file.buffer) : req.file.buffer;
+    await fsp.writeFile(tmpFile, contents);
 
     try {
       await svc.restoreFromDump(tmpFile, { dropFirst: true, userId: req.user.id });

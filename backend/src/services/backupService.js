@@ -2,6 +2,8 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const zlib = require('zlib');
+const { pipeline } = require('stream/promises');
 const ExcelJS = require('exceljs');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
@@ -20,11 +22,11 @@ const PASSWORD_COLUMNS = {
 const INVENTORY_TABLES = ['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'];
 
 // Matches only files produced by this service's own naming conventions:
-//   inventory_<db>[_<stamp>].sql   (pg dump, see runPgBackup)
-//   <table>_<stamp>.csv            (csv export, see dumpTableToCsv, table is one of INVENTORY_TABLES)
-//   pg_dump_...                    (retained for backward-compat with older backup naming)
+//   inventory_<db>[_<stamp>].sql.gz   (gzip'd pg dump, see runPgBackup)
+//   <table>_<stamp>.csv               (csv export, see dumpTableToCsv, table is one of INVENTORY_TABLES)
+//   pg_dump_...                       (retained for backward-compat with older backup naming)
 const BACKUP_NAME_RE = new RegExp(
-  `^(pg_dump|inventory|${INVENTORY_TABLES.join('|')})_.*\\.(sql|csv|zip)$`
+  `^(pg_dump|inventory|${INVENTORY_TABLES.join('|')})_.*\\.(sql(\\.gz)?|csv|zip)$`
 );
 
 function nowStamp() {
@@ -162,6 +164,17 @@ function runPsqlRestore(filePath, { dropFirst }) {
   });
 }
 
+// Gzips srcPath to destPath (streamed, so it doesn't load the whole dump into
+// memory) and removes the uncompressed source once compression succeeds.
+async function gzipFile(srcPath, destPath) {
+  await pipeline(
+    fs.createReadStream(srcPath),
+    zlib.createGzip({ level: zlib.constants.Z_BEST_COMPRESSION }),
+    fs.createWriteStream(destPath)
+  );
+  await fsp.unlink(srcPath);
+}
+
 async function pruneOldFiles(dir, retainDays) {
   if (!retainDays || retainDays <= 0) return;
   const cutoff = Date.now() - retainDays * 86400000;
@@ -185,11 +198,13 @@ async function runPgBackup({ trigger, userId, downloadTo }) {
   const name = settings?.file_naming === 'overwrite'
     ? `inventory_${dbName()}.sql`
     : `inventory_${dbName()}_${stamp}.sql`;
-  const filePath = downloadTo || path.join(dir, name);
+  const rawPath = downloadTo || path.join(dir, name);
+  const filePath = `${rawPath}.gz`;
 
   const startedAt = new Date();
   try {
-    await runPgDump(filePath);
+    await runPgDump(rawPath);
+    await gzipFile(rawPath, filePath);
     const st = await fsp.stat(filePath);
     await pruneOldFiles(dir, settings?.retain_days);
     await recordRun({

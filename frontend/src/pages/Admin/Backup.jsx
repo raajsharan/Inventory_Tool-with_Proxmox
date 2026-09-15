@@ -190,7 +190,7 @@ function PgBackupTab() {
       const res = await api.post('/backup/pg/run', null, { responseType: 'blob' });
       const cd = res.headers['content-disposition'] || '';
       const m = /filename="([^"]+)"/.exec(cd);
-      const fname = m ? m[1] : 'pg_dump.sql';
+      const fname = m ? m[1] : 'pg_dump.sql.gz';
       const url = URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement('a'); a.href = url; a.download = fname; a.click();
       URL.revokeObjectURL(url);
@@ -245,9 +245,9 @@ function PgBackupTab() {
         message="PostgreSQL Database Backup"
         description={
           <span>
-            Creates a full SQL dump of the <code>infrastructure_inventory</code> database using <code>pg_dump</code>.
-            The dump file can be used to restore the full database at any point.
-            Scheduled backups run on the server; manual backup triggers an immediate download.
+            Creates a full SQL dump of the <code>infrastructure_inventory</code> database using <code>pg_dump</code>,
+            then compresses it with gzip to reduce disk usage. The dump file can be used to restore the full database at any point.
+            Scheduled backups run on the server and are stored compressed (.sql.gz); manual backup triggers an immediate compressed download.
             <br /><strong>Requirement:</strong> <code>pg_dump</code>/<code>psql</code> must be installed on the server (standard with PostgreSQL).
           </span>
         }
@@ -260,7 +260,7 @@ function PgBackupTab() {
             Download SQL Dump Now
           </Button>
           <Upload
-            accept=".sql"
+            accept=".sql,.gz"
             beforeUpload={onRestore}
             showUploadList={false}
             disabled={restoring}
@@ -271,7 +271,7 @@ function PgBackupTab() {
           </Upload>
         </Space>
         <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-          Generates a full pg_dump and immediately downloads it as a .sql file. Restore drops and recreates the public schema.
+          Generates a full pg_dump and immediately downloads it as a compressed .sql.gz file. Restore accepts either a .sql or a gzip-compressed .sql.gz dump and drops and recreates the public schema.
         </Typography.Paragraph>
       </Card>
 
