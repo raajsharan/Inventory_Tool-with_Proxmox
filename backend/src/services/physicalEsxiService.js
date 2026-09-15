@@ -14,7 +14,7 @@ const ASSET_COLUMNS = [
   'cpu_cores', 'ram_gb', 'total_disks',
   'ome_status', 'rack_number', 'server_position', 'additional_remarks',
   'idrac_ip', 'idrac_enabled', 'idrac_username', 'asset_tag',
-  'asset_username', 'assigned_user',
+  'asset_username', 'assigned_user', 'vcenter',
 ];
 
 function mapBody(body) {
@@ -203,7 +203,7 @@ async function viewIdracPassword(id) {
   return crypto.decrypt(rows[0].idrac_password_encrypted);
 }
 
-async function list({ search, osType, serverStatus, location, serverModel, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
+async function list({ search, osType, serverStatus, location, serverModel, vcenter, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
   const where = ['a.deleted_at IS NULL', 'a.decommissioned_at IS NULL'];
   const params = [];
   if (search) {
@@ -215,8 +215,9 @@ async function list({ search, osType, serverStatus, location, serverModel, page 
   if (serverStatus) { params.push(serverStatus); where.push(`server_status = $${params.length}`); }
   if (location)     { params.push(location);     where.push(`location = $${params.length}`); }
   if (serverModel)  { params.push(serverModel);  where.push(`server_model = $${params.length}`); }
+  if (vcenter)      { params.push(vcenter);      where.push(`vcenter = $${params.length}`); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const safeSort = ['vm_name','ip_address','os_type','server_status','location','created_at','updated_at'].includes(sortBy) ? sortBy : 'created_at';
+  const safeSort = ['vm_name','ip_address','os_type','server_status','location','vcenter','created_at','updated_at'].includes(sortBy) ? sortBy : 'created_at';
   const safeDir = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * pageSize;
 

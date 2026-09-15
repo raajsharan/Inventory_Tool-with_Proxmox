@@ -524,6 +524,11 @@ ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCH
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_username           VARCHAR(255);
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_password_encrypted TEXT;
 
+-- Vcenter — which configured VMware vCenter (vmware_hosts.host) this
+-- physical/ESXi server belongs to, shown as a dropdown fed live from
+-- VMware Discovery > Hosts & Credentials.
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS vcenter VARCHAR(255);
+
 -- Remove fields not applicable to physical servers (patching / tools / EOL
 -- are handled at the VM / OS layer, not on bare-metal host registration).
 ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed;

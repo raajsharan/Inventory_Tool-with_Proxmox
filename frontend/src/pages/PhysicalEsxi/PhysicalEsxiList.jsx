@@ -30,17 +30,19 @@ export default function PhysicalEsxiList() {
   const [serverModels, setServerModels] = useState([]);
   const [ddStatus, setDdStatus] = useState([]);
   const [ddLocation, setDdLocation] = useState([]);
+  const [vcenterHosts, setVcenterHosts] = useState([]);
 
   const [filters, setFilters] = useState(() => ({
     search:       searchParams.get('q')      || '',
     serverStatus: searchParams.get('status') || undefined,
     location:     searchParams.get('loc')    || undefined,
     serverModel:  searchParams.get('model')  || undefined,
+    vcenter:      searchParams.get('vc')     || undefined,
   }));
   const [page, setPage]         = useState(() => Number(searchParams.get('page')) || 1);
   const [pageSize, setPageSize] = useState(() => Number(searchParams.get('size')) || 20);
 
-  const hasFilters = !!(filters.search || filters.serverStatus || filters.location || filters.serverModel);
+  const hasFilters = !!(filters.search || filters.serverStatus || filters.location || filters.serverModel || filters.vcenter);
 
   // ── URL sync ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function PhysicalEsxiList() {
     if (filters.serverStatus) p.status = filters.serverStatus;
     if (filters.location)     p.loc    = filters.location;
     if (filters.serverModel)  p.model  = filters.serverModel;
+    if (filters.vcenter)      p.vc     = filters.vcenter;
     if (page > 1)             p.page   = String(page);
     if (pageSize !== 20)      p.size   = String(pageSize);
     setSearchParams(p, { replace: true });
@@ -91,7 +94,7 @@ export default function PhysicalEsxiList() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [page, pageSize, filters.serverStatus, filters.location, filters.serverModel]); // eslint-disable-line
+  useEffect(() => { load(); }, [page, pageSize, filters.serverStatus, filters.location, filters.serverModel, filters.vcenter]); // eslint-disable-line
   useEffect(() => {
     api.get('/dropdowns').then(r => {
       const g = r.data.grouped || {};
@@ -99,6 +102,9 @@ export default function PhysicalEsxiList() {
       setDdLocation((g.location    || []).map(d => ({ label: d.value, value: d.value })));
     });
     api.get('/server-models').then(r => setServerModels(r.data || [])).catch(() => {});
+    api.get('/vmware/hosts')
+      .then(r => setVcenterHosts((r.data.hosts || []).map(h => ({ label: h.host, value: h.host }))))
+      .catch(() => {});
     api.get(`/field-visibility/${PAGE_KEY}`)
       .then(r => setHiddenSet(new Set(r.data.hidden || []))).catch(() => {});
     api.get(`/inventory-fields/${PAGE_KEY}`)
@@ -113,7 +119,7 @@ export default function PhysicalEsxiList() {
   // ── Helpers ───────────────────────────────────────────────────────────────
   function onSearch() { setPage(1); load(); }
   function clearFilters() {
-    const blank = { search: '', serverStatus: undefined, location: undefined, serverModel: undefined };
+    const blank = { search: '', serverStatus: undefined, location: undefined, serverModel: undefined, vcenter: undefined };
     setFilters(blank);
     setPage(1);
     load({ page: 1, ...blank });
@@ -309,6 +315,10 @@ export default function PhysicalEsxiList() {
     {
       key: 'server_model', dataIndex: 'server_model', width: 190,
       title: labelOf('server_model', 'Server Model'), render: dash,
+    },
+    {
+      key: 'vcenter', dataIndex: 'vcenter', width: 170,
+      title: labelOf('vcenter', 'Vcenter'), render: dash,
     },
     {
       key: 'serial_number', dataIndex: 'serial_number', width: 150,
@@ -515,6 +525,16 @@ export default function PhysicalEsxiList() {
             value={filters.serverModel}
             onChange={v => setFilters({ ...filters, serverModel: v })}
             options={modelOptions}
+          />
+        </Col>
+        <Col xs={12} md={4}>
+          <Select
+            allowClear showSearch optionFilterProp="label"
+            placeholder="Vcenter"
+            style={{ width: '100%' }}
+            value={filters.vcenter}
+            onChange={v => setFilters({ ...filters, vcenter: v })}
+            options={vcenterHosts}
           />
         </Col>
         <Col xs={12} md={4}>

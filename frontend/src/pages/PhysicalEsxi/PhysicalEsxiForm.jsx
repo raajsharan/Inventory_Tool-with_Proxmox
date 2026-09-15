@@ -49,6 +49,7 @@ export default function PhysicalEsxiForm({ mode }) {
   const [form] = Form.useForm();
   const [dd, setDd] = useState({});
   const [serverModels, setServerModels] = useState([]);
+  const [vcenterHosts, setVcenterHosts] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [originalIp, setOriginalIp] = useState(null);
@@ -72,6 +73,9 @@ export default function PhysicalEsxiForm({ mode }) {
   useEffect(() => {
     api.get('/dropdowns').then(r => setDd(r.data.grouped || {}));
     api.get('/server-models').then(r => setServerModels(r.data || [])).catch(() => {});
+    api.get('/vmware/hosts')
+      .then(r => setVcenterHosts((r.data.hosts || []).map(h => ({ label: h.host, value: h.host }))))
+      .catch(() => {});
     api.get('/departments', { params: { activeOnly: 1 } })
       .then(r => setDepartments(r.data.items || []))
       .catch(() => {});
@@ -104,6 +108,7 @@ export default function PhysicalEsxiForm({ mode }) {
           assetTag:        d.asset_tag,
           assignedUser:    d.assigned_user,
           idracUsername:   d.idrac_username,
+          vcenter:         d.vcenter,
           extras: Object.fromEntries(
             Object.entries(d.extras || {}).map(([k, v]) =>
               [k, v && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? dayjs(v) : v]
@@ -193,6 +198,7 @@ export default function PhysicalEsxiForm({ mode }) {
         assetUsername:     values.assetUsername,
         assignedUser:      values.assignedUser,
         idracUsername:     values.idracUsername,
+        vcenter:           values.vcenter,
         ...(values.serverStatus !== undefined ? { serverStatus: values.serverStatus } : {}),
         ...(values.patchingType !== undefined ? { patchingType: values.patchingType } : {}),
         ...(values.serverStatus && /^decom/i.test(values.serverStatus) ? { decommissionReason: values.decommissionReason } : {}),
@@ -368,6 +374,15 @@ export default function PhysicalEsxiForm({ mode }) {
             <Select allowClear showSearch optionFilterProp="label"
               placeholder="Select location..."
               options={opts('location')}
+            />
+          </Form.Item>
+        );
+      case 'vcenter':
+        return wrap(
+          <Form.Item name="vcenter" label={labelOf('vcenter', 'Vcenter')}>
+            <Select allowClear showSearch optionFilterProp="label"
+              placeholder="Select vCenter..."
+              options={vcenterHosts}
             />
           </Form.Item>
         );

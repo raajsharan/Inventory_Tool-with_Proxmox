@@ -8,7 +8,7 @@ const HINT = (
     <b>Asset Username</b>, <b>Asset Password</b>,{' '}
     <b>CPU Cores</b>, <b>RAM (GB)</b>, <b>Total Disks</b>,{' '}
     <b>OME Status</b>, <b>Rack Number</b>, <b>Server Position</b>, <b>Additional Remarks</b>,{' '}
-    <b>iDRAC IP</b>, <b>iDRAC Enabled</b>.
+    <b>iDRAC IP</b>, <b>iDRAC Enabled</b>, <b>Vcenter</b>.
   </span>
 );
 

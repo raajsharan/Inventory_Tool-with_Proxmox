@@ -42,6 +42,7 @@ const COLUMNS = [
   { key: 'idrac_enabled',      header: 'iDRAC Enabled',       width: 16 },
   { key: 'idrac_username',     header: 'iDRAC Username',      width: 18 },
   { key: 'idrac_password',     header: 'iDRAC Password',      width: 18 },
+  { key: 'vcenter',            header: 'Vcenter',             width: 22 },
 ];
 
 const IP_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -72,6 +73,7 @@ async function list(req, res, next) {
       serverStatus: req.query.serverStatus,
       location: req.query.location,
       serverModel: req.query.serverModel,
+      vcenter: req.query.vcenter,
       page: Number(req.query.page) || 1,
       pageSize: Math.min(Number(req.query.pageSize) || 20, 200),
       sortBy: req.query.sortBy,
@@ -202,6 +204,7 @@ async function exportAssets(req, res, next) {
       serverStatus: req.query.serverStatus,
       location: req.query.location,
       serverModel: req.query.serverModel,
+      vcenter: req.query.vcenter,
       page: 1, pageSize: 100000,
     });
     const wb = new ExcelJS.Workbook();

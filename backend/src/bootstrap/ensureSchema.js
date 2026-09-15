@@ -749,6 +749,11 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_username           VARCHAR(255)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_password_encrypted TEXT`,
 
+  // ── Vcenter — which configured VMware vCenter (vmware_hosts.host) this
+  // physical/ESXi server belongs to, shown as a dropdown fed live from
+  // VMware Discovery > Hosts & Credentials.
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS vcenter VARCHAR(255)`,
+
   // ── Remove fields not applicable to physical/ESXi servers
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS tenable_installed`,

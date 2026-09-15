@@ -275,6 +275,27 @@ async function getDashboardStats() {
   };
 }
 
+// Hyper-V has no cluster/node tier — each hyperv_hosts entry is a standalone
+// hypervisor, so unlike VMware (vCenter -> ESXi host) or Proxmox (host ->
+// node) this is a single-tier grouping straight from source_host to VMs.
+async function getHostTopology() {
+  const vms = await getLatestVMs();
+  const byHost = {};
+  for (const vm of vms) {
+    if (vm.is_template) continue;
+    const h = vm.source_host || 'Unknown';
+    if (!byHost[h]) byHost[h] = { host: h, vm_count: 0, running: 0, stopped: 0, saved: 0, paused: 0 };
+    const s = byHost[h];
+    s.vm_count++;
+    const st = (vm.state || '').toLowerCase();
+    if (st === 'running') s.running++;
+    else if (st === 'off') s.stopped++;
+    else if (st === 'saved') s.saved++;
+    else if (st === 'paused') s.paused++;
+  }
+  return Object.values(byHost).sort((a, b) => a.host.localeCompare(b.host));
+}
+
 // ---------------------------------------------------------------------------
 // Drift
 // ---------------------------------------------------------------------------
@@ -520,5 +541,5 @@ module.exports = {
   setHostRunning, setLastDiscovery, setLastDiscoveryFailed, setHostStats, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
-  getDashboardStats, getDrift, getDriftActivity, getDriftHistory, getStaleVMs, getSnapshotVMs,
+  getDashboardStats, getHostTopology, getDrift, getDriftActivity, getDriftHistory, getStaleVMs, getSnapshotVMs,
 };

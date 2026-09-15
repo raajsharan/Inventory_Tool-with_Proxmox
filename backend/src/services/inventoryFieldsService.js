@@ -57,6 +57,7 @@ const FIELD_GROUP_MAP = {
   total_disks:     'Hardware',
   rack_number:     'Rack',
   server_position: 'Rack',
+  vcenter:         'Hardware',
 };
 
 // Default input types for each built-in field. DB-linked fields stay
@@ -99,6 +100,7 @@ const FIELD_DEFAULTS = {
   total_disks:     { label: 'Total Disks',        type: 'number' },
   rack_number:     { label: 'Rack Number',        type: 'text' },
   server_position: { label: 'Server Position (U)', type: 'text' },
+  vcenter:         { label: 'Vcenter',             type: 'dropdown', frozen: true, frozen_reason: 'Linked to VMware Discovery hosts' },
 };
 
 const PAGE_KEYS = new Set(['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers']);

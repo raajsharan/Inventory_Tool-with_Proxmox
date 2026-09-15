@@ -120,6 +120,10 @@ async function getDashboard(req, res, next) {
   try { res.json(await db.getDashboardStats()); } catch (e) { next(e); }
 }
 
+async function getHostTopology(req, res, next) {
+  try { res.json({ topology: await db.getHostTopology() }); } catch (e) { next(e); }
+}
+
 async function getDrift(req, res, next) {
   try { res.json(await db.getDrift()); } catch (e) { next(e); }
 }
@@ -276,6 +280,6 @@ async function exportMacLookupCSV(req, res, next) {
 
 module.exports = {
   listHosts, addHost, updateHost, removeHost, testHost, triggerRun,
-  listVMs, exportVMsCSV, getDashboard, getDrift, getDriftHistory, getDriftActivity, getStale, getSnapshots, getRuns,
+  listVMs, exportVMsCSV, getDashboard, getHostTopology, getDrift, getDriftHistory, getDriftActivity, getStale, getSnapshots, getRuns,
   getMacLookup, exportMacLookupCSV,
 };

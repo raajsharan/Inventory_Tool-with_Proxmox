@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { App, Card, Typography, Button, Space, List, Alert, Tag, Tooltip } from 'antd';
 import {
   DashboardOutlined, DatabaseOutlined, GlobalOutlined, CloudServerOutlined,
-  HddOutlined, BarChartOutlined, ApartmentOutlined, AppstoreOutlined,
+  HddOutlined, BarChartOutlined, ApartmentOutlined, AppstoreOutlined, ClusterOutlined,
   ArrowUpOutlined, ArrowDownOutlined, MenuOutlined, ReloadOutlined, SaveOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
@@ -18,7 +18,8 @@ export const DEFAULT_NAV_ITEMS = [
   { key: '__custom__',         label: 'Custom Pages',             icon: AppstoreOutlined,          description: 'Dynamically created custom pages' },
   { key: '/reports',           label: 'Report Builder',           icon: BarChartOutlined,          description: 'Report builder and exports' },
   { key: 'software-services',  label: 'Software Services',        icon: SafetyCertificateOutlined, description: 'ManageEngine, Nessus Agent & Tenable Report' },
-  { key: 'vm-discovery',       label: 'VM Discovery',             icon: ApartmentOutlined,         description: 'VMware & Proxmox discovery' },
+  { key: 'vm-discovery',       label: 'VM Discovery',             icon: ApartmentOutlined,         description: 'VMware, Proxmox & Hyper-V discovery' },
+  { key: '/topology-sites',    label: 'Topology of Sites',        icon: ClusterOutlined,           description: 'VMware, Proxmox & Hyper-V topology diagrams' },
 ];
 
 export function loadNavOrder() {

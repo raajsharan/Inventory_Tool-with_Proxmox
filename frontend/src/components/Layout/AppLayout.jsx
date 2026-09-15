@@ -27,7 +27,7 @@ const { Sider, Header, Content, Footer } = Layout;
 
 const DEFAULT_NAV_KEYS = [
   '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
-  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', 'migration-tracker',
+  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', '/topology-sites', 'migration-tracker',
   '/test-deploy',
 ];
 
@@ -163,6 +163,10 @@ export default function AppLayout() {
             can('connectivity_alerts') && { key: '/connectivity-alerts', icon: <AlertOutlined />, label: <Link to="/connectivity-alerts">Connectivity Alerts</Link> },
           ].filter(Boolean),
         }];
+      case '/topology-sites':
+        return can('topology_sites')
+          ? [{ key: '/topology-sites', icon: <ClusterOutlined />, label: <Link to="/topology-sites">Topology of Sites</Link> }]
+          : [];
       case 'migration-tracker':
         return can('migration_tracker')
           ? [{ key: '/migration-tracker', icon: <ControlOutlined />, label: <Link to="/migration-tracker">Migration Tracker</Link> }]
