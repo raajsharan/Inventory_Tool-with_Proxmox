@@ -32,7 +32,7 @@ async function startKind(kind) {
       console.log(`[backup-scheduler] ${kind} run completed`);
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error(`[backup-scheduler] ${kind} run failed:`, e.message);
+      console.error(`[backup-scheduler] ${kind} run failed:`, e.stack || e.message);
     }
   });
   // eslint-disable-next-line no-console

@@ -124,22 +124,31 @@ async function recordRun({ kind, trigger, status, filePath, fileSize, error, tri
   return rows[0];
 }
 
-function runPgDump(filePath) {
+// Streams pg_dump's stdout straight through gzip into destGzPath — the plain
+// dump is never written to disk uncompressed, so a large database backup
+// never needs 2x its size in free disk space (dump + separately-gzipped copy)
+// at once, only the final compressed size.
+function runPgDumpGzip(destGzPath) {
   return new Promise((resolve, reject) => {
-    const args = [
-      ...pgConnArgs(),
-      '--no-owner',
-      '--no-privileges',
-      '-f', filePath,
-    ];
+    const args = [...pgConnArgs(), '--no-owner', '--no-privileges'];
     const proc = spawn('pg_dump', args, { env: pgEnv() });
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
     proc.on('error', (e) => reject(new Error(`pg_dump unavailable: ${e.message}`)));
-    proc.on('close', (code) => {
-      if (code === 0) return resolve();
-      reject(new Error(`pg_dump exited ${code}: ${stderr.trim().slice(0, 800)}`));
-    });
+
+    const closeCode = new Promise((res) => proc.on('close', res));
+    const streamDone = pipeline(
+      proc.stdout,
+      zlib.createGzip({ level: zlib.constants.Z_BEST_COMPRESSION }),
+      fs.createWriteStream(destGzPath)
+    );
+
+    Promise.all([closeCode, streamDone])
+      .then(([code]) => {
+        if (code === 0) resolve();
+        else reject(new Error(`pg_dump exited ${code}: ${stderr.trim().slice(0, 800)}`));
+      })
+      .catch(reject);
   });
 }
 
@@ -162,17 +171,6 @@ function runPsqlRestore(filePath, { dropFirst }) {
       reject(new Error(`psql exited ${code}: ${stderr.trim().slice(0, 1200)}`));
     });
   });
-}
-
-// Gzips srcPath to destPath (streamed, so it doesn't load the whole dump into
-// memory) and removes the uncompressed source once compression succeeds.
-async function gzipFile(srcPath, destPath) {
-  await pipeline(
-    fs.createReadStream(srcPath),
-    zlib.createGzip({ level: zlib.constants.Z_BEST_COMPRESSION }),
-    fs.createWriteStream(destPath)
-  );
-  await fsp.unlink(srcPath);
 }
 
 async function pruneOldFiles(dir, retainDays) {
@@ -198,13 +196,11 @@ async function runPgBackup({ trigger, userId, downloadTo }) {
   const name = settings?.file_naming === 'overwrite'
     ? `inventory_${dbName()}.sql`
     : `inventory_${dbName()}_${stamp}.sql`;
-  const rawPath = downloadTo || path.join(dir, name);
-  const filePath = `${rawPath}.gz`;
+  const filePath = `${downloadTo || path.join(dir, name)}.gz`;
 
   const startedAt = new Date();
   try {
-    await runPgDump(rawPath);
-    await gzipFile(rawPath, filePath);
+    await runPgDumpGzip(filePath);
     const st = await fsp.stat(filePath);
     await pruneOldFiles(dir, settings?.retain_days);
     await recordRun({
@@ -213,10 +209,18 @@ async function runPgBackup({ trigger, userId, downloadTo }) {
     });
     return { filePath, fileSize: st.size, fileName: path.basename(filePath) };
   } catch (e) {
-    await recordRun({
-      kind: 'pg', trigger, status: 'error',
-      filePath, error: e.message, triggeredBy: userId, startedAt,
-    });
+    // eslint-disable-next-line no-console
+    console.error('[backup] pg backup failed:', e.stack || e);
+    try {
+      await recordRun({
+        kind: 'pg', trigger, status: 'error',
+        filePath, error: e?.message || String(e), triggeredBy: userId, startedAt,
+      });
+    } catch (recordErr) {
+      // eslint-disable-next-line no-console
+      console.error('[backup] failed to record error run:', recordErr.stack || recordErr);
+    }
+    await fsp.unlink(filePath).catch(() => {});
     throw e;
   }
 }
