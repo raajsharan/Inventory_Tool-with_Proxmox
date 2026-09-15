@@ -35,8 +35,19 @@ export default function Decommissioned() {
   const [current, setCurrent] = useState([]);
   const [log, setLog]         = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentFilters, setCurrentFilters] = useState({ source: undefined, search: '' });
   const [logFilters, setLogFilters] = useState({ source: undefined, person: '', range: null });
   const [reactivating, setReactivating] = useState(null); // record pending confirm
+
+  const filteredCurrent = current.filter(r => {
+    if (currentFilters.source && r.source !== currentFilters.source) return false;
+    if (currentFilters.search) {
+      const q = currentFilters.search.toLowerCase();
+      const hay = [r.vm_name, r.ip_address, r.asset_tag, r.os_hostname].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   const load = async () => {
     setLoading(true);
@@ -160,13 +171,24 @@ export default function Decommissioned() {
               key: 'current',
               label: `Current (${current.length})`,
               children: (
-                <Table
-                  size="small" rowKey={(r) => `${r.source}-${r.id}`} loading={loading}
-                  dataSource={current} columns={currentColumns}
-                  pagination={{ pageSize: 20 }}
-                  scroll={{ x: 'max-content' }}
-                  locale={{ emptyText: 'No decommissioned servers right now.' }}
-                />
+                <>
+                  <Space wrap style={{ marginBottom: 12 }}>
+                    <Select allowClear placeholder="Source inventory" style={{ minWidth: 170 }}
+                      value={currentFilters.source}
+                      onChange={(v) => setCurrentFilters(f => ({ ...f, source: v }))}
+                      options={Object.entries(SOURCE_META).map(([k, m]) => ({ value: k, label: m.label }))} />
+                    <Input allowClear placeholder="Search name, IP, tag…" prefix={<SearchOutlined />}
+                      style={{ width: 220 }} value={currentFilters.search}
+                      onChange={(e) => setCurrentFilters(f => ({ ...f, search: e.target.value }))} />
+                  </Space>
+                  <Table
+                    size="small" rowKey={(r) => `${r.source}-${r.id}`} loading={loading}
+                    dataSource={filteredCurrent} columns={currentColumns}
+                    pagination={{ pageSize: 20 }}
+                    scroll={{ x: 'max-content' }}
+                    locale={{ emptyText: 'No decommissioned servers right now.' }}
+                  />
+                </>
               ),
             },
             {
