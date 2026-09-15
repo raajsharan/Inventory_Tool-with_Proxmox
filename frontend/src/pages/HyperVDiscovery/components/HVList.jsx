@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Input, Select, Space, Tag, Tooltip, Card, Alert } from 'antd';
-import { SearchOutlined, LaptopOutlined } from '@ant-design/icons';
+import { Table, Input, Select, Space, Button, Tag, Tooltip, Card, Alert } from 'antd';
+import { SearchOutlined, DownloadOutlined, LaptopOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import { DASH_CSS } from '../../../components/DashboardStatCard.jsx';
 
@@ -59,11 +59,34 @@ export default function HVList() {
 
   useEffect(() => { load(); }, [load]);
 
+  async function onExport() {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (state)  params.set('state', state);
+    const url = `/api/hyperv/vms/export?${params}`;
+    const token = localStorage.getItem('token');
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hyperv_vms.csv';
+    a.click();
+  }
+
   return (
     <div style={{ padding: 16 }}>
       <style>{DASH_CSS}</style>
       {error && <Alert type="error" showIcon message="Couldn't load VMs" description={error} style={{ marginBottom: 12 }} />}
-      <Card size="small" className="dashcard" title={`${total} VMs`}>
+      <Card
+        size="small"
+        className="dashcard"
+        title={`${total} VMs`}
+        extra={
+          <Tooltip title="Download the current Hyper-V VM list as CSV">
+            <Button icon={<DownloadOutlined />} onClick={onExport}>Export CSV</Button>
+          </Tooltip>
+        }
+      >
         <Space wrap style={{ marginBottom: 12 }}>
           <Input
             prefix={<SearchOutlined />}

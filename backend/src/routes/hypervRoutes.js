@@ -13,6 +13,7 @@ router.post('/hosts/:id/test',    ...guard, admin, ctrl.testHost);
 router.post('/hosts/:id/run',     ...guard, admin, ctrl.triggerRun);
 
 router.get('/vms',        ...guard, ctrl.listVMs);
+router.get('/vms/export', ...guard, ctrl.exportVMsCSV);
 router.get('/dashboard',  ...guard, ctrl.getDashboard);
 router.get('/drift',          ...guard, ctrl.getDrift);
 router.get('/drift/history',  ...guard, ctrl.getDriftHistory);

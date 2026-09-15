@@ -84,6 +84,38 @@ async function listVMs(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function exportVMsCSV(req, res, next) {
+  try {
+    const hostId = req.query.host_id ? parseInt(req.query.host_id, 10) : null;
+    let vms = await db.getLatestVMs(hostId);
+
+    const { search, state, os_type } = req.query;
+    if (search) {
+      const q = search.toLowerCase();
+      vms = vms.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hostname || '').toLowerCase().includes(q) || (v.source_host || '').toLowerCase().includes(q));
+    }
+    if (state)   vms = vms.filter(v => (v.state   || '').toLowerCase() === state.toLowerCase());
+    if (os_type) vms = vms.filter(v => (v.os_type || '').toLowerCase() === os_type.toLowerCase());
+
+    const headers = [
+      'Name','Hostname','State','vCPUs','Memory MB','Disk GB',
+      'IPs','MAC Addresses','OS Type','Snapshots','Generation','Source Host','Discovered',
+    ];
+    const rows = vms.map(v => [
+      v.name, v.hostname, v.state, v.cpu_count, v.memory_mb, v.disk_gb,
+      (v.ips || []).join(' | '),
+      (v.mac_addresses || []).join(' | '),
+      v.os_type, v.snapshot_count, v.generation, v.source_host,
+      v.first_seen_at ? new Date(v.first_seen_at).toLocaleDateString() : '',
+    ].map(c => `"${String(c ?? '').replace(/"/g, '""')}"`));
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="hyperv_vms.csv"');
+    res.send(csv);
+  } catch (e) { next(e); }
+}
+
 async function getDashboard(req, res, next) {
   try { res.json(await db.getDashboardStats()); } catch (e) { next(e); }
 }
@@ -244,6 +276,6 @@ async function exportMacLookupCSV(req, res, next) {
 
 module.exports = {
   listHosts, addHost, updateHost, removeHost, testHost, triggerRun,
-  listVMs, getDashboard, getDrift, getDriftHistory, getDriftActivity, getStale, getSnapshots, getRuns,
+  listVMs, exportVMsCSV, getDashboard, getDrift, getDriftHistory, getDriftActivity, getStale, getSnapshots, getRuns,
   getMacLookup, exportMacLookupCSV,
 };
