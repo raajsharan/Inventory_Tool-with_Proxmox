@@ -482,7 +482,7 @@ export default function PhysicalEsxiList() {
     >
       <style>{DASH_CSS}</style>
       {/* ── Filters ── */}
-      <Space wrap style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', marginBottom: 16 }}>
         <Input
           prefix={<SearchOutlined />}
           placeholder="Search by name, IP, department…"
@@ -529,7 +529,7 @@ export default function PhysicalEsxiList() {
           options={vcenterHosts}
         />
         <Button onClick={onSearch} type="default">Search</Button>
-      </Space>
+      </div>
 
       {/* ── Bulk bar ── */}
       {canWrite && selectedIds.length > 0 && (

@@ -391,7 +391,7 @@ export default function AssetList({
       }
     >
       <style>{DASH_CSS}</style>
-      <Space wrap style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', marginBottom: 16 }}>
         <Input prefix={<SearchOutlined />} placeholder="Search VM, hostname, IP, user, dept"
           style={{ width: 260 }}
           value={filters.search}
@@ -413,7 +413,7 @@ export default function AssetList({
           optionFilterProp="label"
           onChange={(v) => setFilters({ ...filters, department: v })}
           options={departments.map(d => ({ value: d.name, label: d.name }))} />
-      </Space>
+      </div>
 
       {canWrite && selectedIds.length > 0 && (
         <div className="bulk-bar" key={bulkResetKey}>
