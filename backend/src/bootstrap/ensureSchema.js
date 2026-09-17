@@ -988,6 +988,21 @@ const STATEMENTS = [
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `INSERT INTO weekly_report_schedule_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+
+  // Custom Topology Builder — manually designed diagrams (free-form nodes +
+  // edges, independent of any discovery data). nodes/edges store React
+  // Flow's own JSON shape directly.
+  `CREATE TABLE IF NOT EXISTS custom_topology_diagrams (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(255) NOT NULL,
+      description TEXT,
+      nodes       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      edges       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get

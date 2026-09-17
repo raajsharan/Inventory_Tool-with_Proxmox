@@ -748,6 +748,23 @@ CREATE TABLE IF NOT EXISTS nessus_install_config (
 );
 INSERT INTO nessus_install_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
+-- Custom Topology Builder — manually designed diagrams (free-form nodes +
+-- edges, independent of any discovery data). nodes/edges store React Flow's
+-- own JSON shape directly ({id, position:{x,y}, data:{...}} / {id, source,
+-- target}), same "flexible structured data as JSONB" approach already used
+-- by dashboard_config/compliance_config/migration_projects.stage_options.
+CREATE TABLE IF NOT EXISTS custom_topology_diagrams (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(255) NOT NULL,
+    description TEXT,
+    nodes       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    edges       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -761,7 +778,7 @@ DECLARE
     t TEXT;
 BEGIN
     FOR t IN
-        SELECT unnest(ARRAY['users','dropdown_master','assets','beijing_assets','ext_assets','physical_esxi_servers','custom_pages','custom_page_records','department_tag_ranges','page_field_visibility','page_access','backup_settings'])
+        SELECT unnest(ARRAY['users','dropdown_master','assets','beijing_assets','ext_assets','physical_esxi_servers','custom_pages','custom_page_records','department_tag_ranges','page_field_visibility','page_access','backup_settings','custom_topology_diagrams'])
     LOOP
         EXECUTE format(
             'DROP TRIGGER IF EXISTS trg_%I_updated ON %I;

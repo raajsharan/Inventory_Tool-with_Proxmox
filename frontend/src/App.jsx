@@ -59,6 +59,7 @@ const VMwareDiscovery        = lazy(() => import('./pages/VMwareDiscovery/index.
 const ProxmoxDiscovery       = lazy(() => import('./pages/ProxmoxDiscovery/index.jsx'));
 const HyperVDiscovery        = lazy(() => import('./pages/HyperVDiscovery/index.jsx'));
 const TopologySites          = lazy(() => import('./pages/TopologySites/index.jsx'));
+const CustomTopology         = lazy(() => import('./pages/CustomTopology/index.jsx'));
 const ConnectivityAlerts     = lazy(() => import('./pages/ConnectivityAlerts/index.jsx'));
 const SoftwareStatus         = lazy(() => import('./pages/SoftwareStatus/index.jsx'));
 const NessusStatus           = lazy(() => import('./pages/NessusStatus/index.jsx'));
@@ -131,6 +132,7 @@ export default function App() {
             <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
             <Route path="/hyperv-discovery"   element={<HyperVDiscovery />} />
             <Route path="/topology-sites"     element={<TopologySites />} />
+            <Route path="/custom-topology"    element={<CustomTopology />} />
             <Route path="/connectivity-alerts" element={<ConnectivityAlerts />} />
             <Route path="/weekly-report"       element={<WeeklyReport />} />
             <Route path="/migration-tracker"  element={<MigrationTracker />} />

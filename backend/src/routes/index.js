@@ -24,6 +24,7 @@ router.use('/backup',           authenticate, requirePageAccess('admin/backup'),
 router.use('/branding',         require('./brandingRoutes'));
 router.use('/recycle-bin',      authenticate, requirePageAccess('admin/recycle-bin'),     require('./recycleBinRoutes'));
 router.use('/asset-transfer',   authenticate, requirePageAccess('admin/asset-transfer'),  require('./assetTransferRoutes'));
+router.use('/custom-topology',     authenticate, requirePageAccess('custom_topology'), require('./customTopologyRoutes'));
 router.use('/vmware',              require('./vmwareRoutes'));
 router.use('/proxmox',             require('./proxmoxRoutes'));
 router.use('/hyperv',              require('./hypervRoutes'));

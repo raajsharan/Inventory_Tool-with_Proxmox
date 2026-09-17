@@ -10,7 +10,7 @@ import {
   HddOutlined, SafetyCertificateOutlined,
   SunOutlined, MoonOutlined, FontSizeOutlined, MinusOutlined,
   CloudDownloadOutlined, BgColorsOutlined, IdcardOutlined,
-  RestOutlined, ApartmentOutlined, ClusterOutlined, MenuOutlined, KeyOutlined,
+  RestOutlined, ApartmentOutlined, ClusterOutlined, NodeIndexOutlined, MenuOutlined, KeyOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, HeartOutlined, PoweroffOutlined, ControlOutlined,
   ProjectOutlined, NotificationOutlined, WindowsOutlined, SwapOutlined,
   CalendarOutlined, AlertOutlined, FileTextOutlined, LinkOutlined, RocketOutlined,
@@ -27,7 +27,7 @@ const { Sider, Header, Content, Footer } = Layout;
 
 const DEFAULT_NAV_KEYS = [
   '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
-  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', '/topology-sites', 'migration-tracker',
+  'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', '/topology-sites', '/custom-topology', 'migration-tracker',
   '/test-deploy',
 ];
 
@@ -166,6 +166,10 @@ export default function AppLayout() {
       case '/topology-sites':
         return can('topology_sites')
           ? [{ key: '/topology-sites', icon: <ClusterOutlined />, label: <Link to="/topology-sites">Topology of Sites</Link> }]
+          : [];
+      case '/custom-topology':
+        return can('custom_topology')
+          ? [{ key: '/custom-topology', icon: <NodeIndexOutlined />, label: <Link to="/custom-topology">Custom Topology Builder</Link> }]
           : [];
       case 'migration-tracker':
         return can('migration_tracker')
