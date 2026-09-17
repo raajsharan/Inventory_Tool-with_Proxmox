@@ -757,6 +757,9 @@ CREATE TABLE IF NOT EXISTS custom_topology_diagrams (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        VARCHAR(255) NOT NULL,
     description TEXT,
+    -- 'vmware' | 'proxmox' | 'hyperv' — which platform tab's Custom
+    -- sub-tab this diagram belongs to; each keeps its own separate list.
+    platform    VARCHAR(20),
     nodes       JSONB NOT NULL DEFAULT '[]'::jsonb,
     edges       JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_by  UUID REFERENCES users(id) ON DELETE SET NULL,

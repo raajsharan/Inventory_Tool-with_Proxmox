@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Card, Spin, Empty, Alert, Space, Tag, Typography } from 'antd';
-import { WindowsOutlined } from '@ant-design/icons';
+import { Tabs, Card, Spin, Empty, Alert, Space, Tag, Typography } from 'antd';
+import { WindowsOutlined, ApartmentOutlined, NodeIndexOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import TopologyDiagram from './TopologyDiagram.jsx';
+import CustomTopologyTab from './CustomTopologyTab.jsx';
 
 const { Text } = Typography;
 
@@ -10,7 +11,7 @@ const { Text } = Typography;
 // renders one diagram with a synthetic "Hyper-V Hosts" root, unlike the
 // VMware/Proxmox tabs which group real hosts under real per-vCenter/per-host
 // Collapse panels.
-export default function HyperVTopologyTab() {
+function AutoDiscoveredHyperV() {
   const [hosts, setHosts]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -59,4 +60,12 @@ export default function HyperVTopologyTab() {
       />
     </Card>
   );
+}
+
+export default function HyperVTopologyTab() {
+  const subTabs = [
+    { key: 'auto',   label: <span><ApartmentOutlined /> Auto-Discovered</span>, children: <div style={{ padding: 16 }}><AutoDiscoveredHyperV /></div> },
+    { key: 'custom', label: <span><NodeIndexOutlined /> Custom</span>,          children: <CustomTopologyTab platform="hyperv" /> },
+  ];
+  return <Tabs items={subTabs} tabBarStyle={{ paddingLeft: 16, paddingRight: 16 }} />;
 }

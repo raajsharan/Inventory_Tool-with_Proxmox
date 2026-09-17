@@ -3,14 +3,21 @@ const ApiError = require('../utils/ApiError');
 
 const TABLE = 'custom_topology_diagrams';
 
-// Lightweight — no nodes/edges — for the diagram picker list.
-async function list() {
+// Lightweight — no nodes/edges — for the diagram picker list. Each of the
+// VMware/Proxmox/Hyper-V tabs' Custom sub-tab keeps its own separate list
+// of diagrams, filtered by `platform`.
+async function list(platform) {
+  const params = [];
+  let where = '';
+  if (platform) { params.push(platform); where = 'WHERE d.platform = $1'; }
   const { rows } = await db.query(
-    `SELECT d.id, d.name, d.description, d.updated_at,
+    `SELECT d.id, d.name, d.description, d.platform, d.updated_at,
             u.full_name AS updated_by_name
        FROM ${TABLE} d
        LEFT JOIN users u ON u.id = d.updated_by
-      ORDER BY d.updated_at DESC`
+       ${where}
+      ORDER BY d.updated_at DESC`,
+    params
   );
   return rows;
 }
@@ -21,12 +28,12 @@ async function get(id) {
   return rows[0];
 }
 
-async function create({ name, description }, userId) {
+async function create({ name, description, platform }, userId) {
   if (!name || !String(name).trim()) throw new ApiError(400, 'name is required');
   const { rows } = await db.query(
-    `INSERT INTO ${TABLE} (name, description, created_by, updated_by)
-     VALUES ($1, $2, $3, $3) RETURNING *`,
-    [String(name).trim(), description || null, userId || null]
+    `INSERT INTO ${TABLE} (name, description, platform, created_by, updated_by)
+     VALUES ($1, $2, $3, $4, $4) RETURNING *`,
+    [String(name).trim(), description || null, platform || null, userId || null]
   );
   return rows[0];
 }

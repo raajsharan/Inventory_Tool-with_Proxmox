@@ -1,7 +1,7 @@
 const svc = require('../services/customTopologyService');
 
 async function list(req, res, next) {
-  try { res.json(await svc.list()); } catch (e) { next(e); }
+  try { res.json(await svc.list(req.query.platform)); } catch (e) { next(e); }
 }
 
 async function get(req, res, next) {

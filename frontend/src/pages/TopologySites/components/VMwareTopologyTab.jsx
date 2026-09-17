@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Collapse, Spin, Empty, Alert, Tag, Space, Typography } from 'antd';
-import { CloudServerOutlined } from '@ant-design/icons';
+import { Tabs, Collapse, Spin, Empty, Alert, Tag, Space, Typography } from 'antd';
+import { CloudServerOutlined, ApartmentOutlined, NodeIndexOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import TopologyDiagram from './TopologyDiagram.jsx';
+import CustomTopologyTab from './CustomTopologyTab.jsx';
 
 const { Text } = Typography;
 
-export default function VMwareTopologyTab() {
+function AutoDiscoveredVMware() {
   const [topology, setTopology] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -58,4 +59,12 @@ export default function VMwareTopologyTab() {
   });
 
   return <Collapse items={items} defaultActiveKey={topology.length === 1 ? ['0'] : []} />;
+}
+
+export default function VMwareTopologyTab() {
+  const subTabs = [
+    { key: 'auto',   label: <span><ApartmentOutlined /> Auto-Discovered</span>, children: <div style={{ padding: 16 }}><AutoDiscoveredVMware /></div> },
+    { key: 'custom', label: <span><NodeIndexOutlined /> Custom</span>,          children: <CustomTopologyTab platform="vmware" /> },
+  ];
+  return <Tabs items={subTabs} tabBarStyle={{ paddingLeft: 16, paddingRight: 16 }} />;
 }

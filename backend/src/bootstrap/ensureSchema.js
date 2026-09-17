@@ -996,6 +996,7 @@ const STATEMENTS = [
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(255) NOT NULL,
       description TEXT,
+      platform    VARCHAR(20),
       nodes       JSONB NOT NULL DEFAULT '[]'::jsonb,
       edges       JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -1003,6 +1004,10 @@ const STATEMENTS = [
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  // Added after the table's initial release, once each of VMware/Proxmox/
+  // Hyper-V's tabs got its own separate diagram list instead of one shared
+  // "Custom" tab.
+  `ALTER TABLE custom_topology_diagrams ADD COLUMN IF NOT EXISTS platform VARCHAR(20)`,
 ];
 
 // Backfill: records that already carry a decommissioned server_status get

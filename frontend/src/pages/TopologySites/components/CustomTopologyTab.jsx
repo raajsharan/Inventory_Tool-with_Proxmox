@@ -46,6 +46,18 @@ const NODE_TYPES_OPTS = [
   { value: 'generic',      label: 'Generic',       tone: 'gray',   mode: 'name' },
 ];
 
+// Each platform's Custom sub-tab only offers the tools relevant to it —
+// e.g. the Proxmox tab has no reason to offer a vCenter or ESXi tool.
+// 'cluster' and 'generic' are useful everywhere. Hyper-V has no separate
+// ESXi-equivalent tier (see hypervDbService.getHostTopology's comment —
+// each host runs VMs directly), so it has no 'physical'-mode tool and,
+// for now, no auto VM population in its Custom sub-tab.
+const PLATFORM_TOOLS = {
+  vmware:  ['vcenter', 'esxi', 'cluster', 'generic'],
+  proxmox: ['proxmox_host', 'proxmox_node', 'cluster', 'generic'],
+  hyperv:  ['hyperv_host', 'cluster', 'generic'],
+};
+
 const reactFlowNodeTypes = { custom: CustomTopologyNode };
 const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
 const defaultEdgeOptions = { type: 'flow', markerEnd: { type: MarkerType.ArrowClosed } };
@@ -54,10 +66,11 @@ function newNodeId() {
   return `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function CustomTopologyTab() {
+export default function CustomTopologyTab({ platform }) {
   const { user } = useAuth();
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const { message, modal } = App.useApp();
+  const toolTypes = PLATFORM_TOOLS[platform] || NODE_TYPES_OPTS.map(t => t.value);
 
   const [diagrams, setDiagrams]   = useState([]);
   const [activeId, setActiveId]   = useState(null);
@@ -91,10 +104,10 @@ export default function CustomTopologyTab() {
 
   const loadList = useCallback(() => {
     setListLoading(true);
-    return api.get('/custom-topology')
+    return api.get('/custom-topology', { params: { platform } })
       .then(r => setDiagrams(r.data || []))
       .finally(() => setListLoading(false));
-  }, []);
+  }, [platform]);
 
   useEffect(() => { loadList(); }, [loadList]);
 
@@ -149,7 +162,7 @@ export default function CustomTopologyTab() {
   async function handleCreateDiagram() {
     const values = await diagramForm.validateFields();
     try {
-      const { data } = await api.post('/custom-topology', values);
+      const { data } = await api.post('/custom-topology', { ...values, platform });
       message.success('Diagram created');
       setNewDiagramOpen(false);
       diagramForm.resetFields();
@@ -326,7 +339,7 @@ export default function CustomTopologyTab() {
             <Divider style={{ margin: '12px 0' }} />
             <Space wrap align="center">
               <Text type="secondary" style={{ fontSize: 12 }}>Tools:</Text>
-              {NODE_TYPES_OPTS.map(t => (
+              {NODE_TYPES_OPTS.filter(t => toolTypes.includes(t.value)).map(t => (
                 <Button
                   key={t.value}
                   onClick={() => handleToolClick(t.value)}

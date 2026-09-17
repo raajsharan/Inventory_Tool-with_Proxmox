@@ -1,9 +1,8 @@
 import { Typography, Tabs, Card } from 'antd';
-import { ApartmentOutlined, ClusterOutlined, WindowsOutlined, NodeIndexOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, ClusterOutlined, WindowsOutlined } from '@ant-design/icons';
 import VMwareTopologyTab  from './components/VMwareTopologyTab.jsx';
 import ProxmoxTopologyTab from './components/ProxmoxTopologyTab.jsx';
 import HyperVTopologyTab  from './components/HyperVTopologyTab.jsx';
-import CustomTopologyTab  from './components/CustomTopologyTab.jsx';
 import { TOPOLOGY_CSS } from './components/TopologyDiagram.jsx';
 
 const { Title, Text } = Typography;
@@ -25,11 +24,6 @@ export default function TopologySites() {
       label:    <span><WindowsOutlined /> Hyper-V</span>,
       children: <HyperVTopologyTab />,
     },
-    {
-      key:      'custom',
-      label:    <span><NodeIndexOutlined /> Custom</span>,
-      children: <CustomTopologyTab />,
-    },
   ];
 
   return (
@@ -37,7 +31,7 @@ export default function TopologySites() {
       <style>{TOPOLOGY_CSS}</style>
       <Title level={4} style={{ marginBottom: 4 }}>Topology of Sites</Title>
       <Text type="secondary">
-        Live host-and-VM topology across VMware, Proxmox, and Hyper-V — grouped the same way each platform's own Discovery page groups it — plus a Custom tab for hand-built diagrams.
+        Live host-and-VM topology across VMware, Proxmox, and Hyper-V — grouped the same way each platform's own Discovery page groups it. Each tab also has a Custom sub-tab for hand-built diagrams.
       </Text>
       <Card bodyStyle={{ padding: 0 }} style={{ marginTop: 16 }}>
         <Tabs

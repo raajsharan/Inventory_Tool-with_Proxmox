@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Collapse, Spin, Empty, Alert, Tag, Space, Typography } from 'antd';
-import { ClusterOutlined } from '@ant-design/icons';
+import { Tabs, Collapse, Spin, Empty, Alert, Tag, Space, Typography } from 'antd';
+import { ClusterOutlined, ApartmentOutlined, NodeIndexOutlined } from '@ant-design/icons';
 import api from '../../../api/client';
 import TopologyDiagram from './TopologyDiagram.jsx';
+import CustomTopologyTab from './CustomTopologyTab.jsx';
 
 const { Text } = Typography;
 
-export default function ProxmoxTopologyTab() {
+function AutoDiscoveredProxmox() {
   const [data, setData]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -64,4 +65,12 @@ export default function ProxmoxTopologyTab() {
   });
 
   return <Collapse items={items} defaultActiveKey={data.length === 1 ? ['0'] : []} />;
+}
+
+export default function ProxmoxTopologyTab() {
+  const subTabs = [
+    { key: 'auto',   label: <span><ApartmentOutlined /> Auto-Discovered</span>, children: <div style={{ padding: 16 }}><AutoDiscoveredProxmox /></div> },
+    { key: 'custom', label: <span><NodeIndexOutlined /> Custom</span>,          children: <CustomTopologyTab platform="proxmox" /> },
+  ];
+  return <Tabs items={subTabs} tabBarStyle={{ paddingLeft: 16, paddingRight: 16 }} />;
 }
