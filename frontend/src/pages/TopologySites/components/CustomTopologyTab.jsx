@@ -5,17 +5,17 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  Typography, Card, Button, Space, Select, Modal, Form, Input, Empty, Spin, App, Tooltip, Divider,
+  Card, Button, Space, Select, Modal, Form, Input, Empty, Spin, App, Tooltip, Divider, Typography,
 } from 'antd';
 import {
-  PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined, NodeIndexOutlined, MoreOutlined,
+  PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined,
 } from '@ant-design/icons';
-import api from '../../api/client';
-import { useAuth } from '../../context/AuthContext.jsx';
-import CustomTopologyNode, { TONE_COLORS } from './components/CustomTopologyNode.jsx';
-import ConnectivityFlowEdge from './components/ConnectivityFlowEdge.jsx';
+import api from '../../../api/client';
+import { useAuth } from '../../../context/AuthContext.jsx';
+import CustomTopologyNode, { TONE_COLORS } from './CustomTopologyNode.jsx';
+import ConnectivityFlowEdge from './ConnectivityFlowEdge.jsx';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 // CSS-variable theming for the node component (dark-first app; see
 // DASH_CSS in components/DashboardStatCard.jsx for the same body[data-theme]
@@ -31,20 +31,20 @@ body[data-theme="dark"] .ctb-canvas { --ctb-node-bg: #1c1c1c; --ctb-node-title: 
 .ctb-flow-dot { fill: #1677ff; }
 `;
 
+// Every tool's behavior:
+//   'asset'    -> pick from MSL Assets (searchable)
+//   'physical' -> pick from Physical & ESXi Servers (searchable), then
+//                 auto-fetch + auto-connect its real discovered VMs
+//   'name'     -> just prompt for a name, no linked record
 const NODE_TYPES_OPTS = [
-  { value: 'vcenter',      label: 'vCenter',       tone: 'blue' },
-  { value: 'cluster',      label: 'Cluster',       tone: 'orange' },
-  { value: 'esxi',         label: 'ESXi Host',     tone: 'blue' },
-  { value: 'proxmox_host', label: 'Proxmox Host',  tone: 'orange' },
-  { value: 'proxmox_node', label: 'Proxmox Node',  tone: 'orange' },
-  { value: 'hyperv_host',  label: 'Hyper-V Host',  tone: 'purple' },
-  { value: 'vm',           label: 'VM',            tone: 'teal' },
-  { value: 'generic',      label: 'Generic',       tone: 'gray' },
+  { value: 'vcenter',      label: 'vCenter',       tone: 'blue',   mode: 'asset' },
+  { value: 'proxmox_host', label: 'Proxmox Host',  tone: 'orange', mode: 'asset' },
+  { value: 'hyperv_host',  label: 'Hyper-V Host',  tone: 'purple', mode: 'asset' },
+  { value: 'esxi',         label: 'ESXi Host',     tone: 'blue',   mode: 'physical' },
+  { value: 'proxmox_node', label: 'Proxmox Node',  tone: 'orange', mode: 'physical' },
+  { value: 'cluster',      label: 'Cluster',       tone: 'orange', mode: 'name' },
+  { value: 'generic',      label: 'Generic',       tone: 'gray',   mode: 'name' },
 ];
-
-// The 4 tools called out explicitly — one-click add, no modal. Every other
-// type in NODE_TYPES_OPTS is still reachable via the "More Types…" modal.
-const QUICK_TOOLS = ['vcenter', 'esxi', 'cluster', 'vm'];
 
 const reactFlowNodeTypes = { custom: CustomTopologyNode };
 const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
@@ -54,7 +54,7 @@ function newNodeId() {
   return `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function CustomTopology() {
+export default function CustomTopologyTab() {
   const { user } = useAuth();
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const { message, modal } = App.useApp();
@@ -68,14 +68,26 @@ export default function CustomTopology() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const typeCounts = useRef({});
 
-  const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [newDiagramOpen, setNewDiagramOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [nodeForm]    = Form.useForm();
   const [diagramForm] = Form.useForm();
   const [renameForm]  = Form.useForm();
+
+  // Record picker (vCenter/Proxmox Host/Hyper-V Host -> MSL Assets;
+  // ESXi/Proxmox Node -> Physical & ESXi Servers).
+  const [pickerOpen, setPickerOpen]   = useState(false);
+  const [pickerType, setPickerType]   = useState(null);
+  const [pickerKind, setPickerKind]   = useState(null); // 'asset' | 'physical'
+  const [pickerOptions, setPickerOptions] = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerValue, setPickerValue] = useState(null);
+  const pickerDebounce = useRef(null);
+
+  // Name-only prompt (Cluster / Generic).
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
+  const [namePromptType, setNamePromptType] = useState(null);
+  const [nameForm] = Form.useForm();
 
   const loadList = useCallback(() => {
     setListLoading(true);
@@ -95,7 +107,6 @@ export default function CustomTopology() {
   useEffect(() => {
     if (!activeId) { setActive(null); setNodes([]); setEdges([]); return; }
     setCanvasLoading(true);
-    typeCounts.current = {};
     api.get(`/custom-topology/${activeId}`)
       .then(r => {
         setActive(r.data);
@@ -180,47 +191,110 @@ export default function CustomTopology() {
     });
   }
 
-  function placeNode(type, label, sublabel) {
-    const meta = NODE_TYPES_OPTS.find(t => t.value === type);
-    const tone = meta?.tone || 'gray';
+  // Appends one node and returns {id, position} so callers (e.g. the auto
+  // VM-node placement below) can position new nodes relative to it.
+  function placeNode(type, label, sublabel, extraData = {}) {
+    const meta = NODE_TYPES_OPTS.find(t => t.value === type) || { tone: 'gray' };
+    const id = newNodeId();
+    const position = { x: 120 + (nodes.length % 6) * 220, y: 120 + Math.floor(nodes.length / 6) * 140 };
     setNodes(nds => [...nds, {
-      id: newNodeId(),
-      type: 'custom',
-      position: { x: 120 + (nds.length % 6) * 220, y: 120 + Math.floor(nds.length / 6) * 140 },
-      data: { label, sublabel: sublabel || undefined, tone },
+      id, type: 'custom', position,
+      data: { label, sublabel: sublabel || undefined, tone: meta.tone, ...extraData },
     }]);
+    return { id, position };
   }
 
-  // The quick-add toolbar — one click, a sensibly-numbered default name,
-  // rename later via double-click on the node itself.
-  function quickAddNode(type) {
+  function addAutoVMNodes(hostId, hostPos, vms) {
+    const PER_ROW = 4, COL_GAP = 170, ROW_GAP = 140;
+    const newNodes = [];
+    const newEdges = [];
+    vms.forEach((vm, i) => {
+      const row = Math.floor(i / PER_ROW);
+      const col = i % PER_ROW;
+      const countInRow = Math.min(PER_ROW, vms.length - row * PER_ROW);
+      const rowStartX = hostPos.x - ((countInRow - 1) * COL_GAP) / 2;
+      const vmId = newNodeId();
+      newNodes.push({
+        id: vmId,
+        type: 'custom',
+        position: { x: rowStartX + col * COL_GAP, y: hostPos.y + 160 + row * ROW_GAP },
+        data: { label: vm.hostname || vm.name || 'VM', sublabel: vm.ips?.[0], tone: 'teal' },
+      });
+      newEdges.push({ id: `e-${hostId}-${vmId}`, source: hostId, target: vmId, ...defaultEdgeOptions });
+    });
+    setNodes(nds => [...nds, ...newNodes]);
+    setEdges(eds => [...eds, ...newEdges]);
+  }
+
+  function handleToolClick(type) {
     const meta = NODE_TYPES_OPTS.find(t => t.value === type);
-    typeCounts.current[type] = (typeCounts.current[type] || 0) + 1;
-    placeNode(type, `${meta.label} ${typeCounts.current[type]}`);
+    if (meta.mode === 'name') {
+      setNamePromptType(type);
+      nameForm.resetFields();
+      setNamePromptOpen(true);
+      return;
+    }
+    setPickerType(type);
+    setPickerKind(meta.mode); // 'asset' | 'physical'
+    setPickerValue(null);
+    setPickerOptions([]);
+    setPickerOpen(true);
   }
 
-  function handleAddNode() {
-    nodeForm.validateFields().then(values => {
-      placeNode(values.type, values.label, values.sublabel);
-      setAddNodeOpen(false);
-      nodeForm.resetFields();
+  function searchPickerRecords(q) {
+    clearTimeout(pickerDebounce.current);
+    pickerDebounce.current = setTimeout(async () => {
+      setPickerLoading(true);
+      try {
+        const url = pickerKind === 'asset' ? '/assets' : '/physical-esxi';
+        const { data } = await api.get(url, { params: { search: q, pageSize: 20 } });
+        setPickerOptions((data.items || []).map(r => ({
+          value: r.id,
+          label: `${r.vm_name || '(unnamed)'}${r.ip_address ? ` — ${r.ip_address}` : ''}`,
+          record: r,
+        })));
+      } catch {
+        setPickerOptions([]);
+      } finally {
+        setPickerLoading(false);
+      }
+    }, 300);
+  }
+
+  async function confirmRecordPick() {
+    const opt = pickerOptions.find(o => o.value === pickerValue);
+    if (!opt) return;
+    const r = opt.record;
+    const label = r.vm_name || r.ip_address || 'Unnamed';
+    const { id: hostId, position: hostPos } = placeNode(pickerType, label, r.ip_address, {
+      sourceId: r.id, sourceKind: pickerKind,
+    });
+    setPickerOpen(false);
+
+    if (pickerKind === 'physical') {
+      try {
+        const { data } = await api.get(`/physical-esxi/${r.id}/discovered-vms`);
+        if (!data.vms?.length) {
+          message.info('No discovered VMs found for this host');
+        } else {
+          addAutoVMNodes(hostId, hostPos, data.vms);
+        }
+      } catch {
+        message.error('Failed to look up discovered VMs for this host');
+      }
+    }
+  }
+
+  function confirmNamePrompt() {
+    nameForm.validateFields().then(values => {
+      placeNode(namePromptType, values.label);
+      setNamePromptOpen(false);
     });
   }
 
   return (
     <div style={{ padding: 16 }}>
       <style>{CUSTOM_TOPOLOGY_CSS}</style>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <Space align="start">
-          <NodeIndexOutlined style={{ fontSize: 24, marginTop: 3 }} />
-          <div>
-            <Title level={4} style={{ margin: 0 }}>Custom Topology Builder</Title>
-            <Text type="secondary">
-              Design your own topology by hand — drop nodes with the tools below, drag them into place, and draw connectivity flows between any two nodes.
-            </Text>
-          </div>
-        </Space>
-      </div>
 
       <Card size="small" style={{ marginBottom: 12 }}>
         <Space wrap>
@@ -252,22 +326,15 @@ export default function CustomTopology() {
             <Divider style={{ margin: '12px 0' }} />
             <Space wrap align="center">
               <Text type="secondary" style={{ fontSize: 12 }}>Tools:</Text>
-              {QUICK_TOOLS.map(type => {
-                const meta = NODE_TYPES_OPTS.find(t => t.value === type);
-                const color = TONE_COLORS[meta.tone];
-                return (
-                  <Button
-                    key={type}
-                    onClick={() => quickAddNode(type)}
-                    style={{ borderColor: color, color }}
-                  >
-                    {meta.label}
-                  </Button>
-                );
-              })}
-              <Tooltip title="Proxmox Host, Proxmox Node, Hyper-V Host, Generic — or set a sublabel at creation">
-                <Button icon={<MoreOutlined />} onClick={() => setAddNodeOpen(true)}>More Types…</Button>
-              </Tooltip>
+              {NODE_TYPES_OPTS.map(t => (
+                <Button
+                  key={t.value}
+                  onClick={() => handleToolClick(t.value)}
+                  style={{ borderColor: TONE_COLORS[t.tone], color: TONE_COLORS[t.tone] }}
+                >
+                  {t.label}
+                </Button>
+              ))}
             </Space>
           </>
         )}
@@ -275,14 +342,15 @@ export default function CustomTopology() {
         {active && (
           <div style={{ marginTop: 8 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Drag from any edge of a node to another node to connect them with a connectivity flow. Double-click a node to rename it. Select a node or connection and press Delete to remove it.
+              vCenter / Proxmox Host / Hyper-V Host pick from MSL Assets; ESXi / Proxmox Node pick from Physical &amp; ESXi Servers and auto-add their discovered VMs.
+              Drag from any edge of a node to another to connect them. Double-click a node to rename it. Select a node or connection and press Delete to remove it.
             </Text>
           </div>
         )}
       </Card>
 
       <Card bodyStyle={{ padding: 0 }} className="ctb-canvas">
-        <div style={{ height: '72vh', minHeight: 480 }}>
+        <div style={{ height: '68vh', minHeight: 440 }}>
           {canvasLoading ? (
             <Spin style={{ display: 'block', margin: '80px auto' }} />
           ) : !activeId ? (
@@ -354,22 +422,40 @@ export default function CustomTopology() {
       </Modal>
 
       <Modal
-        title="More Node Types"
-        open={addNodeOpen}
-        onOk={handleAddNode}
-        onCancel={() => setAddNodeOpen(false)}
+        title={pickerKind === 'asset' ? 'Pick an MSL Asset' : 'Pick a Physical & ESXi Server'}
+        open={pickerOpen}
+        onOk={confirmRecordPick}
+        onCancel={() => setPickerOpen(false)}
+        okText="Add"
+        okButtonProps={{ disabled: !pickerValue }}
+        destroyOnClose
+      >
+        <Select
+          style={{ width: '100%' }}
+          showSearch
+          filterOption={false}
+          placeholder="Type to search by name or IP…"
+          value={pickerValue}
+          onSearch={searchPickerRecords}
+          onChange={setPickerValue}
+          loading={pickerLoading}
+          notFoundContent={pickerLoading ? <Spin size="small" /> : 'Type to search…'}
+          options={pickerOptions}
+          autoFocus
+        />
+      </Modal>
+
+      <Modal
+        title={namePromptType === 'cluster' ? 'Add Cluster' : 'Add Node'}
+        open={namePromptOpen}
+        onOk={confirmNamePrompt}
+        onCancel={() => setNamePromptOpen(false)}
         okText="Add"
         destroyOnClose
       >
-        <Form form={nodeForm} layout="vertical" style={{ marginTop: 8 }} initialValues={{ type: 'generic' }}>
+        <Form form={nameForm} layout="vertical" style={{ marginTop: 8 }}>
           <Form.Item name="label" label="Name" rules={[{ required: true, message: 'Name is required' }]}>
-            <Input placeholder="e.g. ESXi-Prod-01" autoFocus />
-          </Form.Item>
-          <Form.Item name="sublabel" label="Sublabel (optional)">
-            <Input placeholder="e.g. 10.10.1.5" />
-          </Form.Item>
-          <Form.Item name="type" label="Type">
-            <Select options={NODE_TYPES_OPTS.map(({ value, label }) => ({ value, label }))} />
+            <Input placeholder={namePromptType === 'cluster' ? 'e.g. Production Cluster' : 'e.g. Router-01'} autoFocus />
           </Form.Item>
         </Form>
       </Modal>

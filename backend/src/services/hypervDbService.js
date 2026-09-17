@@ -237,6 +237,16 @@ async function getLatestVMs(hostId) {
   return rows;
 }
 
+// Used by the Custom Topology Builder's "pick a Physical & ESXi Server ->
+// auto-list its VMs" flow — see the matching comment in
+// vmwareDbService.getVMsByEsxiIp. hyperv_hosts.host is the connection
+// string used as source_host on every VM row, so no separate lookup is
+// needed beyond filtering by it directly.
+async function getVMsByHostIp(ip) {
+  const vms = await getLatestVMs();
+  return vms.filter(v => v.source_host === ip);
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
@@ -544,6 +554,6 @@ module.exports = {
   listHosts, getHostById, upsertHost, updateHostById, deleteHost,
   setHostRunning, setLastDiscovery, setLastDiscoveryFailed, setHostStats, getDecryptedPassword,
   startRun, finishRun, failRun, getRunHistory,
-  saveVMs, getLatestVMs,
+  saveVMs, getLatestVMs, getVMsByHostIp,
   getDashboardStats, getHostTopology, getDrift, getDriftActivity, getDriftHistory, getStaleVMs, getSnapshotVMs,
 };

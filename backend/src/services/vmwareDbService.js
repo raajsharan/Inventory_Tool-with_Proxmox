@@ -289,6 +289,16 @@ async function getLatestVMs(hostId) {
   return rows;
 }
 
+// Used by the Custom Topology Builder's "pick a Physical & ESXi Server ->
+// auto-list its VMs" flow: a physical_esxi_servers row only has an IP, not
+// a link to which platform (if any) discovered it, so this is tried
+// against all three platforms by IP — see the matching functions in
+// proxmoxDbService.js / hypervDbService.js.
+async function getVMsByEsxiIp(ip) {
+  const vms = await getLatestVMs();
+  return vms.filter(v => v.esxi_host_ip === ip);
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard stats
 // ---------------------------------------------------------------------------
@@ -715,6 +725,6 @@ module.exports = {
   setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword,
   setHostStats, clearHostStats, setEsxiHostStats,
   startRun, finishRun, failRun, getRunHistory,
-  saveVMs, getLatestVMs, getReconciliation,
+  saveVMs, getLatestVMs, getVMsByEsxiIp, getReconciliation,
   getDashboardStats, getDrift, getDriftActivity, getDriftHistory, getESXiTopology, getStaleVMs, getSnapshotVMs,
 };

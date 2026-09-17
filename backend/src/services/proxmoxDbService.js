@@ -310,6 +310,18 @@ async function getLatestNodes(hostId) {
   return rows;
 }
 
+// Used by the Custom Topology Builder's "pick a Physical & ESXi Server ->
+// auto-list its VMs" flow — see the matching comment in
+// vmwareDbService.getVMsByEsxiIp. Proxmox VMs are keyed by node name, not
+// IP, so this resolves IP -> node(s) via proxmox_discovered_nodes first.
+async function getVMsByNodeIp(ip) {
+  const nodes = await getLatestNodes();
+  const matches = nodes.filter(n => n.ip_address === ip);
+  if (!matches.length) return [];
+  const vms = await getLatestVMs();
+  return vms.filter(v => matches.some(n => n.node === v.node && n.source_host === v.source_host));
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard stats
 // ---------------------------------------------------------------------------
@@ -652,6 +664,6 @@ module.exports = {
   setHostRunning, setLastDiscovery, setLastDiscoveryFailed, getDecryptedPassword, getDecryptedTokenSecret,
   startRun, finishRun, failRun, getRunHistory,
   saveVMs, getLatestVMs,
-  saveNodes, getLatestNodes,
+  saveNodes, getLatestNodes, getVMsByNodeIp,
   getDashboardStats, getDrift, getDriftActivity, getDriftHistory, getNodeTopology, getStaleVMs, getSnapshotVMs,
 };

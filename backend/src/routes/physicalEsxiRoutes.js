@@ -37,6 +37,7 @@ router.post('/bulk-delete', authenticate, authorize('admin'), bulk.bulkRemove);
 
 router.get('/', authenticate, c.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, c.get);
+router.get('/:id/discovered-vms', authenticate, param('id').isUUID(), validate, c.getDiscoveredVMs);
 router.get('/:id/password', authenticate, requirePasswordAccess, param('id').isUUID(), validate, c.viewPassword);
 router.get('/:id/idrac-password', authenticate, requirePasswordAccess, param('id').isUUID(), validate, c.viewIdracPassword);
 

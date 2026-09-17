@@ -52,7 +52,6 @@ const STATIC_PAGES = [
   { key: 'proxmox',                 label: 'Proxmox Discovery',              group: 'General' },
   { key: 'hyperv',                  label: 'Hyper-V Discovery',              group: 'General' },
   { key: 'topology_sites',          label: 'Topology of Sites',              group: 'General' },
-  { key: 'custom_topology',         label: 'Custom Topology Builder',        group: 'General' },
   { key: 'connectivity_alerts',      label: 'Connectivity Alerts',            group: 'General' },
   { key: 'weekly_report',            label: 'Weekly Report',                  group: 'General' },
   { key: 'test_deploy',              label: 'Test Deploy',                    group: 'General' },

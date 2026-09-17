@@ -4,6 +4,9 @@ const svc     = require('../services/physicalEsxiService');
 const deptSvc = require('../services/departmentService');
 const audit   = require('../services/auditService');
 const teams   = require('../services/teamsNotificationService');
+const vmwareDb  = require('../services/vmwareDbService');
+const proxmoxDb = require('../services/proxmoxDbService');
+const hypervDb  = require('../services/hypervDbService');
 
 const ENTITY = 'physical_esxi_server';
 const SHEET_NAME = 'Physical & ESXi Servers';
@@ -135,6 +138,37 @@ async function viewIdracPassword(req, res, next) {
     const password = await svc.viewIdracPassword(req.params.id);
     await audit.log({ user: req.user, action: 'VIEW_PASSWORD', entityType: 'physical_esxi_idrac', entityId: req.params.id, ipAddress: req.ip });
     res.json({ password: password || '' });
+  } catch (e) { next(e); }
+}
+
+// Custom Topology Builder: given a Physical & ESXi Server record, find its
+// real discovered VMs by matching its IP against each discovery platform in
+// turn (a physical_esxi_servers row has no direct link to which platform,
+// if any, actually found it — see vmwareDbService.getVMsByEsxiIp's comment
+// for the full rationale). Whichever platform matches first wins; if none
+// do (e.g. a manually-registered server never synced from a discovery
+// run), platform comes back null with an empty vms list.
+async function getDiscoveredVMs(req, res, next) {
+  try {
+    const host = await svc.get(req.params.id);
+    const ip = host.ip_address;
+
+    let vms = ip ? await vmwareDb.getVMsByEsxiIp(ip) : [];
+    let platform = vms.length ? 'vmware' : null;
+
+    if (!vms.length && ip) {
+      vms = await proxmoxDb.getVMsByNodeIp(ip);
+      if (vms.length) platform = 'proxmox';
+    }
+    if (!vms.length && ip) {
+      vms = await hypervDb.getVMsByHostIp(ip);
+      if (vms.length) platform = 'hyperv';
+    }
+
+    res.json({
+      platform,
+      vms: vms.map(v => ({ name: v.name, hostname: v.hostname || null, ips: v.ips || [] })),
+    });
   } catch (e) { next(e); }
 }
 
@@ -391,4 +425,4 @@ async function syncFromDiscovery(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { list, get, create, update, remove, tagStats, checkIp, downloadTemplate, exportAssets, importAssets, viewPassword, viewIdracPassword, syncFromDiscovery };
+module.exports = { list, get, create, update, remove, tagStats, checkIp, getDiscoveredVMs, downloadTemplate, exportAssets, importAssets, viewPassword, viewIdracPassword, syncFromDiscovery };
