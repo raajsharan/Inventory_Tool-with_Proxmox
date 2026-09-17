@@ -233,7 +233,18 @@ export default function CustomTopologyTab({ platform }) {
         position: { x: rowStartX + col * COL_GAP, y: hostPos.y + 160 + row * ROW_GAP },
         data: { label: vm.hostname || vm.name || 'VM', sublabel: vm.ips?.[0], tone: 'teal' },
       });
-      newEdges.push({ id: `e-${hostId}-${vmId}`, source: hostId, target: vmId, ...defaultEdgeOptions });
+      // Anchor every auto-connected edge to the host's bottom handle and the
+      // VM's top handle explicitly — VM nodes are laid out below the host,
+      // so without a fixed handle id React Flow falls back to the node's
+      // first-declared handle ('top') for every edge regardless of where
+      // the target actually sits, bunching dozens of connectors into one
+      // point instead of fanning out from the side facing the VMs.
+      newEdges.push({
+        id: `e-${hostId}-${vmId}`,
+        source: hostId, target: vmId,
+        sourceHandle: 'bottom', targetHandle: 'top',
+        ...defaultEdgeOptions,
+      });
     });
     setNodes(nds => [...nds, ...newNodes]);
     setEdges(eds => [...eds, ...newEdges]);
