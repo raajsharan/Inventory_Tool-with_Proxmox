@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
 // Tone palette extends TopologySites/components/TopologyDiagram.jsx's
-// blue/purple/orange with a couple more so every node "type" the Add Node
-// form offers has a distinct, consistent color.
+// blue/purple/orange with a couple more so every node "type" the toolbar
+// offers has a distinct, consistent color.
 export const TONE_COLORS = {
   blue:   '#1677ff',
   purple: '#722ed1',
@@ -21,20 +22,57 @@ const SIDES = [
   { id: 'left',   position: Position.Left },
 ];
 
-export default function CustomTopologyNode({ data, selected }) {
+// data.onRename(id, newLabel), when provided, enables double-click-to-rename
+// — quick-added nodes get a generic default name ("vCenter 1"), so this is
+// how the user actually labels them without a modal getting in the way.
+export default function CustomTopologyNode({ id, data, selected }) {
   const color = TONE_COLORS[data.tone] || TONE_COLORS.gray;
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(data.label);
+
+  useEffect(() => { if (!editing) setValue(data.label); }, [data.label, editing]);
+
+  function commit() {
+    setEditing(false);
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== data.label) data.onRename?.(id, trimmed);
+    else setValue(data.label);
+  }
+
   return (
-    <div style={{
-      minWidth: 150, padding: '10px 16px', borderRadius: 10,
-      border: `1.5px solid ${color}`,
-      background: 'var(--ctb-node-bg, #ffffff)',
-      boxShadow: selected ? `0 0 0 2px ${color}66` : '0 1px 3px rgba(0,0,0,0.08)',
-      textAlign: 'center',
-    }}>
+    <div
+      onDoubleClick={() => data.onRename && setEditing(true)}
+      style={{
+        minWidth: 150, padding: '10px 16px', borderRadius: 10,
+        border: `1.5px solid ${color}`,
+        background: 'var(--ctb-node-bg, #ffffff)',
+        boxShadow: selected ? `0 0 0 2px ${color}66` : '0 1px 3px rgba(0,0,0,0.08)',
+        textAlign: 'center',
+      }}
+    >
       {SIDES.map(s => (
         <Handle key={s.id} id={s.id} type="source" position={s.position} style={{ background: color }} />
       ))}
-      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ctb-node-title, #262626)' }}>{data.label}</div>
+      {editing ? (
+        <input
+          className="nodrag nopan"
+          autoFocus
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setValue(data.label); setEditing(false); }
+          }}
+          style={{
+            width: '100%', textAlign: 'center', border: 'none', outline: 'none',
+            background: 'transparent', fontWeight: 600, fontSize: 13,
+            color: 'var(--ctb-node-title, #262626)',
+          }}
+        />
+      ) : (
+        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ctb-node-title, #262626)' }}>{data.label}</div>
+      )}
       {data.sublabel && (
         <div style={{ fontSize: 11, color: 'var(--ctb-node-subtitle, #8c8c8c)' }}>{data.sublabel}</div>
       )}

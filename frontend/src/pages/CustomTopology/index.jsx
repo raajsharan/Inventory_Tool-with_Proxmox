@@ -1,27 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap, ConnectionMode,
+  ReactFlow, Background, Controls, MiniMap, ConnectionMode, MarkerType,
   useNodesState, useEdgesState, addEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  Typography, Card, Button, Space, Select, Modal, Form, Input, Empty, Spin, App, Tooltip,
+  Typography, Card, Button, Space, Select, Modal, Form, Input, Empty, Spin, App, Tooltip, Divider,
 } from 'antd';
 import {
-  PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined, NodeIndexOutlined,
+  PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined, NodeIndexOutlined, MoreOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
-import CustomTopologyNode from './components/CustomTopologyNode.jsx';
+import CustomTopologyNode, { TONE_COLORS } from './components/CustomTopologyNode.jsx';
+import ConnectivityFlowEdge from './components/ConnectivityFlowEdge.jsx';
 
 const { Title, Text } = Typography;
 
 // CSS-variable theming for the node component (dark-first app; see
 // DASH_CSS in components/DashboardStatCard.jsx for the same body[data-theme]
-// convention used everywhere else in this codebase).
+// convention used everywhere else in this codebase), plus the moving-dot
+// animation for the "Connectivity Flow" edge style.
 const CUSTOM_TOPOLOGY_CSS = `
 .ctb-canvas { --ctb-node-bg: #ffffff; --ctb-node-title: #262626; --ctb-node-subtitle: #8c8c8c; }
 body[data-theme="dark"] .ctb-canvas { --ctb-node-bg: #1c1c1c; --ctb-node-title: #f0f0f0; --ctb-node-subtitle: #a6a6a6; }
+@keyframes ctb-flowdot { to { offset-distance: 100%; } }
+@media (prefers-reduced-motion: no-preference) {
+  .ctb-flow-dot { animation: ctb-flowdot 1.8s linear infinite; }
+}
+.ctb-flow-dot { fill: #1677ff; }
 `;
 
 const NODE_TYPES_OPTS = [
@@ -35,7 +42,13 @@ const NODE_TYPES_OPTS = [
   { value: 'generic',      label: 'Generic',       tone: 'gray' },
 ];
 
+// The 4 tools called out explicitly — one-click add, no modal. Every other
+// type in NODE_TYPES_OPTS is still reachable via the "More Types…" modal.
+const QUICK_TOOLS = ['vcenter', 'esxi', 'cluster', 'vm'];
+
 const reactFlowNodeTypes = { custom: CustomTopologyNode };
+const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
+const defaultEdgeOptions = { type: 'flow', markerEnd: { type: MarkerType.ArrowClosed } };
 
 function newNodeId() {
   return `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -55,6 +68,7 @@ export default function CustomTopology() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const typeCounts = useRef({});
 
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [newDiagramOpen, setNewDiagramOpen] = useState(false);
@@ -81,6 +95,7 @@ export default function CustomTopology() {
   useEffect(() => {
     if (!activeId) { setActive(null); setNodes([]); setEdges([]); return; }
     setCanvasLoading(true);
+    typeCounts.current = {};
     api.get(`/custom-topology/${activeId}`)
       .then(r => {
         setActive(r.data);
@@ -92,8 +107,20 @@ export default function CustomTopology() {
   }, [activeId]); // eslint-disable-line
 
   const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
+    (params) => setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds)),
     [setEdges]
+  );
+
+  const handleRenameNode = useCallback((id, label) => {
+    setNodes(nds => nds.map(n => (n.id === id ? { ...n, data: { ...n.data, label } } : n)));
+  }, [setNodes]);
+
+  // Function props (onRename) aren't part of the persisted node — they're
+  // attached only for the canvas render, never saved to the backend (the
+  // raw `nodes` state PUT in handleSave stays plain JSON).
+  const nodesForCanvas = useMemo(
+    () => nodes.map(n => ({ ...n, data: { ...n.data, onRename: canWrite ? handleRenameNode : undefined } })),
+    [nodes, handleRenameNode, canWrite]
   );
 
   async function handleSave() {
@@ -153,15 +180,28 @@ export default function CustomTopology() {
     });
   }
 
+  function placeNode(type, label, sublabel) {
+    const meta = NODE_TYPES_OPTS.find(t => t.value === type);
+    const tone = meta?.tone || 'gray';
+    setNodes(nds => [...nds, {
+      id: newNodeId(),
+      type: 'custom',
+      position: { x: 120 + (nds.length % 6) * 220, y: 120 + Math.floor(nds.length / 6) * 140 },
+      data: { label, sublabel: sublabel || undefined, tone },
+    }]);
+  }
+
+  // The quick-add toolbar — one click, a sensibly-numbered default name,
+  // rename later via double-click on the node itself.
+  function quickAddNode(type) {
+    const meta = NODE_TYPES_OPTS.find(t => t.value === type);
+    typeCounts.current[type] = (typeCounts.current[type] || 0) + 1;
+    placeNode(type, `${meta.label} ${typeCounts.current[type]}`);
+  }
+
   function handleAddNode() {
     nodeForm.validateFields().then(values => {
-      const tone = NODE_TYPES_OPTS.find(t => t.value === values.type)?.tone || 'gray';
-      setNodes(nds => [...nds, {
-        id: newNodeId(),
-        type: 'custom',
-        position: { x: 120 + (nds.length % 6) * 220, y: 120 + Math.floor(nds.length / 6) * 140 },
-        data: { label: values.label, sublabel: values.sublabel || undefined, tone },
-      }]);
+      placeNode(values.type, values.label, values.sublabel);
       setAddNodeOpen(false);
       nodeForm.resetFields();
     });
@@ -176,7 +216,7 @@ export default function CustomTopology() {
           <div>
             <Title level={4} style={{ margin: 0 }}>Custom Topology Builder</Title>
             <Text type="secondary">
-              Design your own topology by hand — add nodes, drag them into place, and draw connections between any two nodes.
+              Design your own topology by hand — drop nodes with the tools below, drag them into place, and draw connectivity flows between any two nodes.
             </Text>
           </div>
         </Space>
@@ -202,15 +242,40 @@ export default function CustomTopology() {
                 <Button icon={<EditOutlined />} onClick={() => { renameForm.setFieldsValue({ name: active.name, description: active.description }); setRenameOpen(true); }} />
               </Tooltip>
               <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>Delete</Button>
-              <Button icon={<PlusOutlined />} onClick={() => setAddNodeOpen(true)}>Add Node</Button>
               <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>Save</Button>
             </>
           )}
         </Space>
+
+        {active && canWrite && (
+          <>
+            <Divider style={{ margin: '12px 0' }} />
+            <Space wrap align="center">
+              <Text type="secondary" style={{ fontSize: 12 }}>Tools:</Text>
+              {QUICK_TOOLS.map(type => {
+                const meta = NODE_TYPES_OPTS.find(t => t.value === type);
+                const color = TONE_COLORS[meta.tone];
+                return (
+                  <Button
+                    key={type}
+                    onClick={() => quickAddNode(type)}
+                    style={{ borderColor: color, color }}
+                  >
+                    {meta.label}
+                  </Button>
+                );
+              })}
+              <Tooltip title="Proxmox Host, Proxmox Node, Hyper-V Host, Generic — or set a sublabel at creation">
+                <Button icon={<MoreOutlined />} onClick={() => setAddNodeOpen(true)}>More Types…</Button>
+              </Tooltip>
+            </Space>
+          </>
+        )}
+
         {active && (
           <div style={{ marginTop: 8 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Drag from any edge of a node to another node to connect them. Select a node or connection and press Delete to remove it.
+              Drag from any edge of a node to another node to connect them with a connectivity flow. Double-click a node to rename it. Select a node or connection and press Delete to remove it.
             </Text>
           </div>
         )}
@@ -229,7 +294,7 @@ export default function CustomTopology() {
             </Empty>
           ) : (
             <ReactFlow
-              nodes={nodes}
+              nodes={nodesForCanvas}
               edges={edges}
               onNodesChange={canWrite ? onNodesChange : undefined}
               onEdgesChange={canWrite ? onEdgesChange : undefined}
@@ -238,6 +303,8 @@ export default function CustomTopology() {
               nodesConnectable={canWrite}
               elementsSelectable={canWrite}
               nodeTypes={reactFlowNodeTypes}
+              edgeTypes={reactFlowEdgeTypes}
+              defaultEdgeOptions={defaultEdgeOptions}
               connectionMode={ConnectionMode.Loose}
               deleteKeyCode={['Backspace', 'Delete']}
               fitView
@@ -287,7 +354,7 @@ export default function CustomTopology() {
       </Modal>
 
       <Modal
-        title="Add Node"
+        title="More Node Types"
         open={addNodeOpen}
         onOk={handleAddNode}
         onCancel={() => setAddNodeOpen(false)}
