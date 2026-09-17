@@ -15,6 +15,7 @@ const alertsSvc = require('./hostAlertsService');
 
 const jobs    = new Map();   // hostId → CronTask
 const running = new Set();   // hostId values currently running
+const runIds  = new Map();   // hostId → current discovery_runs.id, while running
 
 function intervalToCron(minutes) {
   if (minutes < 60) return `*/${Math.max(1, minutes)} * * * *`;
@@ -32,6 +33,7 @@ async function runDiscovery(hostId) {
 
   await db.setHostRunning(hostId, true);
   const runId = await db.startRun(hostId, host.host);
+  runIds.set(hostId, runId);
 
   try {
     const password    = db.getDecryptedPassword(host);
@@ -53,25 +55,40 @@ async function runDiscovery(hostId) {
       console.warn(`[proxmox-scheduler] utilization check failed for ${host.host}:`, utilErr.message);
     }
     await db.finishRun(runId, vms.length);
-    await db.setLastDiscovery(hostId, vms.length);
 
-    // Notify only on the down -> up transition, not every successful poll.
-    if (host.last_status === 'error') {
-      teams.notifyHostRecovered('Proxmox', host.host).catch(() => {});
+    // A stopNow() call (or a fresh runNow() started after one) may have
+    // already moved runIds past this run — everything below here only
+    // touches the host's *live displayed* status, so it's skipped once this
+    // run has been superseded, rather than clobbering the newer state with a
+    // stale result from a run the admin already gave up on.
+    if (runIds.get(hostId) === runId) {
+      await db.setLastDiscovery(hostId, vms.length);
+
+      // Notify only on the down -> up transition, not every successful poll.
+      if (host.last_status === 'error') {
+        teams.notifyHostRecovered('Proxmox', host.host).catch(() => {});
+      }
     }
   } catch (err) {
     console.error(`[proxmox-scheduler] discovery failed for ${host.host}: ${err.message}`);
     await db.failRun(runId, err.message);
-    const failCount = await db.setLastDiscoveryFailed(hostId, err.message);
 
-    // Notify on every failed attempt — tiered by consecutive-failure count
-    // (1st = Warning, 2nd+ = Critical), not just the up -> down transition.
-    teams.notifyHostDown('Proxmox', host.host, err.message, failCount).catch(() => {});
-    alertsSvc.logDiscoveryFailure({
-      platform: 'Proxmox', hostId, host: host.host, errorMessage: err.message, failCount,
-    }).catch(logErr => console.error(`[proxmox-scheduler] failed to log connectivity alert for ${host.host}:`, logErr.message));
+    if (runIds.get(hostId) === runId) {
+      const failCount = await db.setLastDiscoveryFailed(hostId, err.message);
+
+      // Notify on every failed attempt — tiered by consecutive-failure count
+      // (1st = Warning, 2nd+ = Critical), not just the up -> down transition.
+      teams.notifyHostDown('Proxmox', host.host, err.message, failCount).catch(() => {});
+      alertsSvc.logDiscoveryFailure({
+        platform: 'Proxmox', hostId, host: host.host, errorMessage: err.message, failCount,
+      }).catch(logErr => console.error(`[proxmox-scheduler] failed to log connectivity alert for ${host.host}:`, logErr.message));
+    }
   } finally {
-    running.delete(hostId);
+    // Only clear if this is still the tracked run — see stopNow() below.
+    if (runIds.get(hostId) === runId) {
+      running.delete(hostId);
+      runIds.delete(hostId);
+    }
   }
 }
 
@@ -96,6 +113,19 @@ function isRunning(hostId) {
   return running.has(hostId);
 }
 
+// Force-stop: clears the running state so a new run can start immediately.
+// Doesn't abort the in-flight discovery calls themselves (no cancellation
+// hooks today) — see the matching comment in vmwareSchedulerService.js.
+async function stopNow(hostId) {
+  if (!running.has(hostId)) return false;
+  const runId = runIds.get(hostId);
+  running.delete(hostId);
+  runIds.delete(hostId);
+  await db.setLastDiscoveryFailed(hostId, 'Stopped by admin');
+  if (runId) await db.failRun(runId, 'Stopped by admin');
+  return true;
+}
+
 async function initFromDb() {
   const hosts = await db.listHosts();
   let scheduled = 0;
@@ -108,4 +138,4 @@ async function initFromDb() {
   console.log(`[proxmox-scheduler] initialized ${scheduled} job(s) from DB`);
 }
 
-module.exports = { runDiscovery, upsert, remove, runNow, isRunning, initFromDb };
+module.exports = { runDiscovery, upsert, remove, runNow, stopNow, isRunning, initFromDb };

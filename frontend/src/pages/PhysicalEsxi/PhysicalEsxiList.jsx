@@ -482,65 +482,54 @@ export default function PhysicalEsxiList() {
     >
       <style>{DASH_CSS}</style>
       {/* ── Filters ── */}
-      <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={8}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder="Search by name, IP, department…"
-            value={filters.search}
-            onChange={e => {
-              const search = e.target.value;
-              setFilters({ ...filters, search });
-              if (!search) { setPage(1); load({ page: 1, search: '' }); }
-            }}
-            onPressEnter={onSearch}
-            allowClear
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select
-            allowClear showSearch optionFilterProp="label"
-            placeholder="Server Status"
-            style={{ width: '100%' }}
-            value={filters.serverStatus}
-            onChange={v => setFilters({ ...filters, serverStatus: v })}
-            options={ddStatus}
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select
-            allowClear showSearch optionFilterProp="label"
-            placeholder="Location"
-            style={{ width: '100%' }}
-            value={filters.location}
-            onChange={v => setFilters({ ...filters, location: v })}
-            options={ddLocation}
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select
-            allowClear showSearch optionFilterProp="label"
-            placeholder="Server Model"
-            style={{ width: '100%' }}
-            value={filters.serverModel}
-            onChange={v => setFilters({ ...filters, serverModel: v })}
-            options={modelOptions}
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select
-            allowClear showSearch optionFilterProp="label"
-            placeholder="Vcenter"
-            style={{ width: '100%' }}
-            value={filters.vcenter}
-            onChange={v => setFilters({ ...filters, vcenter: v })}
-            options={vcenterHosts}
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Button onClick={onSearch} type="default" block>Search</Button>
-        </Col>
-      </Row>
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Input
+          prefix={<SearchOutlined />}
+          placeholder="Search by name, IP, department…"
+          style={{ width: 240 }}
+          value={filters.search}
+          onChange={e => {
+            const search = e.target.value;
+            setFilters({ ...filters, search });
+            if (!search) { setPage(1); load({ page: 1, search: '' }); }
+          }}
+          onPressEnter={onSearch}
+          allowClear
+        />
+        <Select
+          allowClear showSearch optionFilterProp="label"
+          placeholder="Server Status"
+          style={{ width: 150 }}
+          value={filters.serverStatus}
+          onChange={v => setFilters({ ...filters, serverStatus: v })}
+          options={ddStatus}
+        />
+        <Select
+          allowClear showSearch optionFilterProp="label"
+          placeholder="Location"
+          style={{ width: 150 }}
+          value={filters.location}
+          onChange={v => setFilters({ ...filters, location: v })}
+          options={ddLocation}
+        />
+        <Select
+          allowClear showSearch optionFilterProp="label"
+          placeholder="Server Model"
+          style={{ width: 150 }}
+          value={filters.serverModel}
+          onChange={v => setFilters({ ...filters, serverModel: v })}
+          options={modelOptions}
+        />
+        <Select
+          allowClear showSearch optionFilterProp="label"
+          placeholder="Vcenter"
+          style={{ width: 150 }}
+          value={filters.vcenter}
+          onChange={v => setFilters({ ...filters, vcenter: v })}
+          options={vcenterHosts}
+        />
+        <Button onClick={onSearch} type="default">Search</Button>
+      </Space>
 
       {/* ── Bulk bar ── */}
       {canWrite && selectedIds.length > 0 && (

@@ -19,6 +19,7 @@ router.put('/hosts/:id',          ...adminGuard, ctrl.updateHost);
 router.delete('/hosts/:id',       ...adminGuard, ctrl.deleteHost);
 router.post('/hosts/:id/test',    ...adminGuard, ctrl.testHost);
 router.post('/hosts/:id/run',     ...adminGuard, ctrl.runDiscovery);
+router.post('/hosts/:id/stop',    ...adminGuard, ctrl.stopDiscovery);
 
 // On-demand discovery with credentials (admin)
 router.post('/discover',          ...adminGuard, ctrl.runDiscoverySync);

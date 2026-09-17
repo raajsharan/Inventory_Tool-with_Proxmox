@@ -137,6 +137,19 @@ async function runDiscovery(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function stopDiscovery(req, res, next) {
+  try {
+    const { id } = req.params;
+    const record = await dbSvc.getHostById(id);
+    if (!record) return res.status(404).json({ error: 'Host not found' });
+
+    const stopped = await scheduler.stopNow(record.host);
+    if (!stopped) return res.status(409).json({ error: 'Discovery is not currently running for this host' });
+
+    res.json({ message: `Discovery stopped for ${record.host}` });
+  } catch (e) { next(e); }
+}
+
 // Trigger discovery immediately, wait for result (used for first-time setup)
 async function runDiscoverySync(req, res, next) {
   try {
@@ -699,7 +712,7 @@ async function exportAssetEditorCSV(req, res, next) {
 
 module.exports = {
   listHosts, addHost, updateHost, deleteHost, testHost,
-  runDiscovery, runDiscoverySync,
+  runDiscovery, stopDiscovery, runDiscoverySync,
   listVMs, getDashboard, getDrift, getDriftHistory, getDriftActivity, getESXiTopology, getReconciliation,
   getStaleVMs, getSnapshots, getRunHistory, exportCSV,
   // MAC Lookup

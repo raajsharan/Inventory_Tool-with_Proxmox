@@ -126,6 +126,15 @@ async function runDiscovery(req, res) {
   res.json({ ok: true });
 }
 
+// Force-stop a running discovery for a saved host
+async function stopDiscovery(req, res) {
+  const host = await db.getHostById(req.params.id);
+  if (!host) return res.status(404).json({ error: 'Host not found' });
+  const stopped = await scheduler.stopNow(host.id);
+  if (!stopped) return res.status(409).json({ error: 'Discovery is not currently running for this host' });
+  res.json({ ok: true });
+}
+
 // Synchronous one-shot discovery (waits for result — use for quick tests)
 async function runDiscoverySync(req, res) {
   const { host, hostType, username, realm, password, tokenId, tokenSecret, port, verifySSL } = req.body;
@@ -361,7 +370,7 @@ async function exportMacLookupCSV(req, res, next) {
 
 module.exports = {
   listHosts, addHost, updateHost, deleteHost, testHost,
-  runDiscovery, runDiscoverySync,
+  runDiscovery, stopDiscovery, runDiscoverySync,
   listVMs, exportCSV, listNodes,
   getDashboard, getDrift, getDriftHistory, getDriftActivity, getNodeTopology, getStaleVMs, getSnapshots, getRunHistory,
   getMacLookup, exportMacLookupCSV,

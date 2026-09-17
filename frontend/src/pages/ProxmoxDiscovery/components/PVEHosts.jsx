@@ -4,7 +4,7 @@ import {
   Space, Tag, Popconfirm, message, Tooltip, Typography, Alert,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, StopOutlined,
   PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ClusterOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
@@ -117,6 +117,16 @@ export default function PVEHosts({ onDiscoveryStarted }) {
     setTimeout(load, 2000);
   }
 
+  async function handleStopNow(h) {
+    try {
+      await api.post(`/proxmox/hosts/${h.id}/stop`);
+      message.info(`Discovery stopped for ${h.host}`);
+      setTimeout(load, 500);
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to stop');
+    }
+  }
+
   async function handleTest() {
     setTesting(true);
     setTestResult(null);
@@ -164,12 +174,15 @@ export default function PVEHosts({ onDiscoveryStarted }) {
     { title: 'Scheduler',     dataIndex: 'scheduler_enabled', key: 'sched',    width: 100,
       render: (v, h) => v ? <Tag color="blue">Every {h.interval_minutes}m</Tag> : <Tag>Off</Tag> },
     isAdmin && {
-      title: 'Actions', key: 'actions', width: 160,
+      title: 'Actions', key: 'actions', width: 200,
       render: (_, h) => (
         <Space>
           <Tooltip title="Edit"><Button size="small" icon={<EditOutlined />} onClick={() => openEdit(h)} /></Tooltip>
           <Tooltip title="Run Now">
             <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRunNow(h)} disabled={h.is_running} />
+          </Tooltip>
+          <Tooltip title="Stop Discovery">
+            <Button size="small" danger icon={<StopOutlined />} onClick={() => handleStopNow(h)} disabled={!h.is_running} />
           </Tooltip>
           <Popconfirm title="Remove this host?" onConfirm={() => handleDelete(h.id)} okText="Yes" cancelText="No">
             <Button size="small" danger icon={<DeleteOutlined />} />

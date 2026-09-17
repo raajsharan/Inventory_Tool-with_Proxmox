@@ -65,6 +65,15 @@ async function triggerRun(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function stopRun(req, res, next) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const stopped = await scheduler.stopNow(id);
+    if (!stopped) return res.status(409).json({ error: 'Discovery is not currently running for this host' });
+    res.json({ stopped: true });
+  } catch (e) { next(e); }
+}
+
 // ── Data endpoints ─────────────────────────────────────────────────────────────
 
 async function listVMs(req, res, next) {
@@ -279,7 +288,7 @@ async function exportMacLookupCSV(req, res, next) {
 }
 
 module.exports = {
-  listHosts, addHost, updateHost, removeHost, testHost, triggerRun,
+  listHosts, addHost, updateHost, removeHost, testHost, triggerRun, stopRun,
   listVMs, exportVMsCSV, getDashboard, getHostTopology, getDrift, getDriftHistory, getDriftActivity, getStale, getSnapshots, getRuns,
   getMacLookup, exportMacLookupCSV,
 };

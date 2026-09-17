@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Card, Table, Input, Select, Space, Button, Tag, App, Row, Col, Typography, Tooltip, Modal, Form,
+  Card, Table, Input, Select, Space, Button, Tag, App, Typography, Tooltip, Modal, Form,
 } from 'antd';
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
@@ -391,40 +391,29 @@ export default function AssetList({
       }
     >
       <style>{DASH_CSS}</style>
-      <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={8}>
-          <Input prefix={<SearchOutlined />} placeholder="Search VM, hostname, IP, user, dept"
-            value={filters.search}
-            onChange={(e) => {
-              const search = e.target.value;
-              setFilters({ ...filters, search });
-              if (!search) { setPage(1); load({ page: 1, search: '' }); }
-            }}
-            onPressEnter={onSearch} allowClear />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select allowClear placeholder="OS Type" style={{ width: '100%' }} value={filters.osType}
-            onChange={(v) => setFilters({ ...filters, osType: v })} options={ddOptions('os_type')} />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select allowClear placeholder="Server Status" style={{ width: '100%' }} value={filters.serverStatus}
-            onChange={(v) => setFilters({ ...filters, serverStatus: v })} options={ddOptions('server_status')} />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select allowClear placeholder="Location" style={{ width: '100%' }} value={filters.location}
-            onChange={(v) => setFilters({ ...filters, location: v })} options={ddOptions('location')} />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select allowClear placeholder="EOL Status" style={{ width: '100%' }} value={filters.eolStatus}
-            onChange={(v) => setFilters({ ...filters, eolStatus: v })} options={ddOptions('eol_status')} />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select allowClear showSearch placeholder="Department" style={{ width: '100%' }} value={filters.department}
-            optionFilterProp="label"
-            onChange={(v) => setFilters({ ...filters, department: v })}
-            options={departments.map(d => ({ value: d.name, label: d.name }))} />
-        </Col>
-      </Row>
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Input prefix={<SearchOutlined />} placeholder="Search VM, hostname, IP, user, dept"
+          style={{ width: 260 }}
+          value={filters.search}
+          onChange={(e) => {
+            const search = e.target.value;
+            setFilters({ ...filters, search });
+            if (!search) { setPage(1); load({ page: 1, search: '' }); }
+          }}
+          onPressEnter={onSearch} allowClear />
+        <Select allowClear placeholder="OS Type" style={{ width: 150 }} value={filters.osType}
+          onChange={(v) => setFilters({ ...filters, osType: v })} options={ddOptions('os_type')} />
+        <Select allowClear placeholder="Server Status" style={{ width: 150 }} value={filters.serverStatus}
+          onChange={(v) => setFilters({ ...filters, serverStatus: v })} options={ddOptions('server_status')} />
+        <Select allowClear placeholder="Location" style={{ width: 150 }} value={filters.location}
+          onChange={(v) => setFilters({ ...filters, location: v })} options={ddOptions('location')} />
+        <Select allowClear placeholder="EOL Status" style={{ width: 150 }} value={filters.eolStatus}
+          onChange={(v) => setFilters({ ...filters, eolStatus: v })} options={ddOptions('eol_status')} />
+        <Select allowClear showSearch placeholder="Department" style={{ width: 170 }} value={filters.department}
+          optionFilterProp="label"
+          onChange={(v) => setFilters({ ...filters, department: v })}
+          options={departments.map(d => ({ value: d.name, label: d.name }))} />
+      </Space>
 
       {canWrite && selectedIds.length > 0 && (
         <div className="bulk-bar" key={bulkResetKey}>

@@ -11,6 +11,7 @@ router.put('/hosts/:id',          ...guard, admin, ctrl.updateHost);
 router.delete('/hosts/:id',       ...guard, admin, ctrl.removeHost);
 router.post('/hosts/:id/test',    ...guard, admin, ctrl.testHost);
 router.post('/hosts/:id/run',     ...guard, admin, ctrl.triggerRun);
+router.post('/hosts/:id/stop',    ...guard, admin, ctrl.stopRun);
 
 router.get('/vms',        ...guard, ctrl.listVMs);
 router.get('/vms/export', ...guard, ctrl.exportVMsCSV);

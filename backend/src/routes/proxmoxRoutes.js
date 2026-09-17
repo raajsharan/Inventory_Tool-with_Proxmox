@@ -14,6 +14,7 @@ router.put   ('/hosts/:id',       ...adminGuard, ctrl.updateHost);
 router.delete('/hosts/:id',       ...adminGuard, ctrl.deleteHost);
 router.post  ('/hosts/:id/test',  ...adminGuard, ctrl.testHost);
 router.post  ('/hosts/:id/run',   ...adminGuard, ctrl.runDiscovery);
+router.post  ('/hosts/:id/stop',  ...adminGuard, ctrl.stopDiscovery);
 router.post  ('/discover',        ...adminGuard, ctrl.runDiscoverySync);
 
 // All authenticated users: read data

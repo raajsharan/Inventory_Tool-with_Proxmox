@@ -4,7 +4,7 @@ import {
   Tag, App, Tooltip, Popconfirm, Card, Typography, Alert,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, StopOutlined,
   PlayCircleOutlined, ApiOutlined, CheckCircleOutlined, ClusterOutlined,
 } from '@ant-design/icons';
 import api from '../../../api/client';
@@ -119,6 +119,16 @@ export default function VMHosts({ onDiscoveryStarted }) {
     }
   }
 
+  async function onStopNow(record) {
+    try {
+      await api.post(`/vmware/hosts/${record.id}/stop`);
+      message.success(`Discovery stopped for ${record.host}`);
+      load();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to stop');
+    }
+  }
+
   async function onTest(record) {
     setTesting(t => ({ ...t, [record.id]: true }));
     setTest(t => ({ ...t, [record.id]: null }));
@@ -190,6 +200,9 @@ export default function VMHosts({ onDiscoveryStarted }) {
         <Space>
           <Tooltip title="Run Discovery Now">
             <Button size="small" icon={<PlayCircleOutlined />} disabled={r.is_running} onClick={() => onRunNow(r)} />
+          </Tooltip>
+          <Tooltip title="Stop Discovery">
+            <Button size="small" danger icon={<StopOutlined />} disabled={!r.is_running} onClick={() => onStopNow(r)} />
           </Tooltip>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
           <Popconfirm title="Delete this host?" onConfirm={() => onDelete(r.id)}>
