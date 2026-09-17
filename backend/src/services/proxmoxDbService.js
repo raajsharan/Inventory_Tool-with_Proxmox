@@ -590,7 +590,7 @@ async function getNodeTopology() {
     const node   = vm.node        || 'Unknown';
     if (!topology[source])       topology[source] = {};
     if (!topology[source][node]) {
-      topology[source][node] = { node, source, total: 0, running: 0, stopped: 0, qemu: 0, lxc: 0 };
+      topology[source][node] = { node, source, total: 0, running: 0, stopped: 0, qemu: 0, lxc: 0, vms: [] };
     }
     const s = topology[source][node];
     s.total++;
@@ -598,6 +598,10 @@ async function getNodeTopology() {
     if (vm.status === 'stopped') s.stopped++;
     if (vm.vm_type === 'qemu')   s.qemu++;
     if (vm.vm_type === 'lxc')    s.lxc++;
+    // Carried straight from the already-fetched VM row — powers the
+    // "hover a node to see its guests" tooltip on the Topology of Sites page
+    // without a second query.
+    s.vms.push({ name: vm.name, hostname: vm.hostname || null, ips: vm.ips || [], status: vm.status });
   }
 
   return Object.entries(topology)

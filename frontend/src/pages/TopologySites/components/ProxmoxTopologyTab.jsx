@@ -46,11 +46,17 @@ export default function ProxmoxTopologyTab() {
       children: (
         <TopologyDiagram
           tone="orange"
-          root={{ label: entry.host, sublabel: 'Proxmox host' }}
+          // Multiple nodes under one connection entry means it's a real
+          // Proxmox VE cluster (several nodes joined together) rather than a
+          // single standalone host — call that out since it's the one place
+          // in this app where a genuine cluster tier already exists in the
+          // data (VMware/Hyper-V don't capture cluster membership today).
+          root={{ label: entry.host, sublabel: entry.nodes.length > 1 ? `Cluster · ${entry.nodes.length} nodes` : 'Proxmox host' }}
           children={entry.nodes.map(n => ({
             key: n.node,
             label: n.node,
             badgeText: `${n.total} guests · ${n.running} run · ${n.qemu} VM · ${n.lxc} LXC`,
+            vms: n.vms,
           }))}
         />
       ),

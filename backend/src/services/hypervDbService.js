@@ -284,7 +284,7 @@ async function getHostTopology() {
   for (const vm of vms) {
     if (vm.is_template) continue;
     const h = vm.source_host || 'Unknown';
-    if (!byHost[h]) byHost[h] = { host: h, vm_count: 0, running: 0, stopped: 0, saved: 0, paused: 0 };
+    if (!byHost[h]) byHost[h] = { host: h, vm_count: 0, running: 0, stopped: 0, saved: 0, paused: 0, vms: [] };
     const s = byHost[h];
     s.vm_count++;
     const st = (vm.state || '').toLowerCase();
@@ -292,6 +292,10 @@ async function getHostTopology() {
     else if (st === 'off') s.stopped++;
     else if (st === 'saved') s.saved++;
     else if (st === 'paused') s.paused++;
+    // Carried straight from the already-fetched VM row — powers the
+    // "hover a host to see its VMs" tooltip on the Topology of Sites page
+    // without a second query.
+    s.vms.push({ name: vm.name, hostname: vm.hostname || null, ips: vm.ips || [], state: vm.state });
   }
   return Object.values(byHost).sort((a, b) => a.host.localeCompare(b.host));
 }

@@ -50,6 +50,7 @@ export default function VMwareTopologyTab() {
             label: h.esxi_name,
             sublabel: h.esxi_ip !== 'Not Available' ? h.esxi_ip : undefined,
             badgeText: `${h.vm_count} VMs · ${h.powered_on} on · ${h.powered_off} off${h.suspended ? ` · ${h.suspended} susp.` : ''}`,
+            vms: h.vms,
           }))}
         />
       ),

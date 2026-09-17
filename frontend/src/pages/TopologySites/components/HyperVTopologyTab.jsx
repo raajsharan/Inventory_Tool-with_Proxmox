@@ -54,6 +54,7 @@ export default function HyperVTopologyTab() {
           key: h.host,
           label: h.host,
           badgeText: `${h.vm_count} VMs · ${h.running} run · ${h.stopped} off${h.saved ? ` · ${h.saved} saved` : ''}${h.paused ? ` · ${h.paused} paused` : ''}`,
+          vms: h.vms,
         }))}
       />
     </Card>

@@ -579,6 +579,7 @@ async function getESXiTopology() {
         disk_total_gb:   hw?.disk_total_gb   ?? null,
         disk_used_gb:    hw?.disk_used_gb    ?? null,
         uptime_seconds:  hw?.uptime_seconds  ?? null,
+        vms: [],
       };
     }
     const s = topology[vcenter][key];
@@ -586,6 +587,10 @@ async function getESXiTopology() {
     if (vm.power_state === 'poweredOn')  s.powered_on++;
     if (vm.power_state === 'poweredOff') s.powered_off++;
     if (vm.power_state === 'suspended')  s.suspended++;
+    // Carried straight from the already-fetched VM row — powers the
+    // "hover an ESXi host to see its VMs" tooltip on the Topology of Sites
+    // page without a second query.
+    s.vms.push({ name: vm.name, hostname: vm.hostname || null, ips: vm.ips || [], power_state: vm.power_state });
   }
 
   return Object.entries(topology).sort(([a], [b]) => a.localeCompare(b)).map(([vcenter, esxiMap]) => ({
