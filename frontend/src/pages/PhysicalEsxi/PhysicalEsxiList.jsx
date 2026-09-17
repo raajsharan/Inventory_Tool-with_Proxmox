@@ -482,11 +482,11 @@ export default function PhysicalEsxiList() {
     >
       <style>{DASH_CSS}</style>
       {/* ── Filters ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
         <Input
           prefix={<SearchOutlined />}
           placeholder="Search by name, IP, department…"
-          style={{ width: 240 }}
+          style={{ flex: '2 1 220px', minWidth: 220 }}
           value={filters.search}
           onChange={e => {
             const search = e.target.value;
@@ -499,7 +499,7 @@ export default function PhysicalEsxiList() {
         <Select
           allowClear showSearch optionFilterProp="label"
           placeholder="Server Status"
-          style={{ width: 150 }}
+          style={{ flex: '1 1 130px', minWidth: 130 }}
           value={filters.serverStatus}
           onChange={v => setFilters({ ...filters, serverStatus: v })}
           options={ddStatus}
@@ -507,7 +507,7 @@ export default function PhysicalEsxiList() {
         <Select
           allowClear showSearch optionFilterProp="label"
           placeholder="Location"
-          style={{ width: 150 }}
+          style={{ flex: '1 1 130px', minWidth: 130 }}
           value={filters.location}
           onChange={v => setFilters({ ...filters, location: v })}
           options={ddLocation}
@@ -515,7 +515,7 @@ export default function PhysicalEsxiList() {
         <Select
           allowClear showSearch optionFilterProp="label"
           placeholder="Server Model"
-          style={{ width: 150 }}
+          style={{ flex: '1 1 130px', minWidth: 130 }}
           value={filters.serverModel}
           onChange={v => setFilters({ ...filters, serverModel: v })}
           options={modelOptions}
@@ -523,12 +523,12 @@ export default function PhysicalEsxiList() {
         <Select
           allowClear showSearch optionFilterProp="label"
           placeholder="Vcenter"
-          style={{ width: 150 }}
+          style={{ flex: '1 1 130px', minWidth: 130 }}
           value={filters.vcenter}
           onChange={v => setFilters({ ...filters, vcenter: v })}
           options={vcenterHosts}
         />
-        <Button onClick={onSearch} type="default">Search</Button>
+        <Button onClick={onSearch} type="default" style={{ flex: '0 0 auto' }}>Search</Button>
       </div>
 
       {/* ── Bulk bar ── */}

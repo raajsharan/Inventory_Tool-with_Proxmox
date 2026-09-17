@@ -391,9 +391,9 @@ export default function AssetList({
       }
     >
       <style>{DASH_CSS}</style>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
         <Input prefix={<SearchOutlined />} placeholder="Search VM, hostname, IP, user, dept"
-          style={{ width: 260 }}
+          style={{ flex: '2 1 220px', minWidth: 220 }}
           value={filters.search}
           onChange={(e) => {
             const search = e.target.value;
@@ -401,15 +401,15 @@ export default function AssetList({
             if (!search) { setPage(1); load({ page: 1, search: '' }); }
           }}
           onPressEnter={onSearch} allowClear />
-        <Select allowClear placeholder="OS Type" style={{ width: 150 }} value={filters.osType}
+        <Select allowClear placeholder="OS Type" style={{ flex: '1 1 130px', minWidth: 130 }} value={filters.osType}
           onChange={(v) => setFilters({ ...filters, osType: v })} options={ddOptions('os_type')} />
-        <Select allowClear placeholder="Server Status" style={{ width: 150 }} value={filters.serverStatus}
+        <Select allowClear placeholder="Server Status" style={{ flex: '1 1 130px', minWidth: 130 }} value={filters.serverStatus}
           onChange={(v) => setFilters({ ...filters, serverStatus: v })} options={ddOptions('server_status')} />
-        <Select allowClear placeholder="Location" style={{ width: 150 }} value={filters.location}
+        <Select allowClear placeholder="Location" style={{ flex: '1 1 130px', minWidth: 130 }} value={filters.location}
           onChange={(v) => setFilters({ ...filters, location: v })} options={ddOptions('location')} />
-        <Select allowClear placeholder="EOL Status" style={{ width: 150 }} value={filters.eolStatus}
+        <Select allowClear placeholder="EOL Status" style={{ flex: '1 1 130px', minWidth: 130 }} value={filters.eolStatus}
           onChange={(v) => setFilters({ ...filters, eolStatus: v })} options={ddOptions('eol_status')} />
-        <Select allowClear showSearch placeholder="Department" style={{ width: 170 }} value={filters.department}
+        <Select allowClear showSearch placeholder="Department" style={{ flex: '1 1 130px', minWidth: 130 }} value={filters.department}
           optionFilterProp="label"
           onChange={(v) => setFilters({ ...filters, department: v })}
           options={departments.map(d => ({ value: d.name, label: d.name }))} />
