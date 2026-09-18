@@ -45,7 +45,6 @@ export default function AssetTagPicker({ value, onChange, department, apiPrefix 
       size="small"
       title={<Space><TagOutlined style={{ color: '#1677ff' }} /><strong style={{ color: '#1677ff' }}>Asset Tag</strong></Space>}
       extra={<Button size="small" type="text" icon={<ReloadOutlined />} onClick={load} loading={loading} />}
-      style={{ background: '#fafbfc' }}
     >
       {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 12 }} />}
       {loading && !stats && <Skeleton active paragraph={{ rows: 3 }} />}
@@ -60,12 +59,12 @@ export default function AssetTagPicker({ value, onChange, department, apiPrefix 
               <Card size="small"><Statistic title="Total Slots" value={stats.total} valueStyle={{ textAlign: 'center' }} /></Card>
             </Col>
             <Col xs={12} md={6}>
-              <Card size="small" style={{ background: '#fff1f0', borderColor: '#ffa39e' }}>
+              <Card size="small" style={{ background: 'rgba(207,19,34,0.12)', borderColor: 'rgba(207,19,34,0.35)' }}>
                 <Statistic title={<span style={{ color: '#cf1322' }}>Used</span>} value={stats.used} valueStyle={{ color: '#cf1322', textAlign: 'center' }} />
               </Card>
             </Col>
             <Col xs={12} md={6}>
-              <Card size="small" style={{ background: '#f6ffed', borderColor: '#b7eb8f' }}>
+              <Card size="small" style={{ background: 'rgba(56,158,13,0.12)', borderColor: 'rgba(56,158,13,0.35)' }}>
                 <Statistic title={<span style={{ color: '#389e0d' }}>Available</span>} value={stats.available} valueStyle={{ color: '#389e0d', textAlign: 'center' }} />
               </Card>
             </Col>
@@ -99,7 +98,7 @@ export default function AssetTagPicker({ value, onChange, department, apiPrefix 
                 <Space style={{ marginTop: 4 }}>
                   <Card
                     size="small"
-                    style={{ background: '#e6f4ff', border: '1px solid #91caff', minWidth: 90, textAlign: 'center' }}
+                    style={{ background: 'rgba(22,119,255,0.12)', border: '1px solid rgba(22,119,255,0.35)', minWidth: 90, textAlign: 'center' }}
                     bodyStyle={{ padding: '6px 16px' }}
                   >
                     <span style={{ fontSize: 22, fontWeight: 600, color: '#1677ff' }}>
@@ -108,16 +107,15 @@ export default function AssetTagPicker({ value, onChange, department, apiPrefix 
                   </Card>
                   <Button
                     type="primary"
-                    style={{ background: '#111', borderColor: '#111' }}
                     disabled={!stats.nextAvailable}
                     onClick={() => onChange?.(String(stats.nextAvailable))}
                   >
                     Use this tag
                   </Button>
                 </Space>
-                <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
                   Next available tag in {department}'s range
-                </div>
+                </Typography.Text>
               </Col>
             </Row>
           ) : (
@@ -139,7 +137,7 @@ export default function AssetTagPicker({ value, onChange, department, apiPrefix 
                     key={n}
                     checked={String(value) === String(n)}
                     onChange={() => onChange?.(String(n))}
-                    style={{ border: '1px solid #d9d9d9', padding: '2px 10px', borderRadius: 6 }}
+                    style={{ border: '1px solid rgba(128,128,128,0.35)', padding: '2px 10px', borderRadius: 6 }}
                   >
                     {n}
                   </Tag.CheckableTag>
