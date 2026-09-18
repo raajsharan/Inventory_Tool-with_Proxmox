@@ -10,8 +10,8 @@ import {
 import {
   PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined,
 } from '@ant-design/icons';
-import api from '../../../api/client';
-import { useAuth } from '../../../context/AuthContext.jsx';
+import api from '../../../../api/client';
+import { useAuth } from '../../../../context/AuthContext.jsx';
 import CustomTopologyNode, { TONE_COLORS } from './CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from './ConnectivityFlowEdge.jsx';
 

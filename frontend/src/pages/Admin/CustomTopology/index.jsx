@@ -1,37 +1,33 @@
 import { Typography, Tabs, Card } from 'antd';
 import { ApartmentOutlined, ClusterOutlined, WindowsOutlined } from '@ant-design/icons';
-import VMwareTopologyTab  from './components/VMwareTopologyTab.jsx';
-import ProxmoxTopologyTab from './components/ProxmoxTopologyTab.jsx';
-import HyperVTopologyTab  from './components/HyperVTopologyTab.jsx';
-import { TOPOLOGY_CSS } from './components/TopologyDiagram.jsx';
+import CustomTopologyTab from './components/CustomTopologyTab.jsx';
 
 const { Title, Text } = Typography;
 
-export default function TopologySites() {
+export default function CustomTopologyAdmin() {
   const tabs = [
     {
       key:      'vmware',
       label:    <span><ApartmentOutlined /> VMware</span>,
-      children: <VMwareTopologyTab />,
+      children: <CustomTopologyTab platform="vmware" />,
     },
     {
       key:      'proxmox',
       label:    <span><ClusterOutlined /> Proxmox</span>,
-      children: <ProxmoxTopologyTab />,
+      children: <CustomTopologyTab platform="proxmox" />,
     },
     {
       key:      'hyperv',
       label:    <span><WindowsOutlined /> Hyper-V</span>,
-      children: <HyperVTopologyTab />,
+      children: <CustomTopologyTab platform="hyperv" />,
     },
   ];
 
   return (
     <div>
-      <style>{TOPOLOGY_CSS}</style>
-      <Title level={4} style={{ marginBottom: 4 }}>Topology of Sites</Title>
+      <Title level={4} style={{ marginBottom: 4 }}>Custom Topology Builder</Title>
       <Text type="secondary">
-        Live host-and-VM topology across VMware, Proxmox, and Hyper-V — grouped the same way each platform's own Discovery page groups it.
+        Manually design topology diagrams by hand, separate per platform — pick real vCenter/ESXi/Proxmox/Hyper-V records where relevant, or freeform Cluster/Generic nodes.
       </Text>
       <Card bodyStyle={{ padding: 0 }} style={{ marginTop: 16 }}>
         <Tabs

@@ -54,6 +54,7 @@ const Decommissioned         = lazy(() => import('./pages/Decommissioned.jsx'));
 const NavOrder               = lazy(() => import('./pages/Admin/NavOrder.jsx'));
 const UserPageControl        = lazy(() => import('./pages/Admin/UserPageControl.jsx'));
 const Roles                  = lazy(() => import('./pages/Admin/Roles.jsx'));
+const CustomTopologyAdmin    = lazy(() => import('./pages/Admin/CustomTopology/index.jsx'));
 const InstallConfig          = lazy(() => import('./pages/Admin/InstallConfig.jsx'));
 const VMwareDiscovery        = lazy(() => import('./pages/VMwareDiscovery/index.jsx'));
 const ProxmoxDiscovery       = lazy(() => import('./pages/ProxmoxDiscovery/index.jsx'));
@@ -164,6 +165,7 @@ export default function App() {
             <Route path="/admin/nav-order" element={<NavOrder />} />
             <Route path="/admin/user-page-control" element={<UserPageControl />} />
             <Route path="/admin/roles" element={<Roles />} />
+            <Route path="/admin/custom-topology" element={<CustomTopologyAdmin />} />
             <Route path="/admin/install-config"        element={<InstallConfig />} />
             <Route path="/admin/nessus-install-config" element={<NessusInstallConfig />} />
             <Route path="/admin/server-models"         element={<ServerModels />} />

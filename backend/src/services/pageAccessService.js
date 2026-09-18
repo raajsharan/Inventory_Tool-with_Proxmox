@@ -44,6 +44,7 @@ const STATIC_PAGES = [
   { key: 'admin/nav-order',          label: 'Menu Order',               group: 'Administration' },
   { key: 'admin/user-page-control', label: 'User Page Control',        group: 'Administration' },
   { key: 'admin/roles',             label: 'Role Management',           group: 'Administration' },
+  { key: 'admin/custom-topology',   label: 'Custom Topology Builder',   group: 'Administration' },
   { key: 'software_status',         label: 'Software Status (ManageEngine)', group: 'General' },
   { key: 'nessus_status',           label: 'Software Status (Nessus)',       group: 'General' },
   { key: 'tenable_report',          label: 'Tenable Report',                 group: 'General' },
