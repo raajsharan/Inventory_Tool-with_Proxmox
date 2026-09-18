@@ -58,6 +58,14 @@ const PLATFORM_TOOLS = {
   hyperv:  ['hyperv_host', 'cluster', 'generic'],
 };
 
+// Cycled per VM so a host with many auto-connected VMs keeps each
+// connection visually traceable instead of every line reading as one
+// indistinguishable blue bundle.
+const EDGE_PALETTE = [
+  '#1677ff', '#52c41a', '#fa8c16', '#eb2f96', '#722ed1',
+  '#13a8a8', '#faad14', '#f5222d', '#2f54eb', '#a0d911',
+];
+
 const reactFlowNodeTypes = { custom: CustomTopologyNode };
 const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
 const defaultEdgeOptions = { type: 'flow', markerEnd: { type: MarkerType.ArrowClosed } };
@@ -233,6 +241,7 @@ export default function CustomTopologyTab({ platform }) {
       const countInCol = Math.min(PER_COL, vms.length - col * PER_COL);
       const colStartY = hostPos.y - ((countInCol - 1) * ROW_GAP) / 2;
       const vmId = newNodeId();
+      const color = EDGE_PALETTE[i % EDGE_PALETTE.length];
       newNodes.push({
         id: vmId,
         type: 'custom',
@@ -243,12 +252,17 @@ export default function CustomTopologyTab({ platform }) {
       // fixed handle id, React Flow falls back to the node's
       // first-declared handle ('top') for every edge regardless of where
       // the target actually sits, bunching dozens of connectors into one
-      // point instead of fanning out from the side facing the VMs.
+      // point instead of fanning out from the side facing the VMs. Each
+      // gets its own color (cycled from EDGE_PALETTE) so a host with many
+      // VMs stays visually traceable instead of reading as one blue bundle.
       newEdges.push({
         id: `e-${hostId}-${vmId}`,
         source: hostId, target: vmId,
         sourceHandle: 'right', targetHandle: 'left',
         ...defaultEdgeOptions,
+        data: { color },
+        style: { stroke: color },
+        markerEnd: { type: MarkerType.ArrowClosed, color },
       });
     });
     setNodes(nds => [...nds, ...newNodes]);
