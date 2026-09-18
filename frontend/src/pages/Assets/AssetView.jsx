@@ -98,6 +98,9 @@ function renderValue(field_key, raw, fieldMeta, helpers) {
   if (field_key === 'manage_engine_installed' || field_key === 'tenable_installed' || field_key === 'idrac_enabled') {
     return <YesNo v={raw} />;
   }
+  if (field_key === 'total_disks') {
+    return <span>{Number(raw).toLocaleString()} {helpers?.totalDisksUnit || 'GB'}</span>;
+  }
   const meta = fieldMeta?.byKey?.[field_key];
   const type = meta?.input_type || meta?.default_type;
   if (type === 'toggle')   return <YesNo v={!!raw} />;
@@ -432,7 +435,7 @@ export default function AssetView({
                         f.field_key,
                         valueFor(f.field_key, f.is_extra),
                         fieldMeta,
-                        { passwordCell }
+                        { passwordCell, totalDisksUnit: record.total_disks_unit }
                       )}
                     />
                   ))}

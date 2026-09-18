@@ -69,6 +69,12 @@ export default function PhysicalEsxiForm({ mode }) {
   const omeMeta = fieldMeta.byKey?.ome_status;
   const omeOverridden = !!(omeMeta?.input_type && omeMeta.input_type !== omeMeta.default_type);
 
+  // total_disks keeps its bespoke number+unit (GB/TB) widget as the default;
+  // only falls back to a generic override widget if an admin explicitly
+  // changes its type away from default via Change Field Types.
+  const totalDisksMeta = fieldMeta.byKey?.total_disks;
+  const totalDisksOverridden = !!(totalDisksMeta?.input_type && totalDisksMeta.input_type !== totalDisksMeta.default_type);
+
   // ── Load dropdowns + record (edit mode) ────────────────────────────────────
   useEffect(() => {
     api.get('/dropdowns').then(r => setDd(r.data.grouped || {}));
@@ -98,6 +104,7 @@ export default function PhysicalEsxiForm({ mode }) {
           cpuCores:        d.cpu_cores ?? 0,
           ramGb:           d.ram_gb    ?? 0,
           totalDisks:      d.total_disks ?? 0,
+          totalDisksUnit:  d.total_disks_unit || 'GB',
           omeActive:       d.ome_status === 'Active',
           omeStatus:       d.ome_status,
           rackNumber:      d.rack_number,
@@ -191,6 +198,7 @@ export default function PhysicalEsxiForm({ mode }) {
         cpuCores:          values.cpuCores   ?? 0,
         ramGb:             values.ramGb      ?? 0,
         totalDisks:        values.totalDisks ?? 0,
+        totalDisksUnit:    values.totalDisksUnit || 'GB',
         omeStatus:         omeOverridden ? values.omeStatus : (values.omeActive ? 'Active' : 'Expired'),
         rackNumber:        values.rackNumber,
         serverPosition:    values.serverPosition,
@@ -500,11 +508,25 @@ export default function PhysicalEsxiForm({ mode }) {
           defaultChild: <InputNumber min={0} style={{ width: '100%' }} />,
         }));
       case 'total_disks':
-        return wrap(overridableFormItem({
-          fieldKey: 'total_disks', name: 'totalDisks',
-          label: labelOf('total_disks', 'Total Disks'),
-          defaultChild: <InputNumber min={0} style={{ width: '100%' }} />,
-        }));
+        if (totalDisksOverridden) {
+          return wrap(overridableFormItem({
+            fieldKey: 'total_disks', name: 'totalDisks',
+            label: labelOf('total_disks', 'Total Disks'),
+            defaultChild: <InputNumber min={0} style={{ width: '100%' }} />,
+          }));
+        }
+        return wrap(
+          <Form.Item label={labelOf('total_disks', 'Total Disks')}>
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item name="totalDisks" noStyle>
+                <InputNumber min={0} style={{ width: '65%' }} placeholder="0" />
+              </Form.Item>
+              <Form.Item name="totalDisksUnit" noStyle>
+                <Select style={{ width: '35%' }} options={[{ value: 'GB', label: 'GB' }, { value: 'TB', label: 'TB' }]} />
+              </Form.Item>
+            </Space.Compact>
+          </Form.Item>
+        );
       case 'ome_status':
         if (omeOverridden) {
           return wrap(overridableFormItem({
@@ -620,7 +642,7 @@ export default function PhysicalEsxiForm({ mode }) {
           form={form}
           layout="vertical"
           onFinish={onFinish}
-          initialValues={{ cpuCores: 0, ramGb: 0, totalDisks: 0, omeActive: false }}
+          initialValues={{ cpuCores: 0, ramGb: 0, totalDisks: 0, totalDisksUnit: 'GB', omeActive: false }}
         >
           {dynamicSections === null ? (
             <Typography.Text type="secondary">Loading fields…</Typography.Text>

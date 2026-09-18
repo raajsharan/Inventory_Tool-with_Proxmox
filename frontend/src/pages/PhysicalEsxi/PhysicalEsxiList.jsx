@@ -339,7 +339,8 @@ export default function PhysicalEsxiList() {
     },
     {
       key: 'total_disks', dataIndex: 'total_disks', width: 110,
-      title: labelOf('total_disks', 'Total Disks'), align: 'right', render: numCell,
+      title: labelOf('total_disks', 'Total Disks'), align: 'right',
+      render: (v, r) => (v == null || v === 0) ? numCell(v) : `${v} ${r.total_disks_unit || 'GB'}`,
     },
     {
       key: 'ome_status', dataIndex: 'ome_status', width: 150,

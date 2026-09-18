@@ -742,6 +742,8 @@ const STATEMENTS = [
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cpu_cores       INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS ram_gb          INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks     INTEGER NOT NULL DEFAULT 0`,
+  // Unit for total_disks — 'GB' or 'TB', stored as entered (no conversion).
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS total_disks_unit VARCHAR(2) NOT NULL DEFAULT 'GB'`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS rack_number     VARCHAR(100)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS server_position VARCHAR(100)`,
 

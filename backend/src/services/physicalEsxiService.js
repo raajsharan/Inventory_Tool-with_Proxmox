@@ -11,7 +11,7 @@ const TABLE = 'physical_esxi_servers';
 const ASSET_COLUMNS = [
   'vm_name', 'ip_address', 'server_status', 'patching_type', 'department', 'location',
   'server_model', 'serial_number', 'asset_type', 'os_type', 'os_version',
-  'cpu_cores', 'ram_gb', 'total_disks',
+  'cpu_cores', 'ram_gb', 'total_disks', 'total_disks_unit',
   'ome_status', 'rack_number', 'server_position', 'additional_remarks',
   'idrac_ip', 'idrac_enabled', 'idrac_username', 'asset_tag',
   'asset_username', 'assigned_user', 'vcenter',
