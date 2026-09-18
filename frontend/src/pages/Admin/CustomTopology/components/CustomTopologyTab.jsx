@@ -218,31 +218,36 @@ export default function CustomTopologyTab({ platform }) {
   }
 
   function addAutoVMNodes(hostId, hostPos, vms) {
-    const PER_ROW = 4, COL_GAP = 170, ROW_GAP = 140;
+    // Laid out in a column to the right of the host (wrapping into further
+    // columns for large VM counts) and connected right handle -> left
+    // handle, matching the left-to-right flow of every other connection on
+    // this canvas (root -> host already flows right -> left) instead of
+    // fanning out underneath the host, which reads as a tangled mess once
+    // there are more than a handful of VMs.
+    const PER_COL = 6, COL_GAP = 260, ROW_GAP = 90;
     const newNodes = [];
     const newEdges = [];
     vms.forEach((vm, i) => {
-      const row = Math.floor(i / PER_ROW);
-      const col = i % PER_ROW;
-      const countInRow = Math.min(PER_ROW, vms.length - row * PER_ROW);
-      const rowStartX = hostPos.x - ((countInRow - 1) * COL_GAP) / 2;
+      const col = Math.floor(i / PER_COL);
+      const row = i % PER_COL;
+      const countInCol = Math.min(PER_COL, vms.length - col * PER_COL);
+      const colStartY = hostPos.y - ((countInCol - 1) * ROW_GAP) / 2;
       const vmId = newNodeId();
       newNodes.push({
         id: vmId,
         type: 'custom',
-        position: { x: rowStartX + col * COL_GAP, y: hostPos.y + 160 + row * ROW_GAP },
+        position: { x: hostPos.x + 280 + col * COL_GAP, y: colStartY + row * ROW_GAP },
         data: { label: vm.hostname || vm.name || 'VM', sublabel: vm.ips?.[0], tone: 'teal' },
       });
-      // Anchor every auto-connected edge to the host's bottom handle and the
-      // VM's top handle explicitly — VM nodes are laid out below the host,
-      // so without a fixed handle id React Flow falls back to the node's
+      // Anchor every auto-connected edge to explicit handles — without a
+      // fixed handle id, React Flow falls back to the node's
       // first-declared handle ('top') for every edge regardless of where
       // the target actually sits, bunching dozens of connectors into one
       // point instead of fanning out from the side facing the VMs.
       newEdges.push({
         id: `e-${hostId}-${vmId}`,
         source: hostId, target: vmId,
-        sourceHandle: 'bottom', targetHandle: 'top',
+        sourceHandle: 'right', targetHandle: 'left',
         ...defaultEdgeOptions,
       });
     });
