@@ -7,6 +7,7 @@ async function list(req, res, next) {
     const result = await svc.list({
       search: req.query.search,
       osType: req.query.osType,
+      osVersion: req.query.osVersion,
       serverStatus: req.query.serverStatus,
       location: req.query.location,
       eolStatus: req.query.eolStatus,

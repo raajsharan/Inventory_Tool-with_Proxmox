@@ -73,8 +73,13 @@ export default function PhysicalEsxiForm({ mode }) {
   useEffect(() => {
     api.get('/dropdowns').then(r => setDd(r.data.grouped || {}));
     api.get('/server-models').then(r => setServerModels(r.data || [])).catch(() => {});
-    api.get('/vmware/hosts')
-      .then(r => setVcenterHosts((r.data.hosts || []).map(h => ({ label: h.host, value: h.host }))))
+    // Sourced from MSL Assets (not VMware Discovery's connection list) —
+    // any asset whose OS Version names it as a vCenter server.
+    api.get('/assets', { params: { osVersion: 'vcenter', pageSize: 200 } })
+      .then(r => setVcenterHosts((r.data.items || []).map(a => ({
+        label: a.vm_name ? `${a.vm_name} (${a.ip_address})` : a.ip_address,
+        value: a.ip_address,
+      }))))
       .catch(() => {});
     api.get('/departments', { params: { activeOnly: 1 } })
       .then(r => setDepartments(r.data.items || []))

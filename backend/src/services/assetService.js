@@ -192,7 +192,7 @@ async function viewPassword(id) {
   return crypto.decrypt(rows[0].asset_password_encrypted);
 }
 
-async function list({ search, osType, serverStatus, location, eolStatus, department, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
+async function list({ search, osType, osVersion, serverStatus, location, eolStatus, department, page = 1, pageSize = 20, sortBy = 'created_at', sortDir = 'desc' }) {
   const where = ['a.deleted_at IS NULL', 'a.decommissioned_at IS NULL'];
   const params = [];
   if (search) {
@@ -201,6 +201,12 @@ async function list({ search, osType, serverStatus, location, eolStatus, departm
     where.push(`(vm_name ILIKE $${i} OR os_hostname ILIKE $${i} OR ip_address ILIKE $${i} OR assigned_user ILIKE $${i} OR department ILIKE $${i})`);
   }
   if (osType)       { params.push(osType);       where.push(`os_type = $${params.length}`); }
+  // Partial/case-insensitive on purpose — unlike osType (an exact
+  // dropdown_master value), osVersion here is used to find assets whose OS
+  // Version merely *contains* a given word (e.g. "vcenter", to source the
+  // Physical & ESXi Servers "Vcenter" picker from MSL Assets rather than a
+  // single exact seeded value that may not exist in every deployment).
+  if (osVersion)    { params.push(`%${osVersion}%`); where.push(`os_version ILIKE $${params.length}`); }
   if (serverStatus) { params.push(serverStatus); where.push(`server_status = $${params.length}`); }
   if (location)     { params.push(location);     where.push(`location = $${params.length}`); }
   if (eolStatus)    { params.push(eolStatus);    where.push(`eol_status = $${params.length}`); }
