@@ -77,7 +77,6 @@ const TestDeploy             = lazy(() => import('./pages/TestDeploy/index.jsx')
 const TestDeployConfig       = lazy(() => import('./pages/Admin/TestDeployConfig.jsx'));
 const AgentPush               = lazy(() => import('./pages/AgentPush/index.jsx'));
 const AgentPushLocations      = lazy(() => import('./pages/Admin/AgentPushLocations.jsx'));
-const AgentPushCredentials    = lazy(() => import('./pages/Admin/AgentPushCredentials.jsx'));
 
 function RouteFallback() {
   return (
@@ -143,7 +142,6 @@ export default function App() {
             <Route path="/admin/test-deploy-config" element={<TestDeployConfig />} />
             <Route path="/agent-push"                    element={<AgentPush />} />
             <Route path="/admin/agent-push-locations"    element={<AgentPushLocations />} />
-            <Route path="/admin/agent-push-credentials"  element={<AgentPushCredentials />} />
             <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
             <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local/login?next=%2F" embeddable={false} />} />
 

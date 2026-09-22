@@ -65,8 +65,7 @@ async function pollForInstallCompletion({ ip, username, password, port, log }) {
   return false;
 }
 
-async function pushViaMsi({ ip, domain, username, password, port, pkg, log }) {
-  const fullUser = domain ? `${domain}\\${username}` : username;
+async function pushViaMsi({ ip, username, password, port, pkg, log }) {
   const remoteDir = `C:/Windows/Temp/AgentPush_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
   const remoteDirWin = remoteDir.replace(/\//g, '\\');
 
@@ -78,7 +77,7 @@ async function pushViaMsi({ ip, domain, username, password, port, pkg, log }) {
   const command = `msiexec /i "${msiRemote}" TRANSFORMS="${mstRemote}" /qn REBOOT="ReallySuppress" ENABLESILENT=yes INSTALLSOURCE=SOM`;
 
   const r = await winrmInstall({
-    host: ip, username: fullUser, password, port,
+    host: ip, username, password, port,
     files, remoteDir, command, timeout: 300000,
   });
   const redacted = (r.output || '').split(password).join('********');
@@ -89,17 +88,16 @@ async function pushViaMsi({ ip, domain, username, password, port, pkg, log }) {
   }
 
   log.log(`[${ip}] msiexec launched — polling for real completion (WinRM install can hand off to the Windows Installer service before finishing)...`);
-  return pollForInstallCompletion({ ip, username: fullUser, password, port, log });
+  return pollForInstallCompletion({ ip, username, password, port, log });
 }
 
-async function pushViaInstallShieldExe({ ip, domain, username, password, port, pkg, responseIssPath, log }) {
+async function pushViaInstallShieldExe({ ip, username, password, port, pkg, responseIssPath, log }) {
   if (!responseIssPath) {
     log.log(`[${ip}] No InstallShield response.iss configured — record one once per environment `
       + `('${pkg.exeName} /r /f1"C:\\response.iss"' on a test machine) and set it in Agent Push Locations.`);
     return false;
   }
 
-  const fullUser = domain ? `${domain}\\${username}` : username;
   const remoteDir = `C:/Windows/Temp/AgentPush_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
   const remoteDirWin = remoteDir.replace(/\//g, '\\');
 
@@ -109,7 +107,7 @@ async function pushViaInstallShieldExe({ ip, domain, username, password, port, p
 
   log.log(`[${ip}] Copying ${pkg.exeName} and response.iss to ${remoteDirWin} ...`);
   const r = await winrmInstall({
-    host: ip, username: fullUser, password, port,
+    host: ip, username, password, port,
     files: [pkg.exePath, responseIssPath], remoteDir, command, timeout: 300000,
   });
   const redacted = (r.output || '').split(password).join('********');
@@ -120,11 +118,14 @@ async function pushViaInstallShieldExe({ ip, domain, username, password, port, p
   }
 
   log.log(`[${ip}] InstallShield silent install launched — polling for real completion...`);
-  return pollForInstallCompletion({ ip, username: fullUser, password, port, log });
+  return pollForInstallCompletion({ ip, username, password, port, log });
 }
 
 /**
- * @param {{ ip, domain, username, password, port?, pkg, responseIssPath?, forceReinstall?, logCallback? }} opts
+ * @param {{ ip, username, password, port?, pkg, responseIssPath?, forceReinstall?, logCallback? }} opts
+ *   username: as stored on the asset record — may already be "DOMAIN\user"
+ *     for a domain account, matching how winrmInstall/winrmVerify are used
+ *     everywhere else in this codebase (no separate domain field).
  *   pkg: { kind: 'msi', msiPath, mstPath, certPaths } | { kind: 'exe', exePath, exeName }
  *   forceReinstall: skip the already-installed check and push regardless — the
  *     original tool's own "force reinstall" option only ever applied to the
@@ -133,7 +134,7 @@ async function pushViaInstallShieldExe({ ip, domain, username, password, port, p
  *     that survives here.
  * @returns Promise<{ success, log, alreadyInstalled }>
  */
-async function pushWindowsAgent({ ip, domain, username, password, port = 5985, pkg, responseIssPath, forceReinstall = false, logCallback }) {
+async function pushWindowsAgent({ ip, username, password, port = 5985, pkg, responseIssPath, forceReinstall = false, logCallback }) {
   const log = new Logger(logCallback);
   const overallStart = Date.now();
 
@@ -156,9 +157,9 @@ async function pushWindowsAgent({ ip, domain, username, password, port = 5985, p
 
     let success;
     if (pkg.kind === 'msi') {
-      success = await pushViaMsi({ ip, domain, username, password, port, pkg, log });
+      success = await pushViaMsi({ ip, username, password, port, pkg, log });
     } else if (pkg.kind === 'exe') {
-      success = await pushViaInstallShieldExe({ ip, domain, username, password, port, pkg, responseIssPath, log });
+      success = await pushViaInstallShieldExe({ ip, username, password, port, pkg, responseIssPath, log });
     } else {
       log.log(`[${ip}] No supported Windows package found (expected UEMSAgent.msi+.mst, or a single .exe).`);
       success = false;

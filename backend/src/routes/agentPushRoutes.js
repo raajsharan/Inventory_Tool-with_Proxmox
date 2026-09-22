@@ -6,6 +6,8 @@ const ctrl = require('../controllers/agentPushController');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 const adminGuard = authorize('admin', 'superadmin');
 
+router.get('/assets',                       ctrl.listAssets);
+
 router.get('/locations',                    ctrl.listLocations);
 router.post('/locations',                   adminGuard, ctrl.createLocation);
 router.delete('/locations/:id',             adminGuard, ctrl.deleteLocation);
@@ -14,10 +16,6 @@ router.post('/response-iss',                adminGuard, upload.single('file'), (
   req.files = req.file ? [req.file] : [];
   ctrl.uploadResponseIss(req, res, next);
 });
-
-router.get('/credentials',                  ctrl.listCredentials);
-router.post('/credentials',                 adminGuard, ctrl.createCredential);
-router.delete('/credentials/:id',           adminGuard, ctrl.deleteCredential);
 
 router.post('/jobs',                        ctrl.createJob);
 router.get('/jobs',                         ctrl.listJobs);

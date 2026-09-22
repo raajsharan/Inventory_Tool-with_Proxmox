@@ -222,7 +222,6 @@ export default function AppLayout() {
       isAdmin                           && { key: '/admin/nessus-install-config', icon: <CloudDownloadOutlined />,      label: <Link to="/admin/nessus-install-config">Nessus Install Config</Link> },
       isAdmin                           && { key: '/admin/test-deploy-config',    icon: <RocketOutlined />,             label: <Link to="/admin/test-deploy-config">Test Deploy Config</Link> },
       isAdmin                           && { key: '/admin/agent-push-locations',    icon: <RocketOutlined />,           label: <Link to="/admin/agent-push-locations">Agent Push Locations</Link> },
-      isAdmin                           && { key: '/admin/agent-push-credentials',  icon: <KeyOutlined />,              label: <Link to="/admin/agent-push-credentials">Agent Push Credentials</Link> },
     ].filter(Boolean),
   };
 

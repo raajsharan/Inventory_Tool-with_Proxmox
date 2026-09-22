@@ -1,7 +1,9 @@
 /**
- * Agent Push — core service: locations/packages, credential profiles, target
- * parsing, and job orchestration. Ported from agent_push_webapp's app.py +
- * models.py, adapted to this app's Postgres/Express conventions. See
+ * Agent Push — core service: locations/packages, eligible-asset listing, and
+ * job orchestration. Ported from agent_push_webapp's app.py + models.py, but
+ * targets are picked from existing Assets/Ext. Assets records instead of a
+ * pasted IP list — same model Test Deploy uses (see resolveTarget() below,
+ * which mirrors testDeployService.js's resolveTarget()). See
  * agentPushWindowsPush.js / agentPushLinuxPush.js for the actual per-target
  * push mechanics.
  */
@@ -18,6 +20,12 @@ const RESPONSE_ISS_PATH = path.join(PACKAGES_DIR, '_shared', 'response.iss');
 fs.mkdirSync(PACKAGES_DIR, { recursive: true });
 
 const CONCURRENCY = 5;
+
+// Scoped to just these two sources, per how this page is meant to be used —
+// Test Deploy's own listAssets() also covers Beijing Assets/Physical Servers,
+// but Agent Push deliberately doesn't.
+const SOURCE_TABLE = { 'MSL Assets': 'assets', 'Ext. Assets': 'ext_assets' };
+const isWindows = (t) => /windows/i.test(t || '');
 
 // ── Package detection — mirrors app.py's locations() status logic ──────────
 
@@ -69,6 +77,17 @@ async function getLocationById(id) {
   return rows[0] || null;
 }
 
+// Matches an asset record's own `location` field (e.g. "Burlington") to an
+// Agent Push Location by name — same idea as Test Deploy matching a VM's
+// location string to test_deploy_location_config.location.
+async function getLocationByName(name) {
+  if (!name) return null;
+  const { rows } = await db.query(
+    `SELECT * FROM agent_push_locations WHERE LOWER(name) = LOWER($1)`, [name.trim()],
+  );
+  return rows[0] || null;
+}
+
 async function createLocation({ name, folder_name, notes }, userId) {
   if (!name || !folder_name) throw new ApiError(400, 'name and folder_name are required');
   const { rows } = await db.query(
@@ -107,176 +126,105 @@ async function uploadResponseIss(files) {
   return { uploaded: true };
 }
 
-// ── Credential profiles ─────────────────────────────────────────────────────
+// ── Eligible assets — same shape/filter as testDeployService.listAssets(),
+// scoped to MSL Assets + Ext. Assets only. ──────────────────────────────────
 
-async function listCredentialProfiles() {
-  const { rows } = await db.query(
-    `SELECT id, name, os_type, auth_type, domain, username, created_by, created_at
-       FROM agent_push_credential_profiles ORDER BY name`,
-  );
-  return rows;
-}
+async function listEligibleAssets() {
+  const unions = Object.entries(SOURCE_TABLE).map(([source, table]) => `
+    SELECT vm_name, os_hostname, ip_address::text AS ip_address,
+           COALESCE(os_type, '') AS os_type,
+           COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location,
+           COALESCE(manage_engine_installed, false) AS me_installed,
+           '${source}' AS source
+      FROM ${table}
+     WHERE deleted_at IS NULL AND decommissioned_at IS NULL AND ip_address IS NOT NULL
+  `);
+  const { rows } = await db.query(`
+    SELECT * FROM (${unions.join(' UNION ALL ')}) all_vms
+    WHERE os_type NOT ILIKE '%esxi%' AND os_type NOT ILIKE '%vmware%'
+      AND os_type NOT ILIKE '%appliance%' AND os_type NOT ILIKE '%proxmox%'
+    ORDER BY location, vm_name
+  `);
 
-async function getCredentialProfile(id) {
-  const { rows } = await db.query(`SELECT * FROM agent_push_credential_profiles WHERE id = $1`, [id]);
-  return rows[0] || null;
-}
+  const locations = await listLocations();
+  const locByName = new Map(locations.map((l) => [l.name.toLowerCase(), l]));
 
-async function createCredentialProfile({ name, os_type, auth_type, domain, username, password }, userId) {
-  if (!name || !os_type || !auth_type || !username || !password) {
-    throw new ApiError(400, 'name, os_type, auth_type, username, and password are required');
-  }
-  const { rows } = await db.query(
-    `INSERT INTO agent_push_credential_profiles
-       (name, os_type, auth_type, domain, username, password_encrypted, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
-     RETURNING id, name, os_type, auth_type, domain, username, created_by, created_at`,
-    [name, os_type, auth_type, domain || null, username, crypto.encrypt(password), userId],
-  );
-  return rows[0];
-}
-
-async function deleteCredentialProfile(id) {
-  await db.query(`DELETE FROM agent_push_credential_profiles WHERE id = $1`, [id]);
-  return { deleted: true };
-}
-
-// ── Target list parsing — port of app.py's parse_target_lines() ────────────
-
-const IP_LINE_RE = /^[A-Za-z0-9.\-_:]+$/;
-
-function parseTargetLines(rawText) {
-  const targets = [];
-  const errors = [];
-  const lines = (rawText || '').split('\n');
-
-  lines.forEach((rawLine, idx) => {
-    const lineno = idx + 1;
-    const line = rawLine.trim();
-    if (!line) return;
-
-    const parts = line.split(',').map((p) => p.trim());
-    const ip = parts[0].replace(/,+$/, '');
-    if (!ip || !IP_LINE_RE.test(ip)) { errors.push(lineno); return; }
-
-    let overrideDomain = null;
-    let overrideUsername = parts[1] || null;
-    const overridePassword = parts[2] || null;
-    const overrideLocation = parts[3] || null;
-    const overrideOsRaw = parts[4] || null;
-    const overrideOs = overrideOsRaw ? overrideOsRaw.toLowerCase() : null;
-    if (overrideOs && !['windows', 'linux'].includes(overrideOs)) { errors.push(lineno); return; }
-
-    if (overrideUsername && overrideUsername.includes('\\')) {
-      const idxBs = overrideUsername.indexOf('\\');
-      overrideDomain = overrideUsername.slice(0, idxBs);
-      overrideUsername = overrideUsername.slice(idxBs + 1);
-    }
-
-    targets.push({ ip, overrideDomain, overrideUsername, overridePassword, overrideLocation, overrideOs });
+  return rows.map((r) => {
+    const loc = locByName.get((r.location || '').toLowerCase());
+    const win = isWindows(r.os_type);
+    const packageReady = !!loc && (win ? loc.windows_ready : loc.linux_ready);
+    return { ...r, package_ready: packageReady };
   });
+}
 
-  return { targets, errors };
+// Resolves one {source, ip_address} ref against the live asset record —
+// direct port of testDeployService.js's resolveTarget(), scoped to this
+// page's two sources.
+async function resolveAssetTarget({ source, ip_address }) {
+  const table = SOURCE_TABLE[source];
+  if (!table) return null;
+  const { rows } = await db.query(
+    `SELECT vm_name, asset_username, asset_password_encrypted, os_type, location
+       FROM ${table} WHERE ip_address::text = $1 AND deleted_at IS NULL AND decommissioned_at IS NULL LIMIT 1`,
+    [ip_address],
+  );
+  if (!rows.length) return null;
+  const row = rows[0];
+  let password = null;
+  if (row.asset_password_encrypted) {
+    try { password = crypto.decrypt(row.asset_password_encrypted); } catch { /* treated as no password below */ }
+  }
+  return {
+    vm_name: row.vm_name, os_type: row.os_type || '', location: (row.location || '').trim(),
+    username: row.asset_username || null, password,
+  };
 }
 
 // ── Job creation ─────────────────────────────────────────────────────────
 
-async function createJob({
-  os_type, location_id, credential_profile_id, adhoc_domain, adhoc_username, adhoc_password,
-  force_reinstall, raw_text,
-}, userId) {
-  if (!os_type || !location_id) throw new ApiError(400, 'os_type and location_id are required');
-
-  const { targets, errors } = parseTargetLines(raw_text);
-  if (!targets.length) throw new ApiError(400, 'No valid target lines found (paste some, or upload a file).');
-
-  const locations = await listLocations();
-  const folderNameToId = new Map(locations.map((l) => [l.folder_name, l.id]));
-
-  const hasJobDefault = !!(credential_profile_id || adhoc_username);
-  const missingCreds = [];
-  const badLocations = [];
-  const crossOsNoOverride = [];
-
-  for (const t of targets) {
-    const effectiveOs = t.overrideOs || os_type;
-    if (!t.overrideUsername) {
-      if (!hasJobDefault) missingCreds.push(t.ip);
-      else if (effectiveOs !== os_type) crossOsNoOverride.push(t.ip);
-    }
-    if (t.overrideLocation && !folderNameToId.has(t.overrideLocation)) {
-      badLocations.push(`${t.ip} -> '${t.overrideLocation}'`);
-    }
-  }
-
-  if (missingCreds.length || badLocations.length || crossOsNoOverride.length) {
-    const parts = [];
-    if (missingCreds.length) {
-      parts.push(`No credentials available for: ${missingCreds.slice(0, 10).join(', ')}`
-        + (missingCreds.length > 10 ? ' ...' : '')
-        + ' (no per-target override and no job default selected).');
-    }
-    if (crossOsNoOverride.length) {
-      parts.push('These targets are a different OS than the job default and need their own '
-        + `credential override: ${crossOsNoOverride.slice(0, 10).join(', ')}`
-        + (crossOsNoOverride.length > 10 ? ' ...' : '') + '.');
-    }
-    if (badLocations.length) {
-      parts.push(`Unknown location override(s): ${badLocations.slice(0, 10).join(', ')} `
-        + "(must match an existing Location's folder name exactly).");
-    }
-    throw new ApiError(400, parts.join(' '));
+/** refs: [{ source, ip_address }] — picked from the Agent Push VM picker table. */
+async function createJob({ targets: refs, force_reinstall }, userId) {
+  if (!Array.isArray(refs) || !refs.length) throw new ApiError(400, 'At least one target is required');
+  for (const r of refs) {
+    if (!SOURCE_TABLE[r.source] || !r.ip_address) throw new ApiError(400, 'Each target needs a valid source and ip_address');
   }
 
   const jobRes = await db.query(
-    `INSERT INTO agent_push_jobs
-       (os_type, location_id, credential_profile_id, adhoc_domain, adhoc_username,
-        adhoc_password_encrypted, force_reinstall, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',$8) RETURNING id`,
-    [
-      os_type, location_id, credential_profile_id || null, adhoc_domain || null, adhoc_username || null,
-      adhoc_username ? crypto.encrypt(adhoc_password || '') : null, !!force_reinstall, userId,
-    ],
+    `INSERT INTO agent_push_jobs (force_reinstall, status, created_by) VALUES ($1,'pending',$2) RETURNING id`,
+    [!!force_reinstall, userId],
   );
   const jobId = jobRes.rows[0].id;
 
-  for (const t of targets) {
+  for (const ref of refs) {
+    // Best-effort snapshot for display — a failed/missing resolution here
+    // still gets inserted (with nulls) so pushOneTarget can report the
+    // precise reason once the job actually runs, rather than silently
+    // dropping the target from the job at creation time.
+    const resolved = await resolveAssetTarget(ref).catch(() => null);
     await db.query(
-      `INSERT INTO agent_push_job_targets
-         (job_id, ip_or_host, override_domain, override_username, override_password_encrypted,
-          override_location_id, override_os_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [
-        jobId, t.ip, t.overrideDomain, t.overrideUsername,
-        t.overrideUsername ? crypto.encrypt(t.overridePassword || '') : null,
-        t.overrideLocation ? folderNameToId.get(t.overrideLocation) : null,
-        t.overrideOs,
-      ],
+      `INSERT INTO agent_push_job_targets (job_id, source, ip_address, vm_name, os_type, location)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [jobId, ref.source, ref.ip_address, resolved?.vm_name || null, resolved?.os_type || null, resolved?.location || null],
     );
   }
 
   startJob(jobId).catch((e) => console.error(`[agent-push] job ${jobId} failed:`, e));
 
-  return { id: jobId, targetCount: targets.length, skippedLines: errors };
+  return { id: jobId, targetCount: refs.length };
 }
 
 async function listJobs() {
   const { rows } = await db.query(
-    `SELECT j.*, l.name AS location_name,
+    `SELECT j.*,
             (SELECT COUNT(*) FROM agent_push_job_targets t WHERE t.job_id = j.id) AS target_count
        FROM agent_push_jobs j
-       JOIN agent_push_locations l ON l.id = j.location_id
       ORDER BY j.created_at DESC LIMIT 50`,
   );
   return rows;
 }
 
 async function getJob(id) {
-  const { rows } = await db.query(
-    `SELECT j.*, l.name AS location_name FROM agent_push_jobs j
-       JOIN agent_push_locations l ON l.id = j.location_id WHERE j.id = $1`,
-    [id],
-  );
+  const { rows } = await db.query(`SELECT * FROM agent_push_jobs WHERE id = $1`, [id]);
   if (!rows[0]) return null;
   const { rows: targets } = await db.query(
     `SELECT * FROM agent_push_job_targets WHERE job_id = $1 ORDER BY id`, [id],
@@ -288,7 +236,7 @@ async function getJobStatus(id) {
   const { rows: jobRows } = await db.query(`SELECT status FROM agent_push_jobs WHERE id = $1`, [id]);
   if (!jobRows[0]) throw new ApiError(404, 'Job not found');
   const { rows: targets } = await db.query(
-    `SELECT id, ip_or_host AS ip, status, log_output AS log FROM agent_push_job_targets
+    `SELECT id, ip_address AS ip, status, log_output AS log FROM agent_push_job_targets
       WHERE job_id = $1 ORDER BY id`,
     [id],
   );
@@ -299,30 +247,6 @@ async function getJobStatus(id) {
 // fire off async work from the request handler, update Postgres as it
 // progresses, and let the frontend poll getJobStatus(). ─────────────────────
 
-async function resolveJobDefaults(job) {
-  if (job.credential_profile_id) {
-    const cp = await getCredentialProfile(job.credential_profile_id);
-    if (!cp) return { domain: null, username: null, password: null };
-    return { domain: cp.domain, username: cp.username, password: crypto.decrypt(cp.password_encrypted) };
-  }
-  return {
-    domain: job.adhoc_domain,
-    username: job.adhoc_username,
-    password: crypto.decryptSafe(job.adhoc_password_encrypted),
-  };
-}
-
-function resolveTargetCredentials(target, jobDefaults) {
-  if (target.override_username) {
-    return {
-      domain: target.override_domain,
-      username: target.override_username,
-      password: crypto.decryptSafe(target.override_password_encrypted),
-    };
-  }
-  return jobDefaults;
-}
-
 async function finishTarget(targetId, status, logLine) {
   await db.query(
     `UPDATE agent_push_job_targets
@@ -332,25 +256,30 @@ async function finishTarget(targetId, status, logLine) {
   );
 }
 
-async function pushOneTarget(job, target, jobDefaults) {
+async function pushOneTarget(job, target) {
   await db.query(
     `UPDATE agent_push_job_targets SET status = 'running', started_at = NOW() WHERE id = $1`,
     [target.id],
   );
 
-  const osType = target.override_os_type || job.os_type;
-  const locationId = target.override_location_id || job.location_id;
-  const location = await getLocationById(locationId);
-  if (!location) {
-    await finishTarget(target.id, 'failed', 'Resolved location no longer exists.');
+  // Resolved fresh here (not from the job-creation snapshot) so credentials
+  // are never persisted anywhere in Agent Push's own tables, and any recent
+  // edit to the asset record (password rotation, location move) is honored.
+  const resolved = await resolveAssetTarget({ source: target.source, ip_address: target.ip_address });
+  if (!resolved || !resolved.username || !resolved.password) {
+    await finishTarget(target.id, 'failed', 'No stored username/password on the asset record — set credentials on '
+      + `the ${target.source} record for ${target.ip_address} first.`);
     return;
   }
 
-  const creds = resolveTargetCredentials(target, jobDefaults);
-  if (!creds.username) {
-    await finishTarget(target.id, 'failed', 'No credentials resolved for this target (no override and no job default).');
+  const location = await getLocationByName(resolved.location);
+  if (!location) {
+    await finishTarget(target.id, 'failed', `No Agent Push Location configured matching '${resolved.location}' — `
+      + 'add one under Agent Push → Locations.');
     return;
   }
+
+  const win = isWindows(resolved.os_type);
 
   let accumulatedLog = '';
   const logCallback = (line) => {
@@ -361,14 +290,14 @@ async function pushOneTarget(job, target, jobDefaults) {
 
   try {
     let result;
-    if (osType === 'windows') {
+    if (win) {
       const pkg = detectWindowsPackage(packageDirFor(location.folder_name, 'windows'));
       if (!pkg) {
         await finishTarget(target.id, 'failed', `No supported Windows package found for location '${location.name}'.`);
         return;
       }
       result = await pushWindowsAgent({
-        ip: target.ip_or_host, domain: creds.domain, username: creds.username, password: creds.password,
+        ip: target.ip_address, username: resolved.username, password: resolved.password,
         pkg, responseIssPath: fs.existsSync(RESPONSE_ISS_PATH) ? RESPONSE_ISS_PATH : null,
         forceReinstall: job.force_reinstall, logCallback,
       });
@@ -379,15 +308,17 @@ async function pushOneTarget(job, target, jobDefaults) {
         return;
       }
       result = await pushLinuxAgent({
-        ip: target.ip_or_host, username: creds.username, password: creds.password,
+        ip: target.ip_address, username: resolved.username, password: resolved.password,
         pkg, forceReinstall: job.force_reinstall, logCallback,
       });
     }
 
     const status = result.alreadyInstalled ? 'skipped' : (result.success ? 'success' : 'failed');
     await db.query(
-      `UPDATE agent_push_job_targets SET status = $1, log_output = $2, finished_at = NOW() WHERE id = $3`,
-      [status, result.log, target.id],
+      `UPDATE agent_push_job_targets
+          SET status = $1, log_output = $2, finished_at = NOW(), vm_name = $3, os_type = $4, location = $5
+        WHERE id = $6`,
+      [status, result.log, resolved.vm_name, resolved.os_type, resolved.location, target.id],
     );
   } catch (e) {
     await finishTarget(target.id, 'failed', `Unhandled error: ${e.message}`);
@@ -410,7 +341,6 @@ async function startJob(jobId) {
 
   const { rows: jobRows } = await db.query(`SELECT * FROM agent_push_jobs WHERE id = $1`, [jobId]);
   const job = jobRows[0];
-  const jobDefaults = await resolveJobDefaults(job);
   const { rows: targets } = await db.query(
     `SELECT * FROM agent_push_job_targets WHERE job_id = $1`, [jobId],
   );
@@ -419,7 +349,7 @@ async function startJob(jobId) {
   async function worker() {
     while (queue.length) {
       const target = queue.shift();
-      await pushOneTarget(job, target, jobDefaults);
+      await pushOneTarget(job, target);
     }
   }
 
@@ -453,7 +383,7 @@ async function cleanupOrphanedJobTargets() {
 
 module.exports = {
   listLocations, createLocation, deleteLocation, uploadLocationPackage, uploadResponseIss,
-  listCredentialProfiles, createCredentialProfile, deleteCredentialProfile,
+  listEligibleAssets,
   createJob, listJobs, getJob, getJobStatus,
   cleanupOrphanedJobTargets,
 };

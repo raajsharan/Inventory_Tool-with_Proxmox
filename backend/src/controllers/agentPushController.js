@@ -1,6 +1,10 @@
 const svc = require('../services/agentPushService');
 const ApiError = require('../utils/ApiError');
 
+async function listAssets(req, res, next) {
+  try { res.json({ assets: await svc.listEligibleAssets() }); } catch (e) { next(e); }
+}
+
 async function listLocations(req, res, next) {
   try { res.json({ locations: await svc.listLocations() }); } catch (e) { next(e); }
 }
@@ -25,18 +29,6 @@ async function uploadResponseIss(req, res, next) {
   try { res.json(await svc.uploadResponseIss(req.files)); } catch (e) { next(e); }
 }
 
-async function listCredentials(req, res, next) {
-  try { res.json({ profiles: await svc.listCredentialProfiles() }); } catch (e) { next(e); }
-}
-
-async function createCredential(req, res, next) {
-  try { res.json(await svc.createCredentialProfile(req.body, req.user.id)); } catch (e) { next(e); }
-}
-
-async function deleteCredential(req, res, next) {
-  try { res.json(await svc.deleteCredentialProfile(req.params.id)); } catch (e) { next(e); }
-}
-
 async function createJob(req, res, next) {
   try { res.json(await svc.createJob(req.body, req.user.id)); } catch (e) { next(e); }
 }
@@ -58,7 +50,6 @@ async function getJobStatus(req, res, next) {
 }
 
 module.exports = {
-  listLocations, createLocation, deleteLocation, uploadPackage, uploadResponseIss,
-  listCredentials, createCredential, deleteCredential,
+  listAssets, listLocations, createLocation, deleteLocation, uploadPackage, uploadResponseIss,
   createJob, listJobs, getJob, getJobStatus,
 };
