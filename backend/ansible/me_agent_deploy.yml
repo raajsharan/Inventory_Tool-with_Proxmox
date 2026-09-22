@@ -88,8 +88,20 @@
       # double-quote scalars ALSO unescape backslashes, which would silently
       # eat half of every \\ before Jinja even saw it — the same trap this
       # file's header comment warns about, just one layer further out.
+      # source_installer_path is computed here too, alongside share_root, for
+      # the same reason: every win_shell task below that referenced
+      # {{ share_path }} DIRECTLY failed with the Get-AnsibleParam/
+      # _raw_params error (this task's own predecessor included), while every
+      # one referencing only a pre-computed fact (share_root,
+      # ansible_password, ansible_user) has consistently worked. Switching
+      # Copy-Item from string-building with {{ share_path }} inline to
+      # Join-Path did NOT fix it — the trigger is share_path itself flowing
+      # into a remote win_shell command, not the surrounding PowerShell
+      # syntax. Pre-resolving it into a plain fact here, on the controller,
+      # sidesteps whatever that is.
       ansible.builtin.set_fact:
         share_root: '{{ ("\\\\" ~ share_path.split("\\")[2] ~ "\\" ~ share_path.split("\\")[3]) if (share_path.split("\\") | length) >= 4 else share_path }}'
+        source_installer_path: '{{ share_path ~ "\\" ~ installer_file }}'
 
     - name: Map the source share with this account's own credentials (works around the WinRM double-hop limitation)
       ansible.windows.win_shell:
@@ -98,13 +110,9 @@
       failed_when: false
 
     - name: Copy installer from the network share to a local temp folder
-      # Join-Path (not string concatenation) so each Jinja substitution sits
-      # isolated in its own quotes — the same literal-backslash-immediately-
-      # beside-{{ pattern that broke the two tasks above ("{{ x }}\{{ y }}")
-      # was present here too, twice.
       ansible.windows.win_shell:
         cmd: |
-          Copy-Item -Path (Join-Path "{{ share_path }}" "{{ installer_file }}") -Destination (Join-Path $env:TEMP "{{ installer_file }}") -Force
+          Copy-Item -Path "{{ source_installer_path }}" -Destination (Join-Path $env:TEMP "{{ installer_file }}") -Force
       register: copy_result
 
     - name: Unmap the source share
