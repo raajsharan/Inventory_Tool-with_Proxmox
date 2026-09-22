@@ -56,6 +56,7 @@ const STATIC_PAGES = [
   { key: 'connectivity_alerts',      label: 'Connectivity Alerts',            group: 'General' },
   { key: 'weekly_report',            label: 'Weekly Report',                  group: 'General' },
   { key: 'test_deploy',              label: 'Test Deploy',                    group: 'General' },
+  { key: 'agent_push',               label: 'Agent Push',                     group: 'General' },
 ];
 
 async function dynamicCustomPages() {

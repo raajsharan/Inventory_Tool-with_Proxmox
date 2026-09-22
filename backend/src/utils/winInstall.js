@@ -116,10 +116,17 @@ function lastResortError(output) {
  * WinRM install via PowerShell Invoke-Command running on the local server.
  * Optionally copies the installer file to the remote VM using Copy-Item -ToSession.
  *
- * @param {{ host, username, password, port?, filePath?, remoteDir?, command, timeout? }} opts
+ * @param {{ host, username, password, port?, filePath?, files?, remoteDir?, command, timeout? }} opts
+ * @param {string}   [opts.filePath] - copy a single local file to remoteDir; substitutes
+ *   {installer} in `command` with its remote path. Mutually exclusive with `files`.
+ * @param {string[]} [opts.files] - copy multiple local files to remoteDir (e.g. an MSI +
+ *   MST + certs that must land together) — one Copy-Item per file, all into the same
+ *   remoteDir. No {installer} substitution: the caller's `command` must reference the
+ *   exact remote paths itself (remoteDir + each file's own basename). Mutually exclusive
+ *   with `filePath`.
  * @returns Promise<{ connected, error, output, exitCode }>
  */
-function winrmInstall({ host, username, password, port = 5985, filePath, remoteDir = 'C:/Windows/Temp', command, timeout = 300000 }) {
+function winrmInstall({ host, username, password, port = 5985, filePath, files, remoteDir = 'C:/Windows/Temp', command, timeout = 300000 }) {
   return new Promise((resolve) => {
     const pw       = password.replace(/'/g, "''");
     const user     = username.replace(/'/g, "''");
@@ -142,6 +149,16 @@ function winrmInstall({ host, username, password, port = 5985, filePath, remoteD
 
       scriptParts.push(`Write-Output '[WinRM] Copying ${filename} to remote...'`);
       scriptParts.push(`Copy-Item -Path '${safeLocalPath}' -Destination '${remoteFilePath}' -ToSession $sess`);
+      scriptParts.push(`Write-Output '[WinRM] Copy complete'`);
+    } else if (files && files.length) {
+      const safeRemoteDir = remoteDir.replace(/'/g, "''").replace(/\\/g, '/');
+      scriptParts.push(`Write-Output '[WinRM] Copying ${files.length} file(s) to remote...'`);
+      for (const f of files) {
+        const filename      = path.basename(f);
+        const safeLocalPath = f.replace(/'/g, "''");
+        const dest           = `${safeRemoteDir}/${filename}`;
+        scriptParts.push(`Copy-Item -Path '${safeLocalPath}' -Destination '${dest}' -ToSession $sess`);
+      }
       scriptParts.push(`Write-Output '[WinRM] Copy complete'`);
     }
 

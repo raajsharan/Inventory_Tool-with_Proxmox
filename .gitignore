@@ -14,6 +14,7 @@ coverage/
 *.seed
 .npm
 uploads/
+backend/data/
 
 # Sensitive migration data file (contains production credentials)
 Migration-Tracker-Template12.xlsx
