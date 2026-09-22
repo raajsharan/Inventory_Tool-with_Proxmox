@@ -69,6 +69,9 @@ function describePsError(err, output) {
 // ManageEngineAgentDeployer tool applies to the same WMI/DCOM failure modes.
 function classifyWmiFailure(output) {
   const text = output || '';
+  if (/(specified (network )?(drive root|network resource))?.*(does not exist, or it is not a folder|network path was not found)/i.test(text) && /ADMIN\$/i.test(text)) {
+    return 'WMI/ADMIN$ share unreachable: the target refused the \\\\host\\ADMIN$ connection (check Windows Firewall allows File and Printer Sharing / SMB on port 445, that the Server service is running, and that the account has admin rights — a local, non-built-in-Administrator account also needs LocalAccountTokenFilterPolicy=1 for remote admin access)';
+  }
   if (/rpc server is unavailable/i.test(text)) {
     return 'WMI/DCOM execution unavailable: RPC server is unavailable on the target (check Windows Firewall, DCOM, and that the Remote Registry / WMI services are running)';
   }
@@ -260,6 +263,20 @@ function winrmServiceAction({ host, username, password, port = 5985, serviceName
  */
 function psexecInstall({ host, username, password, psexecPath, filePath, command, timeout = 300000 }) {
   return new Promise((resolve) => {
+    // PsExec.exe is a Windows PE binary — on this server's actual Linux
+    // deployment execve() can't run it at all. Node's execFile() then hits
+    // ENOEXEC and silently retries via `/bin/sh`, which feeds the binary's
+    // raw bytes to the shell as a "script": that's the garbled
+    // "psexec.exe: 15: ...: not found" / "Syntax error: end of file
+    // unexpected" spew reported from production, not a real PsExec failure.
+    // Fail clearly instead of letting that happen.
+    if (process.platform !== 'win32') {
+      return resolve({
+        connected: false,
+        error: 'PsExec requires this server to run on Windows (or have Wine installed) — a .exe binary cannot be executed directly on Linux. This fallback method is unusable on this deployment.',
+        output: '', exitCode: null,
+      });
+    }
     if (!fs.existsSync(psexecPath)) {
       return resolve({ connected: false, error: `PsExec not found: ${psexecPath}`, output: '', exitCode: null });
     }
