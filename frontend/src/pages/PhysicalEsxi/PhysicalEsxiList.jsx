@@ -8,7 +8,7 @@ import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined,
   EyeOutlined, EyeInvisibleOutlined, LockOutlined, UnlockOutlined, CopyOutlined,
-  CheckCircleFilled, CloseCircleFilled, SyncOutlined, HddOutlined,
+  CheckCircleFilled, CloseCircleFilled, SyncOutlined, HddOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -295,7 +295,21 @@ export default function PhysicalEsxiList() {
     // ── HARDWARE INFORMATION (top section of form) ──────────────────────────
     {
       key: 'ip_address', dataIndex: 'ip_address', width: 140,
-      title: labelOf('ip_address', 'Hosted IP'), render: dash,
+      title: labelOf('ip_address', 'Hosted IP'),
+      render: (v) => v
+        ? (
+          <Space size={4}>
+            {v}
+            <Tooltip title="Open web UI">
+              <Button
+                size="small" type="text" icon={<ExportOutlined />}
+                href={`https://${v}/ui/`} target="_blank" rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Tooltip>
+          </Space>
+        )
+        : dash(v),
     },
     {
       key: 'server_status', dataIndex: 'server_status', width: 130,

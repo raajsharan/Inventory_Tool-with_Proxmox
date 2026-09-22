@@ -365,6 +365,12 @@ async function install(req, res, next) {
       // CentOS-family images), refresh the ca-certificates package and retry
       // once instead of surfacing the raw curl failure.
       const CURL_LOG = '/tmp/.nessus_curl_install.log';
+      // Strip a trailing semicolon from the configured command before splicing it
+      // into `{ ${curlCmd}; }` below — otherwise a command that already ends in
+      // ';' (as Tenable's own copy-paste install commands do) produces `;;`,
+      // which bash parses as the case-statement terminator token and rejects
+      // with a syntax error outside of a case block.
+      const curlCmd = cmd.trim().replace(/;+\s*$/, '');
       const fullScript = [
         'if ! which curl >/dev/null 2>&1; then',
         '  echo "[NESSUS] curl not found, installing...";',
@@ -380,7 +386,7 @@ async function install(req, res, next) {
         '  echo "[NESSUS] curl installed successfully";',
         'fi;',
         'echo "[NESSUS] Running Nessus Agent curl install...";',
-        `{ ${cmd}; } > ${CURL_LOG} 2>&1;`,
+        `{ ${curlCmd}; } > ${CURL_LOG} 2>&1;`,
         'NESSUS_INSTALL_EXIT=$?;',
         `cat ${CURL_LOG};`,
         `if [ $NESSUS_INSTALL_EXIT -ne 0 ] && grep -Eqi "unable to get local issuer certificate|SSL certificate problem" ${CURL_LOG}; then`,
@@ -394,7 +400,7 @@ async function install(req, res, next) {
         '  fi;',
         '  sudo update-ca-trust extract 2>/dev/null || sudo update-ca-certificates 2>/dev/null;',
         '  echo "[NESSUS] Retrying Nessus Agent curl install...";',
-        `  { ${cmd}; } > ${CURL_LOG} 2>&1;`,
+        `  { ${curlCmd}; } > ${CURL_LOG} 2>&1;`,
         '  NESSUS_INSTALL_EXIT=$?;',
         `  cat ${CURL_LOG};`,
         'fi;',
