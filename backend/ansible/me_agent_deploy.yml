@@ -98,9 +98,13 @@
       failed_when: false
 
     - name: Copy installer from the network share to a local temp folder
+      # Join-Path (not string concatenation) so each Jinja substitution sits
+      # isolated in its own quotes — the same literal-backslash-immediately-
+      # beside-{{ pattern that broke the two tasks above ("{{ x }}\{{ y }}")
+      # was present here too, twice.
       ansible.windows.win_shell:
         cmd: |
-          Copy-Item -Path "{{ share_path }}\{{ installer_file }}" -Destination "$env:TEMP\{{ installer_file }}" -Force
+          Copy-Item -Path (Join-Path "{{ share_path }}" "{{ installer_file }}") -Destination (Join-Path $env:TEMP "{{ installer_file }}") -Force
       register: copy_result
 
     - name: Unmap the source share
@@ -113,7 +117,7 @@
     - name: Run the ME Agent installer
       ansible.windows.win_shell:
         cmd: |
-          & "$env:TEMP\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
+          & (Join-Path $env:TEMP "{{ installer_file }}") {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)
 
