@@ -115,12 +115,6 @@ const PORT = process.env.PORT || 4000;
     // eslint-disable-next-line no-console
     console.error('[weekly-report-scheduler] failed to start:', e);
   }
-  try {
-    await require('./src/services/agentPushService').cleanupOrphanedJobTargets();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error('[agent-push] startup cleanup failed:', e);
-  }
   const server = http.createServer(app);
   wsHub.init(server);
   server.listen(PORT, () => {

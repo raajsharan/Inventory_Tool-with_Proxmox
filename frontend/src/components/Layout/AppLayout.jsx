@@ -28,7 +28,7 @@ const { Sider, Header, Content, Footer } = Layout;
 const DEFAULT_NAV_KEYS = [
   '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
   'physical-esxi', '__custom__', '/reports', 'software-services', 'vm-discovery', '/topology-sites', 'migration-tracker',
-  '/test-deploy', '/agent-push',
+  '/test-deploy',
 ];
 
 export default function AppLayout() {
@@ -175,10 +175,6 @@ export default function AppLayout() {
         return can('test_deploy')
           ? [{ key: '/test-deploy', icon: <RocketOutlined />, label: <Link to="/test-deploy">Test Deploy</Link> }]
           : [];
-      case '/agent-push':
-        return can('agent_push')
-          ? [{ key: '/agent-push', icon: <RocketOutlined />, label: <Link to="/agent-push">Agent Push</Link> }]
-          : [];
       default:
         return [];
     }
@@ -221,7 +217,6 @@ export default function AppLayout() {
       isAdmin                           && { key: '/admin/install-config',        icon: <CloudDownloadOutlined />,      label: <Link to="/admin/install-config">ME Install Config</Link> },
       isAdmin                           && { key: '/admin/nessus-install-config', icon: <CloudDownloadOutlined />,      label: <Link to="/admin/nessus-install-config">Nessus Install Config</Link> },
       isAdmin                           && { key: '/admin/test-deploy-config',    icon: <RocketOutlined />,             label: <Link to="/admin/test-deploy-config">Test Deploy Config</Link> },
-      isAdmin                           && { key: '/admin/agent-push-locations',    icon: <RocketOutlined />,           label: <Link to="/admin/agent-push-locations">Agent Push Locations</Link> },
     ].filter(Boolean),
   };
 
