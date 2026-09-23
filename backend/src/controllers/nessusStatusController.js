@@ -3,7 +3,7 @@ const path        = require('path');
 const db          = require('../config/db');
 const { encrypt, decrypt, decryptSafe } = require('../utils/crypto');
 const {
-  sshVerify, sshRunCommand, sshUploadAndRun, isWindows,
+  sshVerify, sshRunCommand, sshUploadAndRun, winrmVerify, isWindows,
   NESSUS_LINUX_CONFIG, NESSUS_WINDOWS_CONFIG,
   buildLinuxCmdFor, parseLinuxService,
   parseWindowsService, SEP,
@@ -59,6 +59,36 @@ async function resolveVm(ip_address, source, override_username, override_passwor
 }
 
 const fileCheck = (p) => { if (!p) return null; try { return fs.existsSync(p); } catch { return false; } };
+
+// ── shared: is the Nessus Agent present on this host? ─────────────────────────
+// Windows goes over WinRM, the same transport the install uses. Most Windows
+// hosts don't run an SSH server, so the previous SSH-only check reported
+// "Unreachable" for perfectly healthy, pingable machines — and silently
+// defeated skip_if_installed, which can only skip a host it can confirm.
+// Software Status and Test Deploy already verify this way; Nessus was the one
+// left behind.
+async function nessusAgentCheck({ ip_address, port = 22, winrm_port, username, password, osType }) {
+  const overSsh = () => sshVerify({
+    host: ip_address, port, username, password, osType, cfgOverride: NESSUS_CFG_OVERRIDE,
+  });
+  if (!isWindows(osType)) return overSsh();
+
+  let winrmPort = winrm_port;
+  if (!winrmPort) {
+    const { rows } = await db.query(`SELECT windows_winrm_port FROM nessus_install_config WHERE id = 1`);
+    winrmPort = rows[0]?.windows_winrm_port || 5985;
+  }
+  const result = await winrmVerify({
+    host: ip_address, username, password, port: winrmPort, cfg: NESSUS_WINDOWS_CONFIG,
+  });
+  // A handful of Windows hosts run OpenSSH instead of WinRM — only fall back
+  // to SSH if WinRM specifically failed to connect, not if it connected and
+  // just found the service/binary missing. If SSH can't connect either, the
+  // WinRM error is the more useful one to report.
+  if (result.connected) return result;
+  const sshResult = await overSsh();
+  return sshResult.connected ? sshResult : result;
+}
 
 // ── GET /nessus-status ────────────────────────────────────────────────────────
 async function get(req, res, next) {
@@ -129,7 +159,7 @@ async function get(req, res, next) {
 // ── POST /nessus-status/verify ────────────────────────────────────────────────
 async function verify(req, res, next) {
   try {
-    const { ip_address, source, port = 22 } = req.body;
+    const { ip_address, source, port = 22, winrm_port } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
     // Credentials always come from the asset record — no manual overrides.
@@ -141,7 +171,7 @@ async function verify(req, res, next) {
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
 
-    const result = await sshVerify({ host: ip_address, port, username, password, osType, cfgOverride: NESSUS_CFG_OVERRIDE });
+    const result = await nessusAgentCheck({ ip_address, port, winrm_port, username, password, osType });
     result.ping  = pingResult;
     result.meta  = { credentials_source: 'stored', os_type: osType };
     res.json(result);
@@ -379,7 +409,9 @@ async function install(req, res, next) {
     if (cfgRow.skip_if_installed) {
       appendLog(logFile, ip_address, 'INFO', 'Checking whether Nessus Agent is already installed...');
       try {
-        const vr = await sshVerify({ host: ip_address, port, username, password, osType, timeout: 14000, cfgOverride: NESSUS_CFG_OVERRIDE });
+        const vr = await nessusAgentCheck({
+          ip_address, port, winrm_port: cfgRow.windows_winrm_port, username, password, osType,
+        });
         if (vr.connected && vr.installed) {
           appendLog(logFile, ip_address, 'INFO', 'Nessus Agent already installed. Skipping deployment.');
           return res.json({ skipped: true, reason: 'Nessus Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
