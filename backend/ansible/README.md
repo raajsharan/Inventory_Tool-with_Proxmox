@@ -33,16 +33,11 @@ Prerequisites this doesn't and can't set up for you:
 - Fill in the real silent-install command for the ME Agent installer in
   the Test Deploy Config admin page (Windows/Linux, default + per-location)
   — `me_agent_deploy.yml` ships with a placeholder switch until then.
-- Windows share paths should point at the source server's **admin share**
-  (e.g. `\\fileserver\C$\me-agents\windows`). The target re-authenticates
-  to it with its own asset-record credentials before copying (see
-  `me_agent_deploy.yml`) — this is the double-hop workaround, and it means
-  that account needs admin rights on the source file server too, not just
-  on the target itself.
-- **`cifs-utils` (`mount.cifs`) must already be installed on every Linux
-  target.** Linux share paths are a Samba (SMB) share (e.g.
-  `//192.168.x.x/software/Linux/Burlington`) — the target mounts it via
-  CIFS using its own asset-record credentials, copies from the mount, then
-  unmounts (same shape as the Windows admin-share step). Without
-  `cifs-utils`, `mount -t cifs` fails with `mount: unknown filesystem type
-  'cifs'`.
+- **windows_share_path / linux_share_path must be a local directory on
+  THIS backend server** (the Ansible control node), containing that OS's
+  installer — e.g. `/opt/inventory/installers/windows`. `win_copy`
+  (Windows) and `ansible.builtin.copy` (Linux) read the file straight off
+  local disk and push it to each target over the same WinRM/SSH connection
+  already used for everything else, so there's no network share to set up
+  and no `cifs-utils` dependency on the targets. Just place the installer
+  (and, for Linux, `serverinfo.json`) in that directory on this server.

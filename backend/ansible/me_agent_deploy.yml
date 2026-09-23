@@ -1,38 +1,36 @@
-# ME Agent deploy pilot (Test Deploy page) — copies the installer from a
-# network share, then runs it. Two separate plays so one ansible-playbook
-# invocation covers whichever OS groups actually have hosts in this run's
-# inventory (an empty group is simply skipped, no error).
+# ME Agent deploy pilot (Test Deploy page) — copies the installer straight
+# from this backend server's own local disk to each target over its normal
+# WinRM/SSH connection, then runs it. Two separate plays so one
+# ansible-playbook invocation covers whichever OS groups actually have hosts
+# in this run's inventory (an empty group is simply skipped, no error).
 #
-# Every shell/win_shell task below uses the explicit `cmd:` sub-parameter
-# instead of the free_form shorthand (`win_shell: |`  directly). Ansible's
-# free_form parsing runs the whole command through a shlex-like argument
-# splitter (to separate the command from modifiers like chdir=/creates=),
-# and that splitter can misread a backslash sitting right before a closing
-# quote (e.g. "\\") as an escaped quote rather than an escaped backslash —
+# windows_share_path / linux_share_path (Test Deploy Config's field names,
+# kept as-is to avoid a DB migration) are now just a local directory on THIS
+# backend server containing that OS's installer — win_copy/copy read them
+# straight off this machine's disk and push the file over the same
+# WinRM/SSH connection already used for everything else, so there's no
+# separate network share, no CIFS mount, and no WinRM double-hop to work
+# around. (An earlier version of this playbook went through a source file
+# server's admin share instead, which needed exactly that workaround — see
+# git history if that's ever needed again.)
+#
+# Every win_shell task below uses the explicit `cmd:` sub-parameter instead
+# of the free_form shorthand (`win_shell: |` directly). Ansible's free_form
+# parsing runs the whole command through a shlex-like argument splitter (to
+# separate the command from modifiers like chdir=/creates=), and that
+# splitter can misread a backslash sitting right before a closing quote
+# (e.g. "\\") as an escaped quote rather than an escaped backslash —
 # producing "failed at splitting arguments, unbalanced jinja2 block or
-# quotes" even though the YAML/PowerShell itself is fine. cmd: bypasses
-# that splitter entirely (plain templated string, passed straight to the
+# quotes" even though the YAML/PowerShell itself is fine. cmd: bypasses that
+# splitter entirely (plain templated string, passed straight to the
 # module), which is the documented fix for exactly this failure mode —
 # needed here since these commands are full of literal backslashes.
+# win_copy itself isn't affected by this at all — src/dest are structured
+# module parameters, not a shell command line.
 #
 # install_cmd is a per-host inventory var (Test Deploy Config, resolved per
 # location) — a PLACEHOLDER until the real silent-install switches for the
 # ME Agent installer are filled in there.
-#
-# Windows "double hop": WinRM's own login can't be forwarded on to a THIRD
-# machine (the file share), so the Windows play below re-authenticates to
-# the source server's admin share (\\server\C$\...) explicitly, using this
-# same account's own credentials — a fresh outbound connection, not a
-# forwarded token, which is the standard fix for double-hop. This requires
-# that account to also have admin rights on the SOURCE file server, not
-# just on the target.
-#
-# Linux share is Samba (SMB) hosted on a Linux server, e.g.
-# //192.168.x.x/software/Linux/Burlington — the Linux play mounts it via
-# CIFS with this same account's credentials (needs `cifs-utils` /
-# mount.cifs installed on every Linux target), copies from the mount,
-# then unmounts. Same shape as the Windows admin-share step, different
-# protocol.
 #
 # check_only=true (passed via --extra-vars) runs the copy step but skips
 # the actual install task — used by Test Deploy's per-VM "Verify" action to
@@ -60,72 +58,25 @@
       ansible.builtin.debug:
         msg: "OSINFO::{{ (os_info.stdout | default('unknown')) | trim }}"
 
-    - name: Fail early if the share path is missing its second leading backslash
-      # Checked here in Jinja on the controller rather than via a remote
-      # win_shell task — share_path is already known at template time, so
-      # there's no need to round-trip it through PowerShell just to test a
-      # string prefix. A prior remote version of this check
-      # ("{{ share_path }}".StartsWith("\\")) failed on every run with
-      # "Get-AnsibleParam: Missing required argument: _raw_params" — the
-      # same Windows string-escaping footgun described above for free_form
-      # parsing, triggered here by the literal \\" sequence right before the
-      # PowerShell string's closing quote.
+    - name: Fail early if windows_share_path isn't a local directory path on this server
       ansible.builtin.fail:
         msg: >-
-          windows_share_path ("{{ share_path }}") isn't a UNC path — it needs two leading
-          backslashes (\\fileserver\share\folder), not one, or Windows resolves it against the
-          local C: drive instead of the network. Fix it in Test Deploy Config for this location
-          (or the Default config).
-      when: not (share_path | default('')).startswith('\\\\')
+          windows_share_path ("{{ share_path | default('') }}") must be an absolute directory path
+          on THIS backend server (e.g. /opt/inventory/installers/windows) containing the Windows
+          installer — win_copy reads it straight off local disk, no network share needed. Fix it
+          in Test Deploy Config for this location (or the Default config).
+      when: not (share_path | default('') | string).startswith('/')
 
-    - name: Determine the source's \\server\share root (works for a named share or an admin share like \\server\C$)
-      # Computed in Jinja on the controller — same fix as the UNC-path check
-      # above. A remote win_shell version of this hit the identical
-      # Get-AnsibleParam/_raw_params quoting failure, and this is pure
-      # string manipulation of an already-known value with no dependency on
-      # remote state anyway, so there was never a need to round-trip it.
-      # Single-quoted YAML here (not double-quoted) since YAML's own
-      # double-quote scalars ALSO unescape backslashes, which would silently
-      # eat half of every \\ before Jinja even saw it — the same trap this
-      # file's header comment warns about, just one layer further out.
-      # source_installer_path is computed here too, alongside share_root, for
-      # the same reason: every win_shell task below that referenced
-      # {{ share_path }} DIRECTLY failed with the Get-AnsibleParam/
-      # _raw_params error (this task's own predecessor included), while every
-      # one referencing only a pre-computed fact (share_root,
-      # ansible_password, ansible_user) has consistently worked. Switching
-      # Copy-Item from string-building with {{ share_path }} inline to
-      # Join-Path did NOT fix it — the trigger is share_path itself flowing
-      # into a remote win_shell command, not the surrounding PowerShell
-      # syntax. Pre-resolving it into a plain fact here, on the controller,
-      # sidesteps whatever that is.
-      ansible.builtin.set_fact:
-        share_root: '{{ ("\\\\" ~ share_path.split("\\")[2] ~ "\\" ~ share_path.split("\\")[3]) if (share_path.split("\\") | length) >= 4 else share_path }}'
-        source_installer_path: '{{ share_path ~ "\\" ~ installer_file }}'
-
-    - name: Map the source share with this account's own credentials (works around the WinRM double-hop limitation)
-      ansible.windows.win_shell:
-        cmd: |
-          net use "{{ share_root }}" "{{ ansible_password }}" /user:"{{ ansible_user }}"
-      failed_when: false
-
-    - name: Copy installer from the network share to a local temp folder
-      ansible.windows.win_shell:
-        cmd: |
-          Copy-Item -Path "{{ source_installer_path }}" -Destination (Join-Path $env:TEMP "{{ installer_file }}") -Force
+    - name: Copy installer to the target's temp folder
+      ansible.windows.win_copy:
+        src: "{{ share_path }}/{{ installer_file }}"
+        dest: 'C:\Windows\Temp\{{ installer_file }}'
       register: copy_result
-
-    - name: Unmap the source share
-      ansible.windows.win_shell:
-        cmd: |
-          net use "{{ share_root }}" /delete /y
-      failed_when: false
-      changed_when: false
 
     - name: Run the ME Agent installer
       ansible.windows.win_shell:
         cmd: |
-          & (Join-Path $env:TEMP "{{ installer_file }}") {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
+          & "C:\Windows\Temp\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)
 
@@ -146,67 +97,28 @@
       ansible.builtin.debug:
         msg: "OSINFO::{{ (os_info.stdout | default('unknown')) | trim }}"
 
-    - name: Split the share path into its //server/share root and remaining subpath (for CIFS mount)
-      ansible.builtin.shell:
-        cmd: |
-          share_path="{{ share_path }}"
-          share_path="${share_path%/}"
-          root=$(echo "$share_path" | grep -oE '^//[^/]+/[^/]+')
-          sub="${share_path#$root}"
-          echo "${root}::${sub}"
-      register: cifs_path_parts
-      changed_when: false
-
-    - name: Fail early if the share path isn't a //server/share CIFS path
+    - name: Fail early if linux_share_path isn't a local directory path on this server
       ansible.builtin.fail:
         msg: >-
-          linux_share_path ("{{ share_path }}") doesn't look like //samba-server/share/folder —
-          the target mounts it via CIFS, so it needs two leading forward slashes followed by the
-          Samba server and share name. Fix it in Test Deploy Config for this location (or the
-          Default config).
-      when: "(cifs_path_parts.stdout | trim).split('::')[0] == ''"
+          linux_share_path ("{{ share_path | default('') }}") must be an absolute directory path
+          on THIS backend server (e.g. /opt/inventory/installers/linux) containing the Linux
+          installer — ansible.builtin.copy reads it straight off local disk, no CIFS mount needed.
+          Fix it in Test Deploy Config for this location (or the Default config).
+      when: not (share_path | default('') | string).startswith('/')
 
-    - name: Create a temp CIFS mount point
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: test_deploy_mnt_
-      register: cifs_mountpoint
-
-    - name: Write a temp CIFS credentials file (keeps the password out of the process list)
+    - name: Copy installer to /tmp
       ansible.builtin.copy:
-        dest: "{{ cifs_mountpoint.path }}.creds"
-        content: |
-          username={{ ansible_user }}
-          password={{ ansible_password }}
-        mode: '0600'
-
-    - name: Mount the source Samba share
-      ansible.builtin.shell:
-        cmd: |
-          mount -t cifs "{{ (cifs_path_parts.stdout | trim).split('::')[0] }}" "{{ cifs_mountpoint.path }}" -o credentials={{ cifs_mountpoint.path }}.creds,vers=3.0
-      register: cifs_mount_result
-
-    - name: Copy installer from the mounted share to /tmp
-      ansible.builtin.shell:
-        cmd: |
-          cp "{{ cifs_mountpoint.path }}{{ (cifs_path_parts.stdout | trim).split('::')[1] }}/{{ installer_file }}" "/tmp/{{ installer_file }}" && chmod +x "/tmp/{{ installer_file }}"
+        src: "{{ share_path }}/{{ installer_file }}"
+        dest: "/tmp/{{ installer_file }}"
+        mode: '0755'
       register: copy_result
 
-    - name: Copy serverinfo.json from the mounted share to /tmp
-      ansible.builtin.shell:
-        cmd: |
-          cp "{{ cifs_mountpoint.path }}{{ (cifs_path_parts.stdout | trim).split('::')[1] }}/{{ serverinfo_file }}" "/tmp/{{ serverinfo_file }}"
+    - name: Copy serverinfo.json to /tmp
+      ansible.builtin.copy:
+        src: "{{ share_path }}/{{ serverinfo_file }}"
+        dest: "/tmp/{{ serverinfo_file }}"
       register: copy_serverinfo_result
       when: (serverinfo_file | default('')) | length > 0
-
-    - name: Unmount and clean up the temp mount
-      ansible.builtin.shell:
-        cmd: |
-          umount "{{ cifs_mountpoint.path }}" 2>/dev/null
-          rm -f "{{ cifs_mountpoint.path }}.creds"
-          rmdir "{{ cifs_mountpoint.path }}" 2>/dev/null
-      failed_when: false
-      changed_when: false
 
     - name: Run the ME Agent installer
       # Runs from /tmp (not by absolute path) so the installer finds

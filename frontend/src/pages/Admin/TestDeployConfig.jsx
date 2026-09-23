@@ -128,18 +128,18 @@ export default function TestDeployConfig() {
                 name="windows_share_path"
                 label={
                   <Space>
-                    Installer share path (UNC)
-                    <Tooltip title="Point this at the source server's admin share (e.g. \\fileserver\C$\...). The target re-authenticates to it with its own asset-record credentials, working around WinRM's double-hop limitation — see me_agent_deploy.yml.">
+                    Installer directory (local path on this server)
+                    <Tooltip title="A directory on THIS backend server (the Ansible control node) containing the Windows installer — win_copy reads it straight off local disk and pushes it to the target over WinRM. No network share needed.">
                       <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
                     </Tooltip>
                   </Space>
                 }
                 rules={[{
-                  pattern: /^\\\\[^\\]/,
-                  message: 'Needs two leading backslashes (\\\\fileserver\\share\\...) — one leading backslash resolves against the local C: drive instead of the network.',
+                  pattern: /^\/[^/]/,
+                  message: 'Needs to be an absolute path on this server (e.g. /opt/inventory/installers/windows).',
                 }]}
               >
-                <Input placeholder="\\fileserver\C$\me-agents\windows" style={{ fontFamily: 'monospace' }} />
+                <Input placeholder="/opt/inventory/installers/windows" style={{ fontFamily: 'monospace' }} />
               </Form.Item>
               <Form.Item name="windows_installer_file" label="Installer filename">
                 <Input placeholder="ME_UEMS_Agent.exe" style={{ fontFamily: 'monospace' }} />
@@ -163,18 +163,18 @@ export default function TestDeployConfig() {
                 name="linux_share_path"
                 label={
                   <Space>
-                    Installer share path (Samba/CIFS)
-                    <Tooltip title="A //server/share path (Samba hosted on a Linux server) — the target mounts it via CIFS using its own asset-record credentials, then unmounts after copying. Needs cifs-utils installed on every Linux target.">
+                    Installer directory (local path on this server)
+                    <Tooltip title="A directory on THIS backend server (the Ansible control node) containing the Linux installer (and serverinfo.json, if needed) — ansible.builtin.copy reads it straight off local disk and pushes it to the target over SSH. No CIFS mount needed.">
                       <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
                     </Tooltip>
                   </Space>
                 }
                 rules={[{
-                  pattern: /^\/\/[^/]/,
-                  message: 'Needs two leading forward slashes (//samba-server/share/...) so the target can mount it via CIFS.',
+                  pattern: /^\/[^/]/,
+                  message: 'Needs to be an absolute path on this server (e.g. /opt/inventory/installers/linux).',
                 }]}
               >
-                <Input placeholder="//192.168.x.x/software/Linux/Burlington" style={{ fontFamily: 'monospace' }} />
+                <Input placeholder="/opt/inventory/installers/linux" style={{ fontFamily: 'monospace' }} />
               </Form.Item>
               <Form.Item name="linux_installer_file" label="Installer filename">
                 <Input placeholder="UEMS_LinuxAgent.bin" style={{ fontFamily: 'monospace' }} />
@@ -184,7 +184,7 @@ export default function TestDeployConfig() {
                 label={
                   <Space>
                     serverinfo.json filename
-                    <Tooltip title="The UEMS Linux agent installer needs this file copied alongside it, in the same share folder as the installer above. Leave blank if this location's installer doesn't need one.">
+                    <Tooltip title="The UEMS Linux agent installer needs this file copied alongside it, in the same local directory as the installer above. Leave blank if this location's installer doesn't need one.">
                       <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
                     </Tooltip>
                   </Space>
