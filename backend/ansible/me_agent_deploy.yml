@@ -67,16 +67,21 @@
           in Test Deploy Config for this location (or the Default config).
       when: not (share_path | default('') | string).startswith('/')
 
-    - name: Copy installer to the target's temp folder
+    - name: Create the destination directory on the target
+      ansible.windows.win_file:
+        path: 'C:\Temp'
+        state: directory
+
+    - name: Copy installer to the target
       ansible.windows.win_copy:
         src: "{{ share_path }}/{{ installer_file }}"
-        dest: 'C:\Windows\Temp\{{ installer_file }}'
+        dest: 'C:\Temp\{{ installer_file }}'
       register: copy_result
 
     - name: Run the ME Agent installer
       ansible.windows.win_shell:
         cmd: |
-          & "C:\Windows\Temp\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
+          & "C:\Temp\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
       register: install_result
       when: not (check_only | default(false) | bool)
 
