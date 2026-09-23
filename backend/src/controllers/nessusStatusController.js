@@ -11,6 +11,7 @@ const {
 const { winrmServiceAction } = require('../utils/winInstall');
 const { installWindowsWithFallback } = require('../utils/windowsInstallFallback');
 const ansible = require('../utils/ansibleRunner');
+const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
 const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
 
@@ -317,7 +318,7 @@ async function saveInstallConfig(req, res, next) {
 // needs comes from nessus_install_config, so nothing about the Tenable link is
 // hardcoded: the MSI is windows_file_path on this server, pushed to the target
 // by win_copy over the same WinRM connection Ansible already uses.
-async function installWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile }) {
+async function installNessusWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile }) {
   const fail = (error) => ({
     connected: false, error, output: '', exitCode: null,
     platform: 'windows', os_type: osType, method: 'ansible',
@@ -336,47 +337,20 @@ async function installWindowsViaAnsible({ ip_address, username, password, cfgRow
     ? cfgRow.nessus_server
     : `${cfgRow.nessus_server}:${cfgRow.nessus_port || 8834}`;
 
-  const target = {
-    ip_address, isWindows: true, username, password,
+  return installWindowsViaAnsible({
+    ip_address, username, password, osType,
+    playbookPath: ansible.NESSUS_WINDOWS_PLAYBOOK,
+    playbookName: 'nessus_agent_windows.yml',
     vars: {
       nessus_source: cfgRow.windows_file_path,
       nessus_group: cfgRow.nessus_groups || '',
       nessus_server: server,
       nessus_key: key,
     },
-  };
-
-  let inventoryPath;
-  try {
-    inventoryPath = await ansible.writeTempInventory([target], {
-      build: ansible.buildVarsInventory, prefix: 'nessus-win-inv',
-    });
-    appendLog(logFile, ip_address, 'INFO', 'Ansible: running nessus_agent_windows.yml');
-    const { exitCode, output } = await ansible.runPlaybook(inventoryPath, {}, ansible.NESSUS_WINDOWS_PLAYBOOK);
-
-    const recap = output.match(/^\S+\s*:\s*ok=\d+\s+changed=\d+\s+unreachable=(\d+)\s+failed=(\d+)/m);
-    const connected = !!recap && recap[1] === '0';
-    const succeeded = connected && exitCode === 0;
-    const error = succeeded ? null
-      : !recap ? 'ansible-playbook did not run to completion — see the output.'
-        : !connected ? 'Could not reach the host over WinRM.'
-          : 'A playbook task failed — see the output.';
-
-    appendLog(logFile, ip_address, succeeded ? 'SUCCESS' : 'ERROR',
-      succeeded ? 'Nessus Agent deployment completed via ANSIBLE' : `ANSIBLE failed: ${error}`);
-
-    return {
-      connected, exitCode, output, error,
-      platform: 'windows', os_type: osType, method: 'ansible',
-      // Deliberately not the real command line — that carries the linking key.
-      command: 'msiexec /i <installer> NESSUS_GROUPS/NESSUS_SERVER/NESSUS_KEY /qn /norestart',
-    };
-  } catch (e) {
-    appendLog(logFile, ip_address, 'ERROR', `ANSIBLE failed: ${e.message}`);
-    return fail(e.message);
-  } finally {
-    if (inventoryPath) fs.promises.unlink(inventoryPath).catch(() => {});
-  }
+    // Deliberately not the real command line — that carries the linking key.
+    command: 'msiexec /i <installer> NESSUS_GROUPS/NESSUS_SERVER/NESSUS_KEY /qn /norestart',
+    appendLog, logFile, agentLabel: 'Nessus Agent',
+  });
 }
 
 // ── POST /nessus-status/install ───────────────────────────────────────────────
@@ -428,7 +402,7 @@ async function install(req, res, next) {
       // Software Status (ME Agent), which doesn't use Ansible at all.
       const selectedMethod = windows_method_override || cfgRow.windows_method || 'auto';
       if (selectedMethod === 'ansible' || selectedMethod === 'auto') {
-        const r = await installWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
+        const r = await installNessusWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
         if (selectedMethod === 'ansible') return res.json(r);
         if (r.connected && r.exitCode === 0) return res.json({ ...r, succeeded_method: 'ansible' });
         appendLog(logFile, ip_address, 'INFO',

@@ -5,9 +5,12 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'me_agent_deploy.yml');
-// Windows-only Nessus Agent install (Nessus Agent Status page). Linux Nessus
-// installs never come through Ansible — see nessusStatusController.js.
+// Windows-only agent installs. Their Linux counterparts never come through
+// Ansible — see nessusStatusController.js / softwareStatusController.js. Note
+// ME_WINDOWS_PLAYBOOK (Software Status) is a different file from
+// PLAYBOOK_PATH above (Test Deploy), despite both installing the ME agent.
 const NESSUS_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'nessus_agent_windows.yml');
+const ME_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'me_agent_windows.yml');
 
 // ansible-playbook puts its working temp dir under $HOME/.ansible/tmp. The
 // backend runs as www-data, whose home (/var/www) it can't write to, so every
@@ -101,5 +104,5 @@ function runPlaybook(inventoryPath, extraVars = {}, playbookPath = PLAYBOOK_PATH
 
 module.exports = {
   buildInventory, buildVarsInventory, writeTempInventory, runPlaybook,
-  PLAYBOOK_PATH, NESSUS_WINDOWS_PLAYBOOK,
+  PLAYBOOK_PATH, NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK,
 };

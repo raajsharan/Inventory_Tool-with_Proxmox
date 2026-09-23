@@ -1,0 +1,114 @@
+# ManageEngine UEMS Agent install — Windows targets only (Software Status
+# page). Linux ME installs do NOT come through here: they stay on the
+# controller's own SSH upload/exec paths in softwareStatusController.js.
+#
+# Not to be confused with me_agent_deploy.yml, which belongs to the Test
+# Deploy page and has its own config, its own inventory vars and a Linux play.
+#
+# Everything comes from software_install_config, with the target's location
+# override merged over it, via the generated inventory:
+#   me_source       ← windows_file_path (the installer on THIS backend server)
+#   me_install_cmd  ← windows_cmd, with {installer} already resolved by Node
+#                     to the path the file lands at on the target
+#
+# Unlike the Nessus playbook there's no linking key here, so nothing needs
+# no_log and the installer's own output stays visible in the run log.
+---
+- name: Check and install the ManageEngine UEMS Agent
+  hosts: windows
+  gather_facts: false
+
+  vars:
+    # A dedicated folder, not C:\Temp itself — the cleanup step below removes
+    # it recursively, and C:\Temp routinely holds unrelated files.
+    me_temp_dir: 'C:\Temp\MEDeploy'
+    me_destination: 'C:\Temp\MEDeploy\{{ me_source | basename }}'
+    me_service_name: 'ManageEngine UEMS - Agent'
+    me_binary_path: 'C:\Program Files (x86)\ManageEngine\UEMS_Agent\bin\dcagentservice.exe'
+
+  tasks:
+    - name: Check if the ManageEngine UEMS Agent service exists
+      ansible.windows.win_service_info:
+        name: "{{ me_service_name }}"
+      register: me_service_before
+
+    - name: Report current ManageEngine Agent status
+      ansible.builtin.debug:
+        msg: "ME_INSTALLED::{{ me_service_before.exists | default(false) }}"
+
+    - name: Install the ManageEngine Agent when it isn't already present
+      when: not (me_service_before.exists | default(false))
+      block:
+
+        - name: Create the temporary deployment directory
+          ansible.windows.win_file:
+            path: "{{ me_temp_dir }}"
+            state: directory
+
+        - name: Copy the ManageEngine installer from this server to the target
+          ansible.windows.win_copy:
+            src: "{{ me_source }}"
+            dest: "{{ me_destination }}"
+
+        - name: Confirm the installer arrived
+          ansible.windows.win_stat:
+            path: "{{ me_destination }}"
+          register: me_installer
+
+        - name: Fail if the installer was not copied
+          ansible.builtin.fail:
+            msg: "The ManageEngine installer was not copied to {{ me_destination }}."
+          when: not me_installer.stat.exists
+
+        - name: Run the ManageEngine installer
+          # win_shell (not win_command) because the configured command is
+          # free-form PowerShell — it may well be a Start-Process wrapper
+          # rather than a bare executable call.
+          ansible.windows.win_shell: "{{ me_install_cmd }}"
+          register: me_install
+          # 1641 and 3010 both mean "installed, reboot needed" — successes.
+          changed_when: me_install.rc in [0, 1641, 3010]
+          failed_when: me_install.rc not in [0, 1641, 3010]
+
+        - name: Wait for the ManageEngine UEMS Agent service to appear
+          # The real verdict on the install. A wrapper like
+          # "Start-Process ... -Wait" exits 0 whatever the installer itself
+          # returned, so the exit code above can't be trusted on its own.
+          ansible.windows.win_service_info:
+            name: "{{ me_service_name }}"
+          register: me_service_after
+          retries: 12
+          delay: 5
+          until: me_service_after.exists | default(false)
+
+        - name: Ensure the ManageEngine UEMS Agent service is running
+          ansible.windows.win_service:
+            name: "{{ me_service_name }}"
+            state: started
+            start_mode: auto
+
+        - name: Check for the agent binary
+          ansible.windows.win_stat:
+            path: "{{ me_binary_path }}"
+          register: me_binary
+
+        - name: Fail if the agent binary was not found
+          ansible.builtin.fail:
+            msg: "Installation completed but {{ me_binary_path }} was not found."
+          when: not me_binary.stat.exists
+
+        # Only reached when every step above succeeded — a failed run
+        # deliberately leaves the installer behind to debug with.
+        - name: Remove the deployment directory
+          ansible.windows.win_file:
+            path: "{{ me_temp_dir }}"
+            state: absent
+
+        - name: Report success
+          ansible.builtin.debug:
+            msg: "ManageEngine UEMS Agent installed and the temporary files were removed."
+
+    - name: Report that the agent was already installed
+      ansible.builtin.debug:
+        msg: "ManageEngine UEMS Agent is already installed — installation skipped."
+      when: me_service_before.exists | default(false)

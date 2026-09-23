@@ -322,6 +322,7 @@ export default function InstallConfig() {
                 <Form.Item name="windows_method" noStyle initialValue="auto">
                   <Radio.Group>
                     <Radio value="auto">Auto</Radio>
+                    <Radio value="ansible">Ansible</Radio>
                     <Radio value="winrm">WinRM</Radio>
                     <Radio value="psexec">PsExec</Radio>
                     <Radio value="wmi">WMI</Radio>
@@ -342,7 +343,15 @@ export default function InstallConfig() {
                 </Row>
                 {winMethod === 'auto' && (
                   <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>
-                    Auto tries: WinRM → WMI → PsExec → SSH in order, stops at first success
+                    Auto tries: Ansible → WinRM → WMI → PsExec → SSH in order, stops at first success
+                  </Text>
+                )}
+                {winMethod === 'ansible' && (
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>
+                    Runs me_agent_windows.yml on this server: copies the installer below to the target over
+                    WinRM, runs the install command, waits for the service, then removes the temporary files.
+                    The install command is still used — <code>{'{installer}'}</code> resolves to the copied
+                    file on the target. Windows only; Linux installs are unaffected.
                   </Text>
                 )}
               </div>

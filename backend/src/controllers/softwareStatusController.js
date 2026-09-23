@@ -7,6 +7,8 @@ const {
 } = require('../utils/sshVerify');
 const { ping } = require('../utils/ping');
 const { installWindowsWithFallback } = require('../utils/windowsInstallFallback');
+const ansible = require('../utils/ansibleRunner');
+const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
 const ApiError    = require('../utils/ApiError');
 
 function appendLog(logFilePath, ip, level, message) {
@@ -357,6 +359,38 @@ async function saveInstallConfig(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Windows install via Ansible ───────────────────────────────────────────────
+// Windows targets only — Linux ME installs stay on the SSH upload/exec paths in
+// install() below and never come through here. Config is whatever install()
+// already resolved, i.e. the location override merged over the default.
+const ME_REMOTE_DIR = 'C:\\Temp\\MEDeploy';
+
+function installMeWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile }) {
+  const filePath = cfgRow.windows_file_path;
+  if (!filePath) {
+    return Promise.resolve({
+      connected: false, error: 'No Windows installer path is configured.', output: '', exitCode: null,
+      platform: 'windows', os_type: osType, method: 'ansible',
+    });
+  }
+
+  // {installer} is resolved here rather than in the playbook, since only this
+  // side knows where win_copy will land the file — the same substitution the
+  // WinRM/WMI/PsExec transports do against their own remote dir.
+  const remotePath = `${ME_REMOTE_DIR}\\${path.basename(filePath)}`;
+  const command = (cfgRow.windows_cmd || `& '{installer}' /Silent`)
+    .replace(/\{installer\}/g, remotePath);
+
+  return installWindowsViaAnsible({
+    ip_address, username, password, osType,
+    playbookPath: ansible.ME_WINDOWS_PLAYBOOK,
+    playbookName: 'me_agent_windows.yml',
+    vars: { me_source: filePath, me_install_cmd: command },
+    command,
+    appendLog, logFile, agentLabel: 'ManageEngine Agent',
+  });
+}
+
 // ── POST /software-status/install ─────────────────────────────────────────────
 async function install(req, res, next) {
   try {
@@ -391,7 +425,15 @@ async function install(req, res, next) {
     if (cfgRow.skip_if_installed) {
       appendLog(logFile, ip_address, 'INFO', 'Checking whether agent is already installed...');
       try {
-        const vResult = await sshVerify({ host: ip_address, port, username, password, osType, timeout: 14000 });
+        // Windows over WinRM, matching verify() above — an SSH-only check
+        // can't connect to a host with no SSH server, so it could never
+        // confirm an existing agent and the skip silently never happened.
+        const vResult = isWindows(osType)
+          ? await winrmVerify({
+            host: ip_address, username, password,
+            port: cfgRow.windows_winrm_port || 5985,
+          })
+          : await sshVerify({ host: ip_address, port, username, password, osType, timeout: 14000 });
         if (vResult.connected && vResult.installed) {
           appendLog(logFile, ip_address, 'INFO', 'Agent already installed. Skipping deployment.');
           return res.json({ skipped: true, reason: 'Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
@@ -404,6 +446,18 @@ async function install(req, res, next) {
       const filePath = cfgRow.windows_file_path;
       if (filePath && !fs.existsSync(filePath)) {
         throw new ApiError(422, `Installer not found on server: ${filePath}`);
+      }
+
+      // Kept here rather than in windowsInstallFallback.js's AUTO_ORDER —
+      // that chain is shared with Nessus Agent Status, which runs a different
+      // playbook, so each page owns where Ansible sits in its own ordering.
+      const selectedMethod = windows_method_override || cfgRow.windows_method || 'auto';
+      if (selectedMethod === 'ansible' || selectedMethod === 'auto') {
+        const r = await installMeWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
+        if (selectedMethod === 'ansible') return res.json(r);
+        if (r.connected && r.exitCode === 0) return res.json({ ...r, succeeded_method: 'ansible' });
+        appendLog(logFile, ip_address, 'INFO',
+          `Auto mode: Ansible did not succeed (${r.error || `exit ${r.exitCode}`}) — falling back to WinRM → WMI → PsExec → SSH`);
       }
 
       const result = await installWindowsWithFallback({
