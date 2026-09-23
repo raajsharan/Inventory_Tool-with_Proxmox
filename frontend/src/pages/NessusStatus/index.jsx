@@ -18,7 +18,8 @@ import { DASH_CSS, StatCard } from '../../components/DashboardStatCard.jsx';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const WIN_METHOD_OPTIONS = [
-  { value: 'auto',    label: 'Auto',   description: 'Try WinRM → WMI → PsExec → SSH until one succeeds' },
+  { value: 'auto',    label: 'Auto',    description: 'Try Ansible → WinRM → WMI → PsExec → SSH until one succeeds' },
+  { value: 'ansible', label: 'Ansible', description: 'Playbook: copy the MSI, install, link, verify the service, clean up' },
   { value: 'winrm',  label: 'WinRM',  description: 'PowerShell Remoting via Invoke-Command' },
   { value: 'wmi',    label: 'WMI',    description: 'Win32_Process.Create via WMI (async)' },
   { value: 'psexec', label: 'PsExec', description: 'Sysinternals PsExec remote execution' },
@@ -26,7 +27,7 @@ const WIN_METHOD_OPTIONS = [
 ];
 
 const WIN_METHOD_COLORS = {
-  auto: 'purple', winrm: 'geekblue', wmi: 'volcano', psexec: 'orange', ssh: 'blue', ssh_bash: 'cyan',
+  auto: 'purple', ansible: 'green', winrm: 'geekblue', wmi: 'volcano', psexec: 'orange', ssh: 'blue', ssh_bash: 'cyan',
 };
 
 const SOURCE_COLOR = {

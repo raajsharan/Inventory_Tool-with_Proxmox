@@ -1,0 +1,136 @@
+# Tenable Nessus Agent install — Windows targets only (Nessus Agent Status
+# page). Linux Nessus installs do NOT come through here: they stay on the
+# controller's own SSH curl/file paths in nessusStatusController.js.
+#
+# Everything this needs comes from nessus_install_config via the generated
+# inventory, never from hardcoded values here:
+#   nessus_source  ← windows_file_path  (the .msi on THIS backend server)
+#   nessus_group   ← nessus_groups
+#   nessus_server  ← nessus_server[:nessus_port]
+#   nessus_key     ← nessus_key (decrypted at run time)
+#
+# The linking key is a credential — it enrolls agents into the Tenable
+# subscription — so the install task runs with no_log: true. That hides the
+# whole task result, exit code included, which makes a failure impossible to
+# read; the task therefore never fails on its own (failed_when: false) and a
+# separate task below fails on the exit code alone, which is safe to print.
+#
+# win_command (not win_shell) runs msiexec without a shell in between, so the
+# PROPERTY="value" arguments reach it exactly as written.
+---
+- name: Check and install Tenable Nessus Agent
+  hosts: windows
+  gather_facts: false
+
+  vars:
+    # A dedicated folder, not C:\Temp itself — the cleanup step below removes
+    # it recursively, and C:\Temp routinely holds unrelated files.
+    nessus_temp_dir: 'C:\Temp\NessusDeploy'
+    nessus_destination: 'C:\Temp\NessusDeploy\{{ nessus_source | basename }}'
+
+  tasks:
+    - name: Check if the Tenable Nessus Agent service exists
+      ansible.windows.win_service_info:
+        name: Tenable Nessus Agent
+      register: nessus_service_before
+
+    - name: Report current Nessus Agent status
+      ansible.builtin.debug:
+        msg: "NESSUS_INSTALLED::{{ nessus_service_before.exists | default(false) }}"
+
+    - name: Install the Nessus Agent when it isn't already present
+      when: not (nessus_service_before.exists | default(false))
+      block:
+
+        - name: Create the temporary deployment directory
+          ansible.windows.win_file:
+            path: "{{ nessus_temp_dir }}"
+            state: directory
+
+        - name: Copy the Nessus Agent MSI from this server to the target
+          ansible.windows.win_copy:
+            src: "{{ nessus_source }}"
+            dest: "{{ nessus_destination }}"
+
+        - name: Confirm the MSI arrived
+          ansible.windows.win_stat:
+            path: "{{ nessus_destination }}"
+          register: nessus_msi
+
+        - name: Fail if the MSI was not copied
+          ansible.builtin.fail:
+            msg: "The Nessus Agent MSI was not copied to {{ nessus_destination }}."
+          when: not nessus_msi.stat.exists
+
+        - name: Install and link the Tenable Nessus Agent
+          ansible.windows.win_command: >-
+            msiexec.exe
+            /i "{{ nessus_destination }}"
+            NESSUS_GROUPS="{{ nessus_group }}"
+            NESSUS_SERVER="{{ nessus_server }}"
+            NESSUS_KEY="{{ nessus_key }}"
+            /qn
+            /norestart
+          register: nessus_install
+          no_log: true
+          # 1641 and 3010 both mean "installed, reboot needed" — successes.
+          changed_when: nessus_install.rc in [0, 1641, 3010]
+          failed_when: false
+
+        - name: Fail if the installer returned an error
+          # Prints only the exit code, so the no_log above keeps protecting the
+          # linking key while a failed run stays diagnosable.
+          ansible.builtin.fail:
+            msg: "msiexec failed with exit code {{ nessus_install.rc | default('unknown') }}."
+          when: nessus_install.rc | default(1) not in [0, 1641, 3010]
+
+        - name: Wait for the Tenable Nessus Agent service to appear
+          ansible.windows.win_service_info:
+            name: Tenable Nessus Agent
+          register: nessus_service_after
+          retries: 12
+          delay: 5
+          until: nessus_service_after.exists | default(false)
+
+        - name: Ensure the Tenable Nessus Agent service is running
+          ansible.windows.win_service:
+            name: Tenable Nessus Agent
+            state: started
+            start_mode: auto
+
+        - name: Check for the Nessus Agent CLI
+          ansible.windows.win_stat:
+            path: 'C:\Program Files\Tenable\Nessus Agent\nessuscli.exe'
+          register: nessus_cli
+
+        - name: Fail if the Nessus Agent CLI was not found
+          ansible.builtin.fail:
+            msg: "Installation completed but nessuscli.exe was not found."
+          when: not nessus_cli.stat.exists
+
+        - name: Read back the agent's link status
+          ansible.windows.win_command: >-
+            "C:\Program Files\Tenable\Nessus Agent\nessuscli.exe" agent status
+          register: nessus_agent_status
+          changed_when: false
+          failed_when: false
+
+        - name: Report the agent's link status
+          ansible.builtin.debug:
+            var: nessus_agent_status.stdout_lines
+
+        # Only reached when every step above succeeded — a failed run
+        # deliberately leaves the MSI behind to debug with.
+        - name: Remove the deployment directory
+          ansible.windows.win_file:
+            path: "{{ nessus_temp_dir }}"
+            state: absent
+
+        - name: Report success
+          ansible.builtin.debug:
+            msg: "Tenable Nessus Agent installed and the temporary files were removed."
+
+    - name: Report that the agent was already installed
+      ansible.builtin.debug:
+        msg: "Tenable Nessus Agent is already installed — installation skipped."
+      when: nessus_service_before.exists | default(false)

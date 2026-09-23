@@ -10,6 +10,7 @@ const {
 } = require('../utils/sshVerify');
 const { winrmServiceAction } = require('../utils/winInstall');
 const { installWindowsWithFallback } = require('../utils/windowsInstallFallback');
+const ansible = require('../utils/ansibleRunner');
 const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
 
@@ -280,6 +281,74 @@ async function saveInstallConfig(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Windows install via Ansible ───────────────────────────────────────────────
+// Windows targets only — Linux Nessus installs stay on the SSH curl/file paths
+// in install() below and never come through here. Every value the playbook
+// needs comes from nessus_install_config, so nothing about the Tenable link is
+// hardcoded: the MSI is windows_file_path on this server, pushed to the target
+// by win_copy over the same WinRM connection Ansible already uses.
+async function installWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile }) {
+  const fail = (error) => ({
+    connected: false, error, output: '', exitCode: null,
+    platform: 'windows', os_type: osType, method: 'ansible',
+  });
+
+  if (!cfgRow.windows_file_path) return fail('No Windows installer path is configured for Nessus.');
+  const key = decryptSafe(cfgRow.nessus_key);
+  if (!cfgRow.nessus_server || !key) {
+    return fail('The Nessus Manager host and linking key must both be set before an Ansible install.');
+  }
+
+  // Admins type either "host" or "host:port" into nessus_server — only append
+  // the configured port when they haven't already included one, otherwise the
+  // agent gets handed "host:443:8834".
+  const server = cfgRow.nessus_server.includes(':')
+    ? cfgRow.nessus_server
+    : `${cfgRow.nessus_server}:${cfgRow.nessus_port || 8834}`;
+
+  const target = {
+    ip_address, isWindows: true, username, password,
+    vars: {
+      nessus_source: cfgRow.windows_file_path,
+      nessus_group: cfgRow.nessus_groups || '',
+      nessus_server: server,
+      nessus_key: key,
+    },
+  };
+
+  let inventoryPath;
+  try {
+    inventoryPath = await ansible.writeTempInventory([target], {
+      build: ansible.buildVarsInventory, prefix: 'nessus-win-inv',
+    });
+    appendLog(logFile, ip_address, 'INFO', 'Ansible: running nessus_agent_windows.yml');
+    const { exitCode, output } = await ansible.runPlaybook(inventoryPath, {}, ansible.NESSUS_WINDOWS_PLAYBOOK);
+
+    const recap = output.match(/^\S+\s*:\s*ok=\d+\s+changed=\d+\s+unreachable=(\d+)\s+failed=(\d+)/m);
+    const connected = !!recap && recap[1] === '0';
+    const succeeded = connected && exitCode === 0;
+    const error = succeeded ? null
+      : !recap ? 'ansible-playbook did not run to completion — see the output.'
+        : !connected ? 'Could not reach the host over WinRM.'
+          : 'A playbook task failed — see the output.';
+
+    appendLog(logFile, ip_address, succeeded ? 'SUCCESS' : 'ERROR',
+      succeeded ? 'Nessus Agent deployment completed via ANSIBLE' : `ANSIBLE failed: ${error}`);
+
+    return {
+      connected, exitCode, output, error,
+      platform: 'windows', os_type: osType, method: 'ansible',
+      // Deliberately not the real command line — that carries the linking key.
+      command: 'msiexec /i <installer> NESSUS_GROUPS/NESSUS_SERVER/NESSUS_KEY /qn /norestart',
+    };
+  } catch (e) {
+    appendLog(logFile, ip_address, 'ERROR', `ANSIBLE failed: ${e.message}`);
+    return fail(e.message);
+  } finally {
+    if (inventoryPath) fs.promises.unlink(inventoryPath).catch(() => {});
+  }
+}
+
 // ── POST /nessus-status/install ───────────────────────────────────────────────
 async function install(req, res, next) {
   try {
@@ -298,7 +367,8 @@ async function install(req, res, next) {
       `SELECT linux_install_method, linux_file_path, linux_cmd,
               windows_method, windows_file_path, windows_cmd,
               windows_psexec_path, windows_winrm_port, windows_smb_port,
-              skip_if_installed, log_file_path
+              skip_if_installed, log_file_path,
+              nessus_server, nessus_port, nessus_key, nessus_groups
          FROM nessus_install_config WHERE id = 1`,
     );
     const cfgRow    = cfg[0] || {};
@@ -320,6 +390,18 @@ async function install(req, res, next) {
     if (win) {
       const filePath = cfgRow.windows_file_path;
       if (filePath && !fs.existsSync(filePath)) throw new ApiError(422, `Installer not found: ${filePath}`);
+
+      // Ansible is Nessus-specific, so the ordering lives here rather than in
+      // windowsInstallFallback.js's AUTO_ORDER — that chain is shared with
+      // Software Status (ME Agent), which doesn't use Ansible at all.
+      const selectedMethod = windows_method_override || cfgRow.windows_method || 'auto';
+      if (selectedMethod === 'ansible' || selectedMethod === 'auto') {
+        const r = await installWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
+        if (selectedMethod === 'ansible') return res.json(r);
+        if (r.connected && r.exitCode === 0) return res.json({ ...r, succeeded_method: 'ansible' });
+        appendLog(logFile, ip_address, 'INFO',
+          `Auto mode: Ansible did not succeed (${r.error || `exit ${r.exitCode}`}) — falling back to WinRM → WMI → PsExec → SSH`);
+      }
 
       const result = await installWindowsWithFallback({
         ip_address, port, username, password, cfgRow, remoteDir, osType,

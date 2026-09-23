@@ -5,6 +5,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'me_agent_deploy.yml');
+// Windows-only Nessus Agent install (Nessus Agent Status page). Linux Nessus
+// installs never come through Ansible — see nessusStatusController.js.
+const NESSUS_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'nessus_agent_windows.yml');
 
 // ansible-playbook puts its working temp dir under $HOME/.ansible/tmp. The
 // backend runs as www-data, whose home (/var/www) it can't write to, so every
@@ -19,24 +22,30 @@ const LOCAL_TMP = path.join(os.tmpdir(), 'ansible-tmp');
 // extension parses cleanly via the yaml inventory plugin without any of
 // the INI format's quoting/escaping pitfalls (host vars here include
 // decrypted passwords straight from JSON.stringify's own escaping).
+function connectionVars(t) {
+  return {
+    ansible_user: t.username,
+    ansible_password: t.password,
+    ansible_connection: t.isWindows ? 'winrm' : 'ssh',
+    ...(t.isWindows
+      ? {
+        ansible_port: 5985,
+        ansible_winrm_transport: 'ntlm',
+        ansible_winrm_server_cert_validation: 'ignore',
+      }
+      : {
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no',
+        ansible_become_password: t.password,
+      }),
+  };
+}
+
 function buildInventory(targets) {
   const groups = { windows: { hosts: {} }, linux: { hosts: {} } };
   for (const t of targets) {
     const group = t.isWindows ? 'windows' : 'linux';
     groups[group].hosts[t.ip_address] = {
-      ansible_user: t.username,
-      ansible_password: t.password,
-      ansible_connection: t.isWindows ? 'winrm' : 'ssh',
-      ...(t.isWindows
-        ? {
-          ansible_port: 5985,
-          ansible_winrm_transport: 'ntlm',
-          ansible_winrm_server_cert_validation: 'ignore',
-        }
-        : {
-          ansible_ssh_common_args: '-o StrictHostKeyChecking=no',
-          ansible_become_password: t.password,
-        }),
+      ...connectionVars(t),
       share_path: t.sharePath || '',
       installer_file: t.installerFile || '',
       install_cmd: t.installCmd || '',
@@ -46,20 +55,33 @@ function buildInventory(targets) {
   return JSON.stringify(groups, null, 2);
 }
 
-async function writeTempInventory(targets) {
-  const filePath = path.join(os.tmpdir(), `test-deploy-inv-${crypto.randomUUID()}.yml`);
-  await fs.promises.writeFile(filePath, buildInventory(targets), { mode: 0o600 });
+// Same connection settings, but the playbook's own variables are passed
+// per-target in `vars` instead of the fixed Test Deploy set above.
+function buildVarsInventory(targets) {
+  const groups = { windows: { hosts: {} }, linux: { hosts: {} } };
+  for (const t of targets) {
+    const group = t.isWindows ? 'windows' : 'linux';
+    groups[group].hosts[t.ip_address] = { ...connectionVars(t), ...(t.vars || {}) };
+  }
+  return JSON.stringify(groups, null, 2);
+}
+
+// mode 0600 because host vars carry decrypted passwords — and, for the Nessus
+// playbook, the Tenable linking key. Callers delete the file when the run ends.
+async function writeTempInventory(targets, { build = buildInventory, prefix = 'test-deploy-inv' } = {}) {
+  const filePath = path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}.yml`);
+  await fs.promises.writeFile(filePath, build(targets), { mode: 0o600 });
   return filePath;
 }
 
-// Runs `ansible-playbook -i <inventory> me_agent_deploy.yml`, resolving once
-// the process exits with the full captured stdout+stderr (interleaved, in
-// arrival order) — one combined run log rather than per-host streams.
+// Runs `ansible-playbook -i <inventory> <playbook>`, resolving once the
+// process exits with the full captured stdout+stderr (interleaved, in arrival
+// order) — one combined run log rather than per-host streams.
 // extraVars.check_only=true skips the install task (see me_agent_deploy.yml)
 // so a verify-only run just proves the file transfer step works.
-function runPlaybook(inventoryPath, extraVars = {}) {
+function runPlaybook(inventoryPath, extraVars = {}, playbookPath = PLAYBOOK_PATH) {
   return new Promise((resolve) => {
-    const args = ['-i', inventoryPath, PLAYBOOK_PATH];
+    const args = ['-i', inventoryPath, playbookPath];
     if (Object.keys(extraVars).length) args.push('--extra-vars', JSON.stringify(extraVars));
     fs.mkdirSync(LOCAL_TMP, { recursive: true });
     const child = spawn('ansible-playbook', args, {
@@ -77,4 +99,7 @@ function runPlaybook(inventoryPath, extraVars = {}) {
   });
 }
 
-module.exports = { buildInventory, writeTempInventory, runPlaybook, PLAYBOOK_PATH };
+module.exports = {
+  buildInventory, buildVarsInventory, writeTempInventory, runPlaybook,
+  PLAYBOOK_PATH, NESSUS_WINDOWS_PLAYBOOK,
+};
