@@ -14,19 +14,17 @@
 # server's admin share instead, which needed exactly that workaround — see
 # git history if that's ever needed again.)
 #
-# Every win_shell task below uses the explicit `cmd:` sub-parameter instead
-# of the free_form shorthand (`win_shell: |` directly). Ansible's free_form
-# parsing runs the whole command through a shlex-like argument splitter (to
-# separate the command from modifiers like chdir=/creates=), and that
-# splitter can misread a backslash sitting right before a closing quote
-# (e.g. "\\") as an escaped quote rather than an escaped backslash —
-# producing "failed at splitting arguments, unbalanced jinja2 block or
-# quotes" even though the YAML/PowerShell itself is fine. cmd: bypasses that
-# splitter entirely (plain templated string, passed straight to the
-# module), which is the documented fix for exactly this failure mode —
-# needed here since these commands are full of literal backslashes.
-# win_copy itself isn't affected by this at all — src/dest are structured
-# module parameters, not a shell command line.
+# win_shell tasks below use the free-form form (`win_shell: |` directly),
+# NOT a `cmd:` sub-parameter. ansible.windows.win_shell has no `cmd` option
+# — unlike ansible.builtin.shell (the Linux play below), which does. Passing
+# cmd: to win_shell means the module receives no command at all and fails
+# with "Get-AnsibleParam: Missing required argument: _raw_params", since
+# _raw_params is precisely what the free-form form populates. An earlier
+# version of this file used cmd: on every Windows task on the theory that it
+# avoided a backslash-vs-quote argument-splitting bug; that theory was wrong
+# and cost several rounds of debugging. The giveaway was "Report OS details"
+# appearing to pass while the UI always showed "OS unknown" — it was failing
+# too, just silently, because of its failed_when: false.
 #
 # install_cmd is a per-host inventory var (Test Deploy Config, resolved per
 # location) — a PLACEHOLDER until the real silent-install switches for the
@@ -46,10 +44,9 @@
   gather_facts: false
   tasks:
     - name: Report OS details
-      ansible.windows.win_shell:
-        cmd: |
-          $os = Get-CimInstance Win32_OperatingSystem
-          Write-Output "$($os.Caption)::$($os.Version)"
+      ansible.windows.win_shell: |
+        $os = Get-CimInstance Win32_OperatingSystem
+        Write-Output "$($os.Caption)::$($os.Version)"
       register: os_info
       failed_when: false
       changed_when: false
@@ -71,6 +68,7 @@
       ansible.windows.win_file:
         path: 'C:\Temp'
         state: directory
+      register: temp_dir
 
     - name: Copy installer to the target
       ansible.windows.win_copy:
@@ -78,12 +76,46 @@
         dest: 'C:\Temp\{{ installer_file }}'
       register: copy_result
 
-    - name: Run the ME Agent installer
-      ansible.windows.win_shell:
-        cmd: |
-          & "C:\Temp\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
-      register: install_result
-      when: not (check_only | default(false) | bool)
+    # An .msi can't be launched the way an .exe can — it isn't an executable,
+    # so it has to go through msiexec. install_cmd carries everything that
+    # follows the package path, the quiet switch included, so the command the
+    # admin tested by hand can be pasted into Test Deploy Config as-is.
+    - name: Install the agent (.msi, via msiexec)
+      ansible.windows.win_shell: |
+        msiexec /i "C:\Temp\{{ installer_file }}" {{ install_cmd | default('/qn', true) }}
+        exit $LASTEXITCODE
+      register: install_msi
+      # 3010 is "succeeded, reboot required" — a successful install, not a
+      # failure. Without this every target that wants a reboot reads as failed.
+      failed_when: install_msi.rc not in [0, 3010]
+      when:
+        - not (check_only | default(false) | bool)
+        - installer_file | lower is search('\.msi$')
+
+    - name: Install the agent (.exe)
+      ansible.windows.win_shell: |
+        & "C:\Temp\{{ installer_file }}" {{ install_cmd | default('/PLACEHOLDER_SILENT_SWITCHES', true) }}
+      register: install_exe
+      when:
+        - not (check_only | default(false) | bool)
+        - not (installer_file | lower is search('\.msi$'))
+
+    # Only reached when everything above succeeded — Ansible stops the host on
+    # failure, which deliberately leaves the installer in place for debugging.
+    - name: Remove the installer from the target
+      ansible.windows.win_file:
+        path: 'C:\Temp\{{ installer_file }}'
+        state: absent
+
+    - name: Remove the temp directory, but only if this run created it
+      # state: absent deletes recursively, and C:\Temp is a shared location
+      # that often already holds unrelated files. win_file reports changed
+      # only when it actually had to create the directory, so this removes
+      # nothing that was already there before the run.
+      ansible.windows.win_file:
+        path: 'C:\Temp'
+        state: absent
+      when: temp_dir is changed
 
 - name: Deploy ME Agent — Linux targets
   hosts: linux

@@ -149,11 +149,13 @@ export default function TestDeployConfig() {
                 label={
                   <Space>
                     Install command
-                    <Tooltip title="Runs as: & installer_file <this>"><InfoCircleOutlined style={{ color: '#8c8c8c' }} /></Tooltip>
+                    <Tooltip title={'For a .msi, runs as: msiexec /i "C:\\Temp\\<installer>" <this> — so put everything that follows the package path here, including the quiet switch (/qn) and any PROPERTY="value" pairs. For a .exe, runs as: & "C:\\Temp\\<installer>" <this>. Exit code 3010 (reboot required) counts as success.'}>
+                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                    </Tooltip>
                   </Space>
                 }
               >
-                <Input placeholder="/PLACEHOLDER_SILENT_SWITCHES" style={{ fontFamily: 'monospace' }} />
+                <Input placeholder={'PROPERTY="value" /qn'} style={{ fontFamily: 'monospace' }} />
               </Form.Item>
             </Card>
           </Col>
