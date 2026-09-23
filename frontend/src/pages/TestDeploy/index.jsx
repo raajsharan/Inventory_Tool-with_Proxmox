@@ -241,7 +241,9 @@ export default function TestDeploy() {
           const items = [
             {
               ok: pingOk, label: pingOk ? 'Ping OK' : 'No ping',
-              title: pingOk ? `Reachable${r.ping.time_ms != null ? ` · ${r.ping.time_ms} ms` : ''}` : 'No ping response',
+              title: pingOk
+                ? `Reachable${r.ping.time_ms != null ? ` · ${r.ping.time_ms} ms` : ''}`
+                : (r.ping?.error || 'No ping response'),
             },
             {
               ok: !!r.hostInfo, label: r.hostInfo ? r.hostInfo.split('::')[0] : 'OS unknown',
@@ -504,7 +506,9 @@ function VerifyResultDetail({ result }) {
   const rows = [
     {
       label: 'Ping', ok: pingOk,
-      detail: pingOk ? `Reachable${result.ping.time_ms != null ? ` · ${result.ping.time_ms} ms` : ''}` : 'No ping response',
+      detail: pingOk
+        ? `Reachable${result.ping.time_ms != null ? ` · ${result.ping.time_ms} ms` : ''}`
+        : (result.ping?.error || 'No ping response'),
     },
     {
       label: 'Host details', ok: hasHostInfo,
