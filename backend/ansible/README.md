@@ -6,8 +6,14 @@ control node cannot run natively on Windows):
 ```
 pip install ansible-core
 pip install -r requirements.txt
-ansible-galaxy collection install -r requirements.yml
+sudo ansible-galaxy collection install -r requirements.yml -p /usr/share/ansible/collections
 ```
+
+The `-p` matters: without it the collections land in the *invoking* user's
+`~/.ansible/collections` (i.e. `/root/...` when installed with sudo), which
+the backend — running as `www-data` — can't read, and every play then fails
+with `couldn't resolve module/action 'ansible.windows.win_shell'`.
+`/usr/share/ansible/collections` is already on Ansible's default search path.
 
 Also install `sshpass` via the OS package manager (not pip) — Ansible's
 `ssh` connection plugin (used for Linux targets) requires it whenever
