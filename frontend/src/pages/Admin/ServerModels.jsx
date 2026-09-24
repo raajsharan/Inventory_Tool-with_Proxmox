@@ -319,7 +319,7 @@ export default function ServerModels() {
           columns={columns}
           loading={loading}
           size="middle"
-          pagination={{ pageSize: 20, showSizeChanger: false, hideOnSinglePage: true }}
+          pagination={{ showTotal: t => `${t} total`, pageSize: 20, showSizeChanger: false, hideOnSinglePage: true }}
           locale={{ emptyText: search ? 'No models match your search' : 'No server models added yet' }}
         />
       </Card>

@@ -175,7 +175,7 @@ function SnapshotHistoryCard() {
         loading={loading}
         dataSource={snapshots}
         columns={columns}
-        pagination={{ pageSize: 10, hideOnSinglePage: true }}
+        pagination={{ showTotal: t => `${t} total`, pageSize: 10, hideOnSinglePage: true }}
       />
     </Card>
   );

@@ -561,7 +561,7 @@ export default function NessusStatus() {
             <Table
               rowKey={v => `${v.ip_address}||${v.source}`}
               dataSource={r.vms} columns={vmColumns}
-              pagination={r.vms.length > 50 ? { pageSize: 50, size: 'small' } : false}
+              pagination={r.vms.length > 50 ? { pageSize: 50, size: 'small', showTotal: t => `${t} total` } : false}
               size="small" style={{ margin: '0 0 8px 0' }}
               scroll={{ x: 'max-content' }}
               rowClassName={v => !v.nessus_installed ? 'row-warning' : ''}

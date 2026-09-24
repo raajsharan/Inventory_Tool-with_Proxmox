@@ -447,7 +447,7 @@ export default function TestDeploy() {
           expandedRowRender: (r) => (
             <Table
               rowKey={vmKey} dataSource={r.vms} columns={vmColumns}
-              pagination={r.vms.length > 50 ? { pageSize: 50, size: 'small' } : false}
+              pagination={r.vms.length > 50 ? { pageSize: 50, size: 'small', showTotal: t => `${t} total` } : false}
               size="small" style={{ margin: '0 0 8px 0' }} tableLayout="fixed"
               rowClassName={v => !v.me_installed ? 'row-warning' : ''}
             />

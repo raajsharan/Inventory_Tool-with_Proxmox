@@ -51,7 +51,7 @@ export default function DataHealth() {
     <Table
       size="small" rowKey={(r) => `${r.source}-${r.id}`}
       dataSource={gaps.filter(g => g[flag])}
-      pagination={{ pageSize: 20 }}
+      pagination={{ showTotal: t => `${t} total`, pageSize: 20 }}
       columns={[
         { title: 'Record', render: (_, r) => recordLink(r) },
         { title: 'IP Address', dataIndex: 'ip_address',
@@ -129,12 +129,12 @@ export default function DataHealth() {
           items={[
             { key: 'dup-ip', label: `Duplicate IPs (${s.duplicate_ips ?? 0})`,
               children: <Table size="small" rowKey="ip_address" loading={loading}
-                dataSource={data?.duplicate_ips || []} pagination={{ pageSize: 20 }}
+                dataSource={data?.duplicate_ips || []} pagination={{ showTotal: t => `${t} total`, pageSize: 20 }}
                 columns={dupColumns('ip_address', 'IP Address')}
                 locale={{ emptyText: 'No duplicate IP addresses across inventories.' }} /> },
             { key: 'dup-name', label: `Duplicate names (${s.duplicate_names ?? 0})`,
               children: <Table size="small" rowKey="vm_name" loading={loading}
-                dataSource={data?.duplicate_names || []} pagination={{ pageSize: 20 }}
+                dataSource={data?.duplicate_names || []} pagination={{ showTotal: t => `${t} total`, pageSize: 20 }}
                 columns={dupColumns('vm_name', 'VM Name')}
                 locale={{ emptyText: 'No duplicate VM names across inventories.' }} /> },
             { key: 'no-pw',  label: `Missing password (${s.no_password ?? 0})`,  children: gapTable('no_password', 'a password') },

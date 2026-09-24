@@ -32,7 +32,7 @@ export default function AuditLogs() {
         rowKey="id"
         dataSource={data.items}
         rowClassName="dashcard-row"
-        pagination={{ current: page, pageSize, total: data.total, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
+        pagination={{ showTotal: t => `${t} total`, current: page, pageSize, total: data.total, onChange: (p, ps) => { setPage(p); setPageSize(ps); } }}
         scroll={{ x: 'max-content' }}
         columns={[
           { title: 'When', dataIndex: 'created_at', width: 180, render: v => new Date(v).toLocaleString() },

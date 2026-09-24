@@ -349,7 +349,7 @@ export default function ConnectivityAlerts() {
               loading={listLoading}
               size="small"
               scroll={{ x: 'max-content' }}
-              pagination={{
+              pagination={{ showTotal: t => `${t} total`,
                 current: listPage,
                 pageSize: listPageSize,
                 total: list.total,

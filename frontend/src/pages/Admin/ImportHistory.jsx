@@ -22,6 +22,7 @@ export default function ImportHistory() {
       title={<Space><ImportOutlined style={{ color: '#1677ff' }} /><Typography.Title level={4} style={{ margin: 0 }}>Import History</Typography.Title></Space>}>
       <style>{DASH_CSS}</style>
       <Table
+      pagination={{ showTotal: t => `${t} total` }}
         rowKey="id"
         dataSource={data}
         rowClassName="dashcard-row"

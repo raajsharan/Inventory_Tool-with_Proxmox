@@ -142,7 +142,7 @@ function RunsTable({ kind, runs, onReload }) {
         <Button size="small" icon={<ReloadOutlined />} onClick={onReload}>Refresh</Button>
       </Space>
       <Table
-        size="small" rowKey="id" dataSource={runs} pagination={{ pageSize: 8 }}
+        size="small" rowKey="id" dataSource={runs} pagination={{ showTotal: t => `${t} total`, pageSize: 8 }}
         scroll={{ x: 'max-content' }}
         columns={[
           { title: 'When', dataIndex: 'started_at', render: v => new Date(v).toLocaleString(), width: 180 },
@@ -509,7 +509,7 @@ function RestoreByDateTab() {
           rowKey="filename"
           loading={loadingFiles}
           dataSource={files}
-          pagination={{ pageSize: 10 }}
+          pagination={{ showTotal: t => `${t} total`, pageSize: 10 }}
           rowSelection={{
             type: 'radio',
             selectedRowKeys: selectedFile ? [selectedFile] : [],

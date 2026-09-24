@@ -114,7 +114,7 @@ export default function CustomPageImport() {
                 size="small"
                 rowKey={(r) => r.row}
                 dataSource={result.failures}
-                pagination={{ pageSize: 10 }}
+                pagination={{ showTotal: t => `${t} total`, pageSize: 10 }}
                 columns={[
                   { title: 'Row', dataIndex: 'row', width: 80 },
                   { title: 'Errors', dataIndex: 'errors', render: v => (Array.isArray(v) ? v.join('; ') : String(v)) },

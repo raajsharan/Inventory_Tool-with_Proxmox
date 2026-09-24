@@ -361,7 +361,7 @@ function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivo
         columns={tableColumns}
         size="small"
         scroll={{ x: 'max-content' }}
-        pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [10,20,50,100] }}
+        pagination={{ showTotal: t => `${t} total`, pageSize: 20, showSizeChanger: true, pageSizeOptions: [10,20,50,100] }}
       />
     );
   }

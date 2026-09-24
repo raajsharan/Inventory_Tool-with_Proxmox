@@ -66,7 +66,7 @@ export default function VMReconcile() {
               children: (
                 <Table
                   size="small" loading={loading} rowKey="id"
-                  dataSource={missing} pagination={{ pageSize: 20 }}
+                  dataSource={missing} pagination={{ showTotal: t => `${t} total`, pageSize: 20 }}
                   scroll={{ x: 'max-content' }}
                   columns={[
                     { title: 'VM Name', dataIndex: 'name', render: v => <Text strong>{v}</Text> },
@@ -94,7 +94,7 @@ export default function VMReconcile() {
                     message="These records match no discovered VM — possibly decommissioned, physical hardware, or on a network discovery does not reach." />
                   <Table
                     size="small" loading={loading} rowKey={(r) => `${r.source}-${r.id}`}
-                    dataSource={stale} pagination={{ pageSize: 20 }}
+                    dataSource={stale} pagination={{ showTotal: t => `${t} total`, pageSize: 20 }}
                     scroll={{ x: 'max-content' }}
                     columns={[
                       { title: 'Record', render: (_, r) => {

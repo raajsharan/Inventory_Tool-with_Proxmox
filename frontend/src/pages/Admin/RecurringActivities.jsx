@@ -341,7 +341,7 @@ function OverridesView() {
         loading={loading}
         rowKey="id"
         dataSource={items}
-        pagination={{ pageSize: 20 }}
+        pagination={{ showTotal: t => `${t} total`, pageSize: 20 }}
         scroll={{ x: 'max-content' }}
         columns={[
           { title: 'Frequency', dataIndex: 'frequency', width: 100, render: v => <Tag>{v}</Tag> },

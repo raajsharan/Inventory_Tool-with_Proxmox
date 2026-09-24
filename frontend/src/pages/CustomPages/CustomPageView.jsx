@@ -122,7 +122,7 @@ export default function CustomPageView() {
       <Table
         rowKey="id"
         dataSource={records.items}
-        pagination={{
+        pagination={{ showTotal: t => `${t} total`,
           current: pg.current, pageSize: pg.pageSize, total: records.total,
           onChange: (current, pageSize) => setPg({ current, pageSize }),
           showSizeChanger: true,

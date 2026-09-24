@@ -282,7 +282,7 @@ export default function AssetImport({
             dataSource={filteredRows}
             columns={previewColumns}
             rowSelection={rowSelection}
-            pagination={{
+            pagination={{ showTotal: t => `${t} total`,
               pageSize: previewPageSize,
               onShowSizeChange: (_, size) => setPreviewPageSize(size),
               onChange: (_, size) => setPreviewPageSize(size),
@@ -313,7 +313,7 @@ export default function AssetImport({
                 { title: 'Data', dataIndex: 'data',
                   render: d => <code style={{ fontSize: 12 }}>{JSON.stringify(d).slice(0, 200)}</code> },
               ]}
-              pagination={{
+              pagination={{ showTotal: t => `${t} total`,
                 pageSize: resultsPageSize,
                 onShowSizeChange: (_, size) => setResultsPageSize(size),
                 onChange: (_, size) => setResultsPageSize(size),

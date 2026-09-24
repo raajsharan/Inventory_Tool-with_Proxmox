@@ -78,6 +78,7 @@ export default function Users() {
     >
       <style>{DASH_CSS}</style>
       <Table
+      pagination={{ showTotal: t => `${t} total` }}
         rowKey="id"
         dataSource={data}
         rowClassName="dashcard-row"
