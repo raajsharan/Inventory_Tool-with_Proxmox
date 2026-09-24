@@ -41,15 +41,19 @@ function authorize(...roles) {
 }
 
 // Per-page RBAC check, layered on top of authenticate + authorize.
-function requirePageAccess(pageKey) {
+// Passing several keys means "any of these" — for data that more than one
+// page legitimately reads, e.g. custom topology diagrams, which the admin
+// builder writes and the Topology of Sites page displays read-only.
+function requirePageAccess(...pageKeys) {
   return async (req, _res, next) => {
     try {
       if (!req.user) return next(new ApiError(401, 'Unauthenticated'));
       if (req.user.role === 'superadmin') return next();
       const svc = require('../services/pageAccessService');
-      const ok = await svc.canUser(req.user.id, req.user.role, pageKey);
-      if (!ok) return next(new ApiError(403, 'Page access denied for your account'));
-      return next();
+      for (const key of pageKeys) {
+        if (await svc.canUser(req.user.id, req.user.role, key)) return next();
+      }
+      return next(new ApiError(403, 'Page access denied for your account'));
     } catch (e) { return next(e); }
   };
 }

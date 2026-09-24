@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
-// Tone palette extends TopologySites/components/TopologyDiagram.jsx's
-// blue/purple/orange with a couple more so every node "type" the toolbar
-// offers has a distinct, consistent color.
+// One distinct, consistent color per node "type" the toolbar offers.
 export const TONE_COLORS = {
   blue:   '#1677ff',
   purple: '#722ed1',

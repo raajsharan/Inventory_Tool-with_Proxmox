@@ -24,7 +24,9 @@ router.use('/backup',           authenticate, requirePageAccess('admin/backup'),
 router.use('/branding',         require('./brandingRoutes'));
 router.use('/recycle-bin',      authenticate, requirePageAccess('admin/recycle-bin'),     require('./recycleBinRoutes'));
 router.use('/asset-transfer',   authenticate, requirePageAccess('admin/asset-transfer'),  require('./assetTransferRoutes'));
-router.use('/custom-topology',     authenticate, requirePageAccess('admin/custom-topology'), require('./customTopologyRoutes'));
+// Topology of Sites displays these diagrams read-only, so it needs to read
+// them too; the write routes inside stay gated on the builder's own page.
+router.use('/custom-topology',     authenticate, requirePageAccess('admin/custom-topology', 'topology_sites'), require('./customTopologyRoutes'));
 router.use('/vmware',              require('./vmwareRoutes'));
 router.use('/proxmox',             require('./proxmoxRoutes'));
 router.use('/hyperv',              require('./hypervRoutes'));

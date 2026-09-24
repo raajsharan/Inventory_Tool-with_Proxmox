@@ -1,10 +1,8 @@
 import { BaseEdge, getBezierPath } from '@xyflow/react';
 
 // The default connection style for every edge drawn on the Custom Topology
-// canvas — a moving dot along the connector, same CSS offset-path technique
-// as TopologySites/components/TopologyDiagram.jsx's auto-generated
-// diagrams, so hand-built and auto-discovered topologies read as one
-// visual language. getBezierPath's "d" string works directly as an
+// canvas — a moving dot along the connector, via CSS offset-path.
+// getBezierPath's "d" string works directly as an
 // offset-path target since CSS offset-path parses the same SVG path syntax.
 // data.color, when set (e.g. one distinct color per auto-connected VM —
 // see addAutoVMNodes in CustomTopologyTab.jsx), overrides both the line and

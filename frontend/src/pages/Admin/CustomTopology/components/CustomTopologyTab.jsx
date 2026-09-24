@@ -21,7 +21,7 @@ const { Text } = Typography;
 // DASH_CSS in components/DashboardStatCard.jsx for the same body[data-theme]
 // convention used everywhere else in this codebase), plus the moving-dot
 // animation for the "Connectivity Flow" edge style.
-const CUSTOM_TOPOLOGY_CSS = `
+export const CUSTOM_TOPOLOGY_CSS = `
 .ctb-canvas { --ctb-node-bg: #ffffff; --ctb-node-title: #262626; --ctb-node-subtitle: #8c8c8c; }
 body[data-theme="dark"] .ctb-canvas { --ctb-node-bg: #1c1c1c; --ctb-node-title: #f0f0f0; --ctb-node-subtitle: #a6a6a6; }
 @keyframes ctb-flowdot { to { offset-distance: 100%; } }
