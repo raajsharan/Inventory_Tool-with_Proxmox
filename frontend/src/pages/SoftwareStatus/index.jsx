@@ -668,18 +668,45 @@ function VerifyDetail({ vm, result }) {
   }
 
   if (result.restricted_shell) {
+    const rf = result.file;
     return (
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <Space>{pingTag}<Tag>credentials: {result.meta?.credentials_source || 'stored'}</Tag></Space>
         <Alert
-          type="warning"
+          type={rf?.exists ? 'success' : 'warning'}
           showIcon
-          message="Connected, but can't run the check — this account has a restricted shell"
-          description="SSH accepted the login and opened a command channel, but the account is locked to a
-            non-interactive shell (commonly OpenSSH's ForceCommand internal-sftp for SFTP-only accounts), so the
-            diagnostic command never actually ran. This isn't the same as the agent being missing — use an account
-            with normal shell access to get a real Service/Binary check on this host."
+          message={rf?.exists
+            ? 'Agent binary found — but the service state is unavailable'
+            : "Connected, but can't run the check — this account has a restricted shell"}
+          description={rf?.exists
+            ? `The account is locked to a non-interactive shell (commonly OpenSSH's ForceCommand
+               internal-sftp), so the diagnostic command never ran and the service state is unknown.
+               The agent's binary was found over SFTP, so the agent is installed — use an account with
+               normal shell access to see whether its service is actually running.`
+            : rf
+              ? `The account is locked to a non-interactive shell (commonly OpenSSH's ForceCommand
+                 internal-sftp), so the diagnostic command never ran. The binary wasn't found over SFTP
+                 either, but that is not proof it's missing: SFTP-only accounts are usually chrooted, so
+                 absolute paths can be invisible to them. Use an account with normal shell access for a
+                 real Service/Binary check on this host.`
+              : `SSH accepted the login and opened a command channel, but the account is locked to a
+                 non-interactive shell (commonly OpenSSH's ForceCommand internal-sftp for SFTP-only
+                 accounts), so the diagnostic command never actually ran. This isn't the same as the
+                 agent being missing — use an account with normal shell access to get a real
+                 Service/Binary check on this host.`}
         />
+        {rf && (
+          <Card size="small" title={<Space><FileSearchOutlined />Binary</Space>}>
+            <Tag color={rf.exists ? 'success' : 'default'}
+              icon={rf.exists ? <CheckCircleFilled /> : <CloseCircleFilled />}
+              style={{ fontSize: 13, padding: '2px 10px' }}>
+              {rf.exists ? 'Found' : 'Not Found'}
+            </Tag>
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11, wordBreak: 'break-all' }}>
+              {rf.path}
+            </Typography.Text>
+          </Card>
+        )}
         <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
           Raw response
         </Typography.Text>

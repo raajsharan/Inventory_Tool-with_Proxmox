@@ -140,14 +140,41 @@ function sshVerify({ host, port = 22, username, password, osType = '', timeout =
             // SFTP only), so the diagnostic command never actually ran.
             // Reporting "Unknown"/"Not Found" here would read as "checked
             // and the agent is missing", which isn't what happened.
-            return done({
+            const restricted = {
               connected: true,
               error: null,
               restricted_shell: true,
               restricted_reason: raw.trim() || 'No output — the account may be restricted to a non-interactive shell.',
               service: null,
-              file: null,
-              installed: null,
+            };
+
+            // An SFTP-only account still can't run systemctl, but it can
+            // still stat a path — so the binary half of the check is
+            // answerable even here. Worth doing: it's the difference between
+            // "we learned nothing" and "the agent is definitely present".
+            const sftpTimer = setTimeout(
+              () => done({ ...restricted, file: null, installed: null }),
+              Math.min(timeout, 10000),
+            );
+            return conn.sftp((sftpErr, sftp) => {
+              if (sftpErr) {
+                clearTimeout(sftpTimer);
+                return done({ ...restricted, file: null, installed: null });
+              }
+              sftp.stat(cfg.binaryPath, (statErr, stats) => {
+                clearTimeout(sftpTimer);
+                const exists = !statErr && !!stats;
+                done({
+                  ...restricted,
+                  file: { exists, path: cfg.binaryPath },
+                  // Finding it proves the agent is there. NOT finding it
+                  // proves nothing: internal-sftp is usually paired with
+                  // ChrootDirectory, so an absolute path can be absent from
+                  // this account's view while present on the host. Hence
+                  // null rather than false.
+                  installed: exists ? true : null,
+                });
+              });
             });
           }
 
