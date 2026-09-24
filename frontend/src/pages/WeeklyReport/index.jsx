@@ -141,6 +141,23 @@ function NessusSection({ data }) {
             { title: 'Physical & ESXi Inventory', dataIndex: 'physicalEsxi', align: 'right', render: v => (v ?? 0).toLocaleString() },
             { title: 'Total Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
           ]}
+          summary={(tableRows) => {
+            if (!tableRows.length) return null;
+            // Subset rows are already counted in the buckets above, so they
+            // must not be added in again — same rule as the Dashboard's copy
+            // of this table.
+            const sum = (key) => tableRows.reduce((s, r) => s + (r.subset ? 0 : (r[key] ?? 0)), 0);
+            return (
+              <Table.Summary.Row style={{ fontWeight: 700 }}>
+                <Table.Summary.Cell index={0} colSpan={2}><strong>Total</strong></Table.Summary.Cell>
+                <Table.Summary.Cell index={2} align="right"><strong>{sum('mslAssets').toLocaleString()}</strong></Table.Summary.Cell>
+                <Table.Summary.Cell index={3} align="right"><strong>{sum('extAssets').toLocaleString()}</strong></Table.Summary.Cell>
+                <Table.Summary.Cell index={4} align="right"><strong>{sum('beijingAssets').toLocaleString()}</strong></Table.Summary.Cell>
+                <Table.Summary.Cell index={5} align="right"><strong>{sum('physicalEsxi').toLocaleString()}</strong></Table.Summary.Cell>
+                <Table.Summary.Cell index={6} align="right"><strong>{sum('count').toLocaleString()}</strong></Table.Summary.Cell>
+              </Table.Summary.Row>
+            );
+          }}
         />
       </div>
       <Paragraph style={{ marginTop: 12 }}>
