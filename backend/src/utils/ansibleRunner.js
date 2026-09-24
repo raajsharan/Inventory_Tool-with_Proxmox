@@ -11,6 +11,9 @@ const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'me_agent_depl
 // PLAYBOOK_PATH above (Test Deploy), despite both installing the ME agent.
 const NESSUS_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'nessus_agent_windows.yml');
 const ME_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'me_agent_windows.yml');
+// Agent-agnostic Windows service/binary check — which agent to look for is
+// passed per host, so both status pages share it.
+const VERIFY_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'agent_verify_windows.yml');
 
 // ansible-playbook puts its working temp dir under $HOME/.ansible/tmp. The
 // backend runs as www-data, whose home (/var/www) it can't write to, so every
@@ -104,5 +107,5 @@ function runPlaybook(inventoryPath, extraVars = {}, playbookPath = PLAYBOOK_PATH
 
 module.exports = {
   buildInventory, buildVarsInventory, writeTempInventory, runPlaybook,
-  PLAYBOOK_PATH, NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK,
+  PLAYBOOK_PATH, NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK, VERIFY_WINDOWS_PLAYBOOK,
 };

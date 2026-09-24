@@ -1,0 +1,44 @@
+# Windows agent verification — "is this agent's service present/running, and
+# is its binary on disk?" Used by Nessus Agent Status and Software Status for
+# their Live Check, and by the skip_if_installed pre-check before an install.
+#
+# Why this exists rather than the direct pwsh path: Windows verification used
+# to run `pwsh` + New-PSSession from this Linux backend, which needs the OS
+# GSSAPI stack to speak NTLM. On hosts authenticated with local admin accounts
+# that fails with MI_RESULT_FAILED even with PSWSMan and gss-ntlmssp installed.
+# Ansible's pywinrm implements NTLM itself and never touches system GSSAPI,
+# which is why installs already worked against hosts verification could not
+# reach. This runs the check over that same connection.
+#
+# Which agent to look for is passed in per host, so one playbook serves both
+# the ManageEngine and Nessus pages:
+#   agent_service_name ← e.g. "Tenable Nessus Agent"
+#   agent_binary_path  ← e.g. C:\Program Files\Tenable\Nessus Agent\nessus-service.exe
+#
+# The single AGENTCHECK:: line is what the Node side parses; both lookups are
+# failed_when: false so a missing service or binary reports as "absent"
+# rather than failing the play, which would be indistinguishable from an
+# unreachable host.
+---
+- name: Verify a Windows agent
+  hosts: windows
+  gather_facts: false
+
+  tasks:
+    - name: Look up the service
+      ansible.windows.win_service_info:
+        name: "{{ agent_service_name }}"
+      register: agent_svc
+      failed_when: false
+
+    - name: Look up the binary
+      ansible.windows.win_stat:
+        path: "{{ agent_binary_path }}"
+      register: agent_bin
+      failed_when: false
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          AGENTCHECK::{{ (agent_svc.services[0].state | default('unknown'))
+            if (agent_svc.exists | default(false)) else 'not_found' }}::{{ agent_bin.stat.exists | default(false) }}

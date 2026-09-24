@@ -12,6 +12,7 @@ const { winrmServiceAction } = require('../utils/winInstall');
 const { installWindowsWithFallback } = require('../utils/windowsInstallFallback');
 const ansible = require('../utils/ansibleRunner');
 const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
+const { verifyWindowsAgentViaAnsible } = require('../utils/ansibleWindowsVerify');
 const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
 
@@ -73,6 +74,18 @@ async function nessusAgentCheck({ ip_address, port = 22, winrm_port, username, p
     host: ip_address, port, username, password, osType, cfgOverride: NESSUS_CFG_OVERRIDE,
   });
   if (!isWindows(osType)) return overSsh();
+
+  // Ansible first: pwsh's WSMan client can't speak NTLM to a host
+  // authenticated with a local admin account (MI_RESULT_FAILED, even with
+  // PSWSMan and gss-ntlmssp installed), while pywinrm does its own NTLM and
+  // reaches the same hosts fine. winrmVerify stays as a fallback for
+  // deployments where the pwsh path does work.
+  const viaAnsible = await verifyWindowsAgentViaAnsible({
+    ip_address, username, password,
+    serviceName: NESSUS_WINDOWS_CONFIG.serviceName,
+    binaryPath: NESSUS_WINDOWS_CONFIG.binaryPath,
+  });
+  if (viaAnsible.connected) return viaAnsible;
 
   let winrmPort = winrm_port;
   if (!winrmPort) {

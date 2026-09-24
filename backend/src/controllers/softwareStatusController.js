@@ -9,6 +9,8 @@ const { ping } = require('../utils/ping');
 const { installWindowsWithFallback } = require('../utils/windowsInstallFallback');
 const ansible = require('../utils/ansibleRunner');
 const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
+const { verifyWindowsAgentViaAnsible } = require('../utils/ansibleWindowsVerify');
+const { WINDOWS_CONFIG } = require('../utils/sshVerify');
 const ApiError    = require('../utils/ApiError');
 
 function appendLog(logFilePath, ip, level, message) {
@@ -168,6 +170,34 @@ async function get(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── shared: is the ME Agent present on this Windows host? ────────────────────
+// Ansible first: pwsh's WSMan client can't speak NTLM to a host authenticated
+// with a local admin account (MI_RESULT_FAILED, even with PSWSMan and
+// gss-ntlmssp installed), while pywinrm does its own NTLM and reaches the same
+// hosts fine — which is why installs already worked against hosts Live Check
+// could not. winrmVerify stays as a fallback for deployments where the pwsh
+// path does work, then SSH for the rare Windows host running OpenSSH instead.
+async function meAgentCheckWindows({ ip_address, port = 22, username, password, osType, location }) {
+  const viaAnsible = await verifyWindowsAgentViaAnsible({
+    ip_address, username, password,
+    serviceName: WINDOWS_CONFIG.serviceName,
+    binaryPath: WINDOWS_CONFIG.binaryPath,
+  });
+  if (viaAnsible.connected) return viaAnsible;
+
+  const { rows: cfg } = await db.query(`SELECT windows_winrm_port FROM software_install_config WHERE id = 1`);
+  const locCfg = await getLocationConfigRow(location);
+  const result = await winrmVerify({
+    host: ip_address, username, password,
+    port: locCfg?.windows_winrm_port || cfg[0]?.windows_winrm_port || 5985,
+  });
+  // Only fall back to SSH if WinRM specifically failed to connect, not if it
+  // connected and just found the service/binary missing.
+  if (result.connected) return result;
+  const sshResult = await sshVerify({ host: ip_address, port, username, password, osType });
+  return sshResult.connected ? sshResult : result;
+}
+
 // ── POST /software-status/verify ─────────────────────────────────────────────
 //    Credentials always come from the asset record — no manual overrides.
 async function verify(req, res, next) {
@@ -183,23 +213,9 @@ async function verify(req, res, next) {
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
 
-    let result;
-    if (isWindows(osType)) {
-      const { rows: cfg } = await db.query(`SELECT windows_winrm_port FROM software_install_config WHERE id = 1`);
-      const locCfg = await getLocationConfigRow(location);
-      const winrmPort = locCfg?.windows_winrm_port || cfg[0]?.windows_winrm_port || 5985;
-
-      result = await winrmVerify({ host: ip_address, username, password, port: winrmPort });
-      // A handful of Windows hosts run OpenSSH instead of WinRM — only fall
-      // back to SSH if WinRM specifically failed to connect, not if it
-      // connected and just found the service/binary missing.
-      if (!result.connected) {
-        const sshResult = await sshVerify({ host: ip_address, port, username, password, osType });
-        if (sshResult.connected) result = sshResult;
-      }
-    } else {
-      result = await sshVerify({ host: ip_address, port, username, password, osType });
-    }
+    const result = isWindows(osType)
+      ? await meAgentCheckWindows({ ip_address, port, username, password, osType, location })
+      : await sshVerify({ host: ip_address, port, username, password, osType });
 
     result.ping = pingResult;
     result.meta = { credentials_source: 'stored', os_type: osType };
@@ -425,14 +441,11 @@ async function install(req, res, next) {
     if (cfgRow.skip_if_installed) {
       appendLog(logFile, ip_address, 'INFO', 'Checking whether agent is already installed...');
       try {
-        // Windows over WinRM, matching verify() above — an SSH-only check
-        // can't connect to a host with no SSH server, so it could never
-        // confirm an existing agent and the skip silently never happened.
+        // Same check Live Check runs — an SSH-only check can't connect to a
+        // host with no SSH server, so it could never confirm an existing
+        // agent and the skip silently never happened.
         const vResult = isWindows(osType)
-          ? await winrmVerify({
-            host: ip_address, username, password,
-            port: cfgRow.windows_winrm_port || 5985,
-          })
+          ? await meAgentCheckWindows({ ip_address, port, username, password, osType, location })
           : await sshVerify({ host: ip_address, port, username, password, osType, timeout: 14000 });
         if (vResult.connected && vResult.installed) {
           appendLog(logFile, ip_address, 'INFO', 'Agent already installed. Skipping deployment.');
