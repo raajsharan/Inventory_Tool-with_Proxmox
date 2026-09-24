@@ -75,6 +75,16 @@ body[data-theme="dark"] .logo-title {
 body[data-theme="dark"] .ant-layout-sider {
   background: linear-gradient(180deg, #000000 0%, #0a0a0a 60%, #000000 100%) !important;
 }
+/* The content column sits next to the sider as a flex item, and flex items
+   default to min-width:auto — so a wide table's max-content width stretched
+   the whole shell past the viewport and the horizontal scrollbar ended up on
+   the page, dragging the sidebar off-screen with it. Letting the column
+   shrink keeps that scrollbar where it belongs: inside the table's own
+   scroll container (every wide table sets scroll={{ x: 'max-content' }}),
+   so only the content area moves sideways. */
+.ant-layout-has-sider > .ant-layout {
+  min-width: 0;
+}
 /* App-wide card shadow tinted with the ink token instead of flat black —
    ties every Card back to the same identity as the masthead/login card. */
 .ant-card {
