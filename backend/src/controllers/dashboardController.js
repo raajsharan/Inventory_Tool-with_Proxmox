@@ -518,10 +518,14 @@ async function summary(_req, res, next) {
         -- applicable/not_applicable above, so the two keep summing to the
         -- total and the compliance denominator is unchanged. Reported
         -- separately only so the table can show how many of the population
-        -- are powered off. Same status match the rest of the file uses.
-        COUNT(*) FILTER (
-          WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'
-        )::int                                               AS alive_powered_off
+        -- are powered off.
+        --
+        -- Matched on "%power%off%" rather than the "Powered Off%" prefix the
+        -- rest of this file uses: the actual dropdown value is
+        -- "Alive But Powered Off", which does not START with "Powered Off",
+        -- so a prefix match returns zero for every row. This form also still
+        -- catches legacy "Powered Off"/"Power Off" values.
+        COUNT(*) FILTER (WHERE server_status ILIKE '%power%off%')::int AS alive_powered_off
       FROM classified
       GROUP BY 1, 2
     `);
