@@ -439,6 +439,9 @@ function buildWeeklyReportCard(report) {
       [
         ['1', 'Nessus Applicable',     nessus.applicable?.mslAssets,     nessus.applicable?.extAssets,     nessus.applicable?.beijingAssets,     nessus.applicable?.physicalEsxi,     nessus.applicable?.total ?? 0],
         ['2', 'Nessus Not Applicable', nessus.notApplicable?.mslAssets,  nessus.notApplicable?.extAssets,  nessus.notApplicable?.beijingAssets,  nessus.notApplicable?.physicalEsxi,  nessus.notApplicable?.total ?? 0],
+        // Already counted in the two rows above — labelled so nobody reads
+        // it as a third bucket and adds it into the total.
+        ['',  'of which: Alive But Powered Off', nessus.alivePoweredOff?.mslAssets, nessus.alivePoweredOff?.extAssets, nessus.alivePoweredOff?.beijingAssets, nessus.alivePoweredOff?.physicalEsxi, nessus.alivePoweredOff?.total ?? 0],
       ],
     ));
   }

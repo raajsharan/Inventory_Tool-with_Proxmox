@@ -118,6 +118,9 @@ async function getNessusSection(dashboardData) {
     data: {
       applicable,
       notApplicable,
+      // Already counted within the two buckets above — an "of which" line,
+      // so it is deliberately left out of total and compliancePct.
+      alivePoweredOff: na.alive_powered_off || { total: 0 },
       total: na.total ?? 0,
       compliancePct: pct(applicable.installed ?? 0, applicable.total ?? 0),
     },

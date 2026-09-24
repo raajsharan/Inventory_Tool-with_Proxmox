@@ -485,6 +485,7 @@ async function summary(_req, res, next) {
       ),
       classified AS (
         SELECT source, COALESCE(tenable_installed, false) AS tenable_installed,
+          server_status,
           (os_type ILIKE '%windows%') AS is_windows,
           (
             os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
@@ -512,7 +513,15 @@ async function summary(_req, res, next) {
              THEN 'applicable' ELSE 'not_applicable' END AS bucket,
         source,
         COUNT(*)::int                                        AS count,
-        COUNT(*) FILTER (WHERE tenable_installed)::int       AS installed
+        COUNT(*) FILTER (WHERE tenable_installed)::int       AS installed,
+        -- Cross-cut, not a third bucket: these rows stay counted in
+        -- applicable/not_applicable above, so the two keep summing to the
+        -- total and the compliance denominator is unchanged. Reported
+        -- separately only so the table can show how many of the population
+        -- are powered off. Same status match the rest of the file uses.
+        COUNT(*) FILTER (
+          WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'
+        )::int                                               AS alive_powered_off
       FROM classified
       GROUP BY 1, 2
     `);
@@ -746,11 +755,17 @@ async function summary(_req, res, next) {
       applicable: { total: 0, installed: 0 },
       not_applicable: { total: 0, installed: 0 },
     };
+    // Powered-off rows are also counted in one of the two buckets above —
+    // this is an "of which" line for the table, so it is summed across
+    // buckets rather than alongside them.
+    const nessusAlivePoweredOff = { total: 0 };
     for (const r of weeklyNessusApplicability.rows) {
       const key = NESSUS_APPLICABILITY_SOURCE_KEYS[r.source] || r.source;
       nessusApplicabilityByBucket[r.bucket][key] = r.count;
       nessusApplicabilityByBucket[r.bucket].total += r.count;
       nessusApplicabilityByBucket[r.bucket].installed += r.installed;
+      nessusAlivePoweredOff[key] = (nessusAlivePoweredOff[key] || 0) + r.alive_powered_off;
+      nessusAlivePoweredOff.total += r.alive_powered_off;
     }
 
     res.json({
@@ -830,8 +845,9 @@ async function summary(_req, res, next) {
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
       weeklyNessusApplicability: {
-        applicable:     nessusApplicabilityByBucket.applicable,
-        not_applicable: nessusApplicabilityByBucket.not_applicable,
+        applicable:        nessusApplicabilityByBucket.applicable,
+        not_applicable:    nessusApplicabilityByBucket.not_applicable,
+        alive_powered_off: nessusAlivePoweredOff,
         total: nessusApplicabilityByBucket.applicable.total + nessusApplicabilityByBucket.not_applicable.total,
       },
       weeklyLocationPatching:   weeklyLocationPatching.rows,

@@ -1414,13 +1414,21 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                   count: nessusApplicability.applicable?.total ?? 0 },
                 { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', ...nessusApplicability.not_applicable,
                   count: nessusApplicability.not_applicable?.total ?? 0 },
+                // An "of which" line, not a third bucket: these rows are
+                // already counted in the two above, so `subset` keeps them
+                // out of the Total and the compliance figure is unaffected.
+                { key: 'alive_powered_off', slNo: '', subset: true,
+                  description: 'of which: Alive But Powered Off',
+                  ...nessusApplicability.alive_powered_off,
+                  count: nessusApplicability.alive_powered_off?.total ?? 0 },
               ]}
               pagination={false}
               scroll={{ x: 'max-content' }}
               tableLayout="fixed"
               columns={[
                 { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
-                { title: 'Description', dataIndex: 'description' },
+                { title: 'Description', dataIndex: 'description',
+                  render: (v, r) => (r.subset ? <Typography.Text type="secondary" italic>{v}</Typography.Text> : v) },
                 { title: 'Assets Inventory', dataIndex: 'mslAssets', align: 'right', width: 130,
                   render: v => (v ?? 0).toLocaleString() },
                 { title: 'Ext. Inventory', dataIndex: 'extAssets', align: 'right', width: 120,
@@ -1434,7 +1442,8 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
               ]}
               summary={(rows) => {
                 if (!rows.length) return null;
-                const sum = (key) => rows.reduce((s, r) => s + (r[key] ?? 0), 0);
+                // Subset rows are already counted in the buckets above.
+                const sum = (key) => rows.reduce((s, r) => s + (r.subset ? 0 : (r[key] ?? 0)), 0);
                 return (
                   <Table.Summary.Row style={{ fontWeight: 700 }}>
                     <Table.Summary.Cell index={0} colSpan={2}><strong>Total</strong></Table.Summary.Cell>

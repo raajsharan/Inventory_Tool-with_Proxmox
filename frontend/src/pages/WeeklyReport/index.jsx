@@ -110,6 +110,10 @@ function NessusSection({ data }) {
   const rows = [
     { key: 'applicable', slNo: 1, description: 'Nessus Applicable', ...data.applicable, count: data.applicable?.total ?? 0 },
     { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', ...data.notApplicable, count: data.notApplicable?.total ?? 0 },
+    // An "of which" line — these rows are already counted in the two above,
+    // so they are not part of the applicable/not-applicable split.
+    { key: 'alive_powered_off', slNo: '', subset: true, description: 'of which: Alive But Powered Off',
+      ...data.alivePoweredOff, count: data.alivePoweredOff?.total ?? 0 },
   ];
   return (
     <>
@@ -122,7 +126,8 @@ function NessusSection({ data }) {
           scroll={{ x: 'max-content' }}
           columns={[
             { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
-            { title: 'Description', dataIndex: 'description' },
+            { title: 'Description', dataIndex: 'description',
+              render: (v, r) => (r.subset ? <Text type="secondary" italic>{v}</Text> : v) },
             { title: 'Assets Inventory', dataIndex: 'mslAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
             { title: 'Ext. Inventory', dataIndex: 'extAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
             { title: 'Beijing Inventory', dataIndex: 'beijingAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
