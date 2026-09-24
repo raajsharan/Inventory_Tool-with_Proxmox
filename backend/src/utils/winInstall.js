@@ -11,6 +11,23 @@ const fs   = require('fs');
 // production even though SSH/PsExec did.
 const PS_BIN = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
 
+// Printed by the remote scripts below immediately after New-PSSession returns,
+// so "did the session actually open?" is answered by a fact rather than
+// guessed from the error text. The previous checks looked for the literal
+// strings "WS-Management"/"ETIMEDOUT", or just asked whether pwsh exited at
+// all, so any other failure counted as connected — MI_RESULT_FAILED, the usual
+// way pwsh's own WSMan client fails on Linux, being the one that mattered.
+// Callers then read the empty output as a real answer, and Live Check reported
+// "Agent is not installed" for hosts it had never reached.
+const WINRM_SESSION_MARKER = '---WINRM-SESSION-OPEN---';
+
+// Was the remote session established? Also strips the marker so it never
+// reaches the output box the UI shows.
+function splitSessionMarker(output) {
+  const connected = output.includes(WINRM_SESSION_MARKER);
+  return { connected, output: output.split(WINRM_SESSION_MARKER).join('').replace(/^\s*\n/, '') };
+}
+
 // PowerShell serializes terminating errors that cross a remoting/redirect
 // boundary (e.g. New-PSDrive/Invoke-WmiMethod failures under -EncodedCommand)
 // into "CLIXML" — a "#< CLIXML" marker followed by an XML blob where every
@@ -140,6 +157,7 @@ function winrmInstall({ host, username, password, port = 5985, filePath, files, 
     scriptParts.push(`$cred = New-Object PSCredential('${user}', $pw)`);
     scriptParts.push(`$sopt = New-PSSessionOption -SkipCACheck -SkipCNCheck`);
     scriptParts.push(`$sess = New-PSSession -ComputerName '${safeHost}' -Port ${port} -Credential $cred -SessionOption $sopt`);
+    scriptParts.push(`Write-Output '${WINRM_SESSION_MARKER}'`);
 
     if (filePath) {
       const filename      = path.basename(filePath);
@@ -191,12 +209,12 @@ function winrmInstall({ host, username, password, port = 5985, filePath, files, 
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      output = cleanPsOutput(output);
-      const connected = !output.includes('WS-Management') && !output.includes('ETIMEDOUT')
-        ? true
-        : code !== null;
-      const error = code !== 0 ? (describePsError(null, output) || lastResortError(output) || `PowerShell exited with code ${code}`) : null;
-      resolve({ connected, error, output, exitCode: code });
+      const marker = splitSessionMarker(cleanPsOutput(output));
+      output = marker.output;
+      const error = code !== 0
+        ? (describePsError(null, output) || lastResortError(output) || `PowerShell exited with code ${code}`)
+        : (marker.connected ? null : 'The WinRM session was never established.');
+      resolve({ connected: marker.connected, error, output, exitCode: code });
     });
 
     child.on('error', (err) => {
@@ -233,6 +251,7 @@ function winrmServiceAction({ host, username, password, port = 5985, serviceName
       `$cred = New-Object PSCredential('${user}', $pw)`,
       `$sopt = New-PSSessionOption -SkipCACheck -SkipCNCheck`,
       `$sess = New-PSSession -ComputerName '${safeHost}' -Port ${port} -Credential $cred -SessionOption $sopt`,
+      `Write-Output '${WINRM_SESSION_MARKER}'`,
       `Write-Output '[WinRM] ${verb} -Name ${safeSvc}'`,
       `Invoke-Command -Session $sess -ScriptBlock {`,
       `  ${verb} -Name '${safeSvc}' -Force`,
@@ -259,9 +278,12 @@ function winrmServiceAction({ host, username, password, port = 5985, serviceName
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      output = cleanPsOutput(output);
-      const error = code !== 0 ? (describePsError(null, output) || `PowerShell exited with code ${code}`) : null;
-      resolve({ connected: code !== null, error, output, exitCode: code });
+      const marker = splitSessionMarker(cleanPsOutput(output));
+      output = marker.output;
+      const error = code !== 0
+        ? (describePsError(null, output) || `PowerShell exited with code ${code}`)
+        : (marker.connected ? null : 'The WinRM session was never established.');
+      resolve({ connected: marker.connected, error, output, exitCode: code });
     });
 
     child.on('error', (err) => {
