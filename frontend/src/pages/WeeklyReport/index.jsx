@@ -112,8 +112,15 @@ function NessusSection({ data }) {
     { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', ...data.notApplicable, count: data.notApplicable?.total ?? 0 },
     // An "of which" line — these rows are already counted in the two above,
     // so they are not part of the applicable/not-applicable split.
-    { key: 'alive_powered_off', slNo: '', subset: true, description: 'of which: Alive But Powered Off',
-      ...data.alivePoweredOff, count: data.alivePoweredOff?.total ?? 0 },
+    //
+    // Omitted entirely for snapshots taken before this was measured: their
+    // stored JSON has no alivePoweredOff, and rendering that as 0 would read
+    // as "none are powered off" rather than "this report predates the line".
+    ...(data.alivePoweredOff ? [{
+      key: 'alive_powered_off', slNo: '', subset: true,
+      description: 'of which: Alive But Powered Off',
+      ...data.alivePoweredOff, count: data.alivePoweredOff.total ?? 0,
+    }] : []),
   ];
   return (
     <>
