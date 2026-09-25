@@ -88,7 +88,8 @@ export default function PVEList() {
     { title: 'Node',     dataIndex: 'node',         key: 'node',        width: 140, ellipsis: true, render: textCell },
     { title: 'Status',   dataIndex: 'status',       key: 'status',      width: 100, render: statusTag },
     { title: 'CPUs',     dataIndex: 'cpu_count',    key: 'cpu_count',   width: 70 },
-    { title: 'Mem (MB)', dataIndex: 'memory_mb',    key: 'memory_mb',   width: 100 },
+    { title: 'RAM (GB)', dataIndex: 'memory_mb',    key: 'memory_mb',   width: 100,
+      render: v => v ? (v / 1024).toFixed(1) : '—' },
     { title: 'Disk (GB)',dataIndex: 'disk_gb',      key: 'disk_gb',     width: 100, render: v => v ?? '—' },
     {
       title: 'IPs', dataIndex: 'ips', key: 'ips', width: 160, ellipsis: true,

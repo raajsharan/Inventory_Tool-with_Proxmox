@@ -52,7 +52,7 @@ export function vmwareToInventory(vm) {
     _source_detail: [
       vm.power_state && `Power: ${vm.power_state}`,
       vm.num_cpu     && `CPUs: ${vm.num_cpu}`,
-      vm.memory_mb   && `RAM: ${vm.memory_mb} MB`,
+      vm.memory_mb   && `RAM: ${(vm.memory_mb / 1024).toFixed(1)} GB`,
     ].filter(Boolean).join('  ·  '),
   };
 }
@@ -80,7 +80,7 @@ export function proxmoxToInventory(vm) {
     _source_label: `Proxmox · ${vm.source_host || vm.node || ''}`,
     _source_detail: [
       vm.cpu_count  && `CPUs: ${vm.cpu_count}`,
-      vm.memory_mb  && `RAM: ${vm.memory_mb} MB`,
+      vm.memory_mb  && `RAM: ${(vm.memory_mb / 1024).toFixed(1)} GB`,
       vm.disk_gb    && `Disk: ${vm.disk_gb} GB`,
     ].filter(Boolean).join('  ·  '),
   };
