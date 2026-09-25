@@ -86,95 +86,105 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <Suspense fallback={<RouteFallback />}>
-      <RouteErrorBoundary>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RouteErrorBoundary>
+              <Login />
+            </RouteErrorBoundary>
+          </Suspense>
+        }
+      />
+      {/* AppLayout is not lazy, so it mounts once and stays mounted across
+          every navigation below. Its own Suspense/error boundary (around
+          just the Outlet, in AppLayout.jsx) is what swaps per page — this
+          keeps the sidebar/header alive and avoids replaying AppLayout's
+          effects (e.g. the custom-pages/health fetch) on every click. */}
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
 
-            <Route path="/assets" element={<AssetList />} />
-            <Route path="/assets/new" element={<AssetForm mode="create" />} />
-            <Route path="/assets/import" element={<AssetImport />} />
-            <Route path="/assets/:id" element={<AssetView />} />
-            <Route path="/assets/:id/edit" element={<AssetForm mode="edit" />} />
+        <Route path="/assets" element={<AssetList />} />
+        <Route path="/assets/new" element={<AssetForm mode="create" />} />
+        <Route path="/assets/import" element={<AssetImport />} />
+        <Route path="/assets/:id" element={<AssetView />} />
+        <Route path="/assets/:id/edit" element={<AssetForm mode="edit" />} />
 
-            <Route path="/beijing-assets" element={<BeijingAssetList />} />
-            <Route path="/beijing-assets/new" element={<BeijingAssetForm mode="create" />} />
-            <Route path="/beijing-assets/import" element={<BeijingAssetImport />} />
-            <Route path="/beijing-assets/:id" element={<BeijingAssetView />} />
-            <Route path="/beijing-assets/:id/edit" element={<BeijingAssetForm mode="edit" />} />
+        <Route path="/beijing-assets" element={<BeijingAssetList />} />
+        <Route path="/beijing-assets/new" element={<BeijingAssetForm mode="create" />} />
+        <Route path="/beijing-assets/import" element={<BeijingAssetImport />} />
+        <Route path="/beijing-assets/:id" element={<BeijingAssetView />} />
+        <Route path="/beijing-assets/:id/edit" element={<BeijingAssetForm mode="edit" />} />
 
-            <Route path="/ext-assets" element={<ExtAssetList />} />
-            <Route path="/ext-assets/new" element={<ExtAssetForm mode="create" />} />
-            <Route path="/ext-assets/import" element={<ExtAssetImport />} />
-            <Route path="/ext-assets/:id" element={<ExtAssetView />} />
-            <Route path="/ext-assets/:id/edit" element={<ExtAssetForm mode="edit" />} />
+        <Route path="/ext-assets" element={<ExtAssetList />} />
+        <Route path="/ext-assets/new" element={<ExtAssetForm mode="create" />} />
+        <Route path="/ext-assets/import" element={<ExtAssetImport />} />
+        <Route path="/ext-assets/:id" element={<ExtAssetView />} />
+        <Route path="/ext-assets/:id/edit" element={<ExtAssetForm mode="edit" />} />
 
-            <Route path="/physical-esxi" element={<PhysicalEsxiList />} />
-            <Route path="/physical-esxi/new" element={<PhysicalEsxiForm mode="create" />} />
-            <Route path="/physical-esxi/import" element={<PhysicalEsxiImport />} />
-            <Route path="/physical-esxi/:id" element={<PhysicalEsxiView />} />
-            <Route path="/physical-esxi/:id/edit" element={<PhysicalEsxiForm mode="edit" />} />
+        <Route path="/physical-esxi" element={<PhysicalEsxiList />} />
+        <Route path="/physical-esxi/new" element={<PhysicalEsxiForm mode="create" />} />
+        <Route path="/physical-esxi/import" element={<PhysicalEsxiImport />} />
+        <Route path="/physical-esxi/:id" element={<PhysicalEsxiView />} />
+        <Route path="/physical-esxi/:id/edit" element={<PhysicalEsxiForm mode="edit" />} />
 
-            <Route path="/custom-pages/new" element={<CustomPageBuilder />} />
-            <Route path="/custom-pages/:slug" element={<CustomPageView />} />
-            <Route path="/custom-pages/:slug/new" element={<CustomPageRecordForm mode="create" />} />
-            <Route path="/custom-pages/:slug/:recordId/edit" element={<CustomPageRecordForm mode="edit" />} />
-            <Route path="/custom-pages/:slug/import" element={<CustomPageImport />} />
+        <Route path="/custom-pages/new" element={<CustomPageBuilder />} />
+        <Route path="/custom-pages/:slug" element={<CustomPageView />} />
+        <Route path="/custom-pages/:slug/new" element={<CustomPageRecordForm mode="create" />} />
+        <Route path="/custom-pages/:slug/:recordId/edit" element={<CustomPageRecordForm mode="edit" />} />
+        <Route path="/custom-pages/:slug/import" element={<CustomPageImport />} />
 
-            <Route path="/reports" element={<ReportBuilder />} />
-            <Route path="/software-status"  element={<SoftwareStatus />} />
-            <Route path="/nessus-status"    element={<NessusStatus />} />
-            <Route path="/tenable-report"   element={<TenableReport />} />
-            <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
-            <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
-            <Route path="/hyperv-discovery"   element={<HyperVDiscovery />} />
-            <Route path="/topology-sites"     element={<TopologySites />} />
-            <Route path="/connectivity-alerts" element={<ConnectivityAlerts />} />
-            <Route path="/weekly-report"       element={<WeeklyReport />} />
-            <Route path="/migration-tracker"  element={<MigrationTracker />} />
-            <Route path="/endpoint-central"   element={<EndpointCentral />} />
-            <Route path="/test-deploy"        element={<TestDeploy />} />
-            <Route path="/admin/test-deploy-config" element={<TestDeployConfig />} />
-            <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
-            <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local/login?next=%2F" embeddable={false} />} />
+        <Route path="/reports" element={<ReportBuilder />} />
+        <Route path="/software-status"  element={<SoftwareStatus />} />
+        <Route path="/nessus-status"    element={<NessusStatus />} />
+        <Route path="/tenable-report"   element={<TenableReport />} />
+        <Route path="/vmware-discovery"   element={<VMwareDiscovery />} />
+        <Route path="/proxmox-discovery"  element={<ProxmoxDiscovery />} />
+        <Route path="/hyperv-discovery"   element={<HyperVDiscovery />} />
+        <Route path="/topology-sites"     element={<TopologySites />} />
+        <Route path="/connectivity-alerts" element={<ConnectivityAlerts />} />
+        <Route path="/weekly-report"       element={<WeeklyReport />} />
+        <Route path="/migration-tracker"  element={<MigrationTracker />} />
+        <Route path="/endpoint-central"   element={<EndpointCentral />} />
+        <Route path="/test-deploy"        element={<TestDeploy />} />
+        <Route path="/admin/test-deploy-config" element={<TestDeployConfig />} />
+        <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
+        <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local/login?next=%2F" embeddable={false} />} />
 
-            <Route path="/admin/users" element={<Users />} />
-            <Route path="/admin/dropdowns" element={<Dropdowns />} />
-            <Route path="/admin/tag-ranges" element={<TagRanges />} />
-            <Route path="/admin/custom-pages" element={<AdminCustomPages />} />
-            <Route path="/admin/field-visibility" element={<FieldVisibility />} />
-            <Route path="/admin/page-access" element={<PageAccess />} />
-            <Route path="/admin/inventory-fields/:pageKey" element={<InventoryFields />} />
-            <Route path="/admin/audit" element={<AuditLogs />} />
-            <Route path="/admin/imports" element={<ImportHistory />} />
-            <Route path="/admin/db-import" element={<DbImport />} />
-            <Route path="/admin/backup" element={<AdminBackup />} />
-            <Route path="/admin/branding" element={<AdminBranding />} />
-            <Route path="/admin/recycle-bin" element={<RecycleBin />} />
-            <Route path="/admin/asset-transfer" element={<AssetTransfer />} />
-            <Route path="/admin/recurring-activities" element={<RecurringActivities />} />
-            <Route path="/admin/data-health" element={<DataHealth />} />
-            <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
-            <Route path="/admin/migration-config"         element={<MigrationConfig />} />
-            <Route path="/admin/teams-notifications"      element={<TeamsNotifications />} />
-            <Route path="/admin/weekly-report-config"      element={<WeeklyReportAdmin />} />
-            <Route path="/decommissioned" element={<Decommissioned />} />
-            <Route path="/admin/nav-order" element={<NavOrder />} />
-            <Route path="/admin/user-page-control" element={<UserPageControl />} />
-            <Route path="/admin/roles" element={<Roles />} />
-            <Route path="/admin/custom-topology" element={<CustomTopologyAdmin />} />
-            <Route path="/admin/install-config"        element={<InstallConfig />} />
-            <Route path="/admin/nessus-install-config" element={<NessusInstallConfig />} />
-            <Route path="/admin/server-models"         element={<ServerModels />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-        </Routes>
-      </RouteErrorBoundary>
-    </Suspense>
+        <Route path="/admin/users" element={<Users />} />
+        <Route path="/admin/dropdowns" element={<Dropdowns />} />
+        <Route path="/admin/tag-ranges" element={<TagRanges />} />
+        <Route path="/admin/custom-pages" element={<AdminCustomPages />} />
+        <Route path="/admin/field-visibility" element={<FieldVisibility />} />
+        <Route path="/admin/page-access" element={<PageAccess />} />
+        <Route path="/admin/inventory-fields/:pageKey" element={<InventoryFields />} />
+        <Route path="/admin/audit" element={<AuditLogs />} />
+        <Route path="/admin/imports" element={<ImportHistory />} />
+        <Route path="/admin/db-import" element={<DbImport />} />
+        <Route path="/admin/backup" element={<AdminBackup />} />
+        <Route path="/admin/branding" element={<AdminBranding />} />
+        <Route path="/admin/recycle-bin" element={<RecycleBin />} />
+        <Route path="/admin/asset-transfer" element={<AssetTransfer />} />
+        <Route path="/admin/recurring-activities" element={<RecurringActivities />} />
+        <Route path="/admin/data-health" element={<DataHealth />} />
+        <Route path="/admin/compliance-config"  element={<ComplianceConfig />} />
+        <Route path="/admin/migration-config"         element={<MigrationConfig />} />
+        <Route path="/admin/teams-notifications"      element={<TeamsNotifications />} />
+        <Route path="/admin/weekly-report-config"      element={<WeeklyReportAdmin />} />
+        <Route path="/decommissioned" element={<Decommissioned />} />
+        <Route path="/admin/nav-order" element={<NavOrder />} />
+        <Route path="/admin/user-page-control" element={<UserPageControl />} />
+        <Route path="/admin/roles" element={<Roles />} />
+        <Route path="/admin/custom-topology" element={<CustomTopologyAdmin />} />
+        <Route path="/admin/install-config"        element={<InstallConfig />} />
+        <Route path="/admin/nessus-install-config" element={<NessusInstallConfig />} />
+        <Route path="/admin/server-models"         element={<ServerModels />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Route>
+    </Routes>
   );
 }
 

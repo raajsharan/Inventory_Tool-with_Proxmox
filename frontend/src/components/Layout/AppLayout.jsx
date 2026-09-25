@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Breadcrumb, Space, Typography, Button, Tooltip, notification } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Breadcrumb, Space, Typography, Button, Tooltip, notification, Spin } from 'antd';
 import {
   DashboardOutlined, DatabaseOutlined, PlusOutlined, UploadOutlined,
   AppstoreAddOutlined, AppstoreOutlined, UnorderedListOutlined,
@@ -21,9 +21,24 @@ import api from '../../api/client';
 import GlobalSearch from '../GlobalSearch.jsx';
 import AlertBell from '../AlertBell.jsx';
 import GlobalHorizontalScroll from '../GlobalHorizontalScroll.jsx';
+import RouteErrorBoundary from '../RouteErrorBoundary.jsx';
 import { NAV_STORAGE_KEY, loadNavOrder } from '../../pages/Admin/NavOrder.jsx';
 
 const { Sider, Header, Content, Footer } = Layout;
+
+// Scoped to the content area so a page-to-page navigation only swaps this
+// pane while the next route's chunk streams in — the sidebar, header, and
+// footer (and AppLayout's own effects, e.g. the custom-pages/health fetch
+// below) stay mounted instead of being torn down and refetched on every
+// click. Without this boundary here, the nearest Suspense is the one in
+// App.jsx around the whole <Routes>, which unmounts AppLayout itself.
+function ContentFallback() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+      <Spin size="large" />
+    </div>
+  );
+}
 
 const DEFAULT_NAV_KEYS = [
   '/dashboard', 'assets', 'beijing-assets', 'ext-assets',
@@ -349,7 +364,11 @@ export default function AppLayout() {
           </Space>
         </Header>
         <Content className="page-shell">
-          <Outlet />
+          <Suspense fallback={<ContentFallback />}>
+            <RouteErrorBoundary>
+              <Outlet />
+            </RouteErrorBoundary>
+          </Suspense>
         </Content>
         <Footer style={{ textAlign: 'center', padding: '12px 24px', fontSize: 12 }}>
           <span dangerouslySetInnerHTML={{
