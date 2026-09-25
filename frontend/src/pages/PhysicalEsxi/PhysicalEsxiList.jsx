@@ -18,6 +18,13 @@ import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
 const PAGE_KEY = 'physical_esxi_servers';
 
+// Each hypervisor serves its web UI somewhere different: Proxmox on port
+// 8006, ESXi at /ui on 443. Anything else keeps the ESXi form, which is what
+// every row used before this split.
+const webUiUrl = (ip, osType) => (
+  /proxmox/i.test(osType || '') ? `https://${ip}:8006` : `https://${ip}/ui/`
+);
+
 export default function PhysicalEsxiList() {
   const { user, getPageLabel, canViewPasswords } = useAuth();
   const title = getPageLabel ? getPageLabel(PAGE_KEY, 'Physical & ESXi Servers') : 'Physical & ESXi Servers';
@@ -296,14 +303,14 @@ export default function PhysicalEsxiList() {
     {
       key: 'ip_address', dataIndex: 'ip_address', width: 140,
       title: labelOf('ip_address', 'Hosted IP'),
-      render: (v) => v
+      render: (v, r) => v
         ? (
           <Space size={4}>
             {v}
             <Tooltip title="Open web UI">
               <Button
                 size="small" type="text" icon={<ExportOutlined />}
-                href={`https://${v}/ui/`} target="_blank" rel="noreferrer"
+                href={webUiUrl(v, r.os_type)} target="_blank" rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
               />
             </Tooltip>
