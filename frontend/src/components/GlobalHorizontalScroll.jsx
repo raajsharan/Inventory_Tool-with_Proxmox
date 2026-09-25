@@ -9,7 +9,12 @@ import { useEffect, useRef } from 'react';
 // down to the table's own edge to find a horizontal scrollbar. Mounted
 // once in AppLayout; a MutationObserver auto-attaches to new tables as
 // routes change, so it covers every current and future page.
-const SELECTOR = '.ant-table-content, [data-hscroll]';
+// AntD renders the real horizontally-scrollable wrapper as
+// .ant-table-content normally, but as .ant-table-body instead whenever the
+// table has a fixed column (almost every table here has a fixed:'right'
+// actions column) — the two classes are mutually exclusive per table, never
+// both, so watching for both covers every table regardless of that layout.
+const SELECTOR = '.ant-table-content, .ant-table-body, [data-hscroll]';
 const DRAG_THRESHOLD = 6;
 const INTERACTIVE_SELECTOR =
   'button, a, input, textarea, select, .ant-select, .ant-checkbox, .ant-radio, ' +
