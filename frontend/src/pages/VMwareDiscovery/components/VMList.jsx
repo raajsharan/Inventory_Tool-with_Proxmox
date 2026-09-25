@@ -136,8 +136,8 @@ export default function VMList({ hostId }) {
       render: v => v ?? '—',
     },
     {
-      title: 'RAM (MB)', dataIndex: 'memory_mb', key: 'memory_mb', width: 90,
-      render: v => v ?? '—',
+      title: 'RAM (GB)', dataIndex: 'memory_mb', key: 'memory_mb', width: 90,
+      render: v => v ? (v / 1024).toFixed(1) : '—',
     },
     {
       title: 'Snapshots', dataIndex: 'snapshot_count', key: 'snapshot_count', width: 90,
