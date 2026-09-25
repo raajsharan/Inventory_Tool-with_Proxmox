@@ -6,12 +6,13 @@ import {
 import {
   PlusOutlined, DownloadOutlined, UploadOutlined, SearchOutlined,
   EditOutlined, DeleteOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined,
-  LockOutlined, UnlockOutlined, CopyOutlined,
+  LockOutlined, UnlockOutlined, CopyOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
 import { copyToClipboard } from '../../utils/clipboard';
+import { webUiUrl } from '../../utils/hypervisorUrl.js';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 import { DatabaseOutlined } from '@ant-design/icons';
 
@@ -266,7 +267,23 @@ export default function AssetList({
     { key: 'tenable_installed', dataIndex: 'tenable_installed', width: 100,
       title: labelOf('tenable_installed', 'Tenable'), align: 'center', render: yesNo },
     { key: 'hosted_ip', dataIndex: 'hosted_ip', width: 130,
-      title: labelOf('hosted_ip', 'Hosted IP'), render: cell },
+      title: labelOf('hosted_ip', 'Hosted IP'),
+      // hosted_os_type is the hypervisor behind this IP, resolved server-side
+      // — the VM's own os_type would always pick the ESXi form.
+      render: (v, r) => (v
+        ? (
+          <Space size={4}>
+            {v}
+            <Tooltip title="Open host web UI">
+              <Button
+                size="small" type="text" icon={<ExportOutlined />}
+                href={webUiUrl(v, r.hosted_os_type)} target="_blank" rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Tooltip>
+          </Space>
+        )
+        : cell(v)) },
     { key: 'created_by_name', dataIndex: 'created_by_name', width: 160,
       title: 'Submitted By', render: cell },
     { key: 'created_at', dataIndex: 'created_at', width: 170,

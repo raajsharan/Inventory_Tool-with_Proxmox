@@ -220,7 +220,15 @@ async function list({ search, osType, osVersion, serverStatus, location, eolStat
     db.query(
       `SELECT a.*,
               u.full_name  AS created_by_name,
-              u2.full_name AS updated_by_name
+              u2.full_name AS updated_by_name,
+              -- hosted_ip points at the hypervisor this VM runs on, so the
+              -- list's web-UI link needs that HOST's os_type (Proxmox serves
+              -- its UI on 8006, ESXi at /ui) rather than the VM's own.
+              -- physical_esxi_servers.ip_address is UNIQUE, so this resolves
+              -- to at most one row; NULL when the host isn't recorded there.
+              (SELECT h.os_type FROM physical_esxi_servers h
+                WHERE h.deleted_at IS NULL
+                  AND h.ip_address = NULLIF(TRIM(a.hosted_ip), '')) AS hosted_os_type
          FROM assets a
          LEFT JOIN users u  ON u.id  = a.created_by
          LEFT JOIN users u2 ON u2.id = a.updated_by

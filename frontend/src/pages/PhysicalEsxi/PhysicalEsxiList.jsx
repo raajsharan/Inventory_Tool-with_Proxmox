@@ -15,15 +15,9 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import PasswordConfirmModal from '../../components/PasswordConfirmModal.jsx';
 import { copyToClipboard } from '../../utils/clipboard';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
+import { webUiUrl } from '../../utils/hypervisorUrl.js';
 
 const PAGE_KEY = 'physical_esxi_servers';
-
-// Each hypervisor serves its web UI somewhere different: Proxmox on port
-// 8006, ESXi at /ui on 443. Anything else keeps the ESXi form, which is what
-// every row used before this split.
-const webUiUrl = (ip, osType) => (
-  /proxmox/i.test(osType || '') ? `https://${ip}:8006` : `https://${ip}/ui/`
-);
 
 export default function PhysicalEsxiList() {
   const { user, getPageLabel, canViewPasswords } = useAuth();

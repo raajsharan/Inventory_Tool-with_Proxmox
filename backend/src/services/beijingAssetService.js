@@ -210,7 +210,12 @@ async function list({ search, osType, serverStatus, location, eolStatus, page = 
     db.query(
       `SELECT a.*,
               u.full_name  AS created_by_name,
-              u2.full_name AS updated_by_name
+              u2.full_name AS updated_by_name,
+              -- See assetService.list(): the web-UI link on hosted_ip needs
+              -- the HOST's os_type, not this VM's.
+              (SELECT h.os_type FROM physical_esxi_servers h
+                WHERE h.deleted_at IS NULL
+                  AND h.ip_address = NULLIF(TRIM(a.hosted_ip), '')) AS hosted_os_type
          FROM ${TABLE} a
          LEFT JOIN users u  ON u.id  = a.created_by
          LEFT JOIN users u2 ON u2.id = a.updated_by
