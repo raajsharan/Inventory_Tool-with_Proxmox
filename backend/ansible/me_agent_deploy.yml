@@ -64,6 +64,29 @@
           in Test Deploy Config for this location (or the Default config).
       when: not (share_path | default('') | string).startswith('/')
 
+    - name: Read the target's hostname
+      ansible.windows.win_shell: hostname
+      register: target_hostname
+      failed_when: false
+      changed_when: false
+
+    - name: Refuse to install on a host still named localhost.localdomain
+      # The agent registers itself in ManageEngine under the machine's own
+      # hostname, so installing on an unnamed host files it as
+      # localhost.localdomain — colliding with every other host that was
+      # never renamed. Checked against the live hostname rather than the
+      # asset record, since that is the value the agent will actually use.
+      # Skipped for check_only: Verify only proves the transfer works.
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to install: this host still reports its hostname as
+          "{{ (target_hostname.stdout | default('')) | trim }}". The ME Agent registers under the
+          machine's hostname, so it would enroll as localhost.localdomain and collide with every
+          other unnamed host. Give the machine a real hostname, then run this again.
+      when:
+        - not (check_only | default(false) | bool)
+        - ((target_hostname.stdout | default('')) | trim | lower) == 'localhost.localdomain'
+
     - name: Create the destination directory on the target
       ansible.windows.win_file:
         path: 'C:\Temp'
@@ -142,6 +165,30 @@
           installer — ansible.builtin.copy reads it straight off local disk, no CIFS mount needed.
           Fix it in Test Deploy Config for this location (or the Default config).
       when: not (share_path | default('') | string).startswith('/')
+
+    - name: Read the target's hostname
+      # -f first: a RHEL-family box left unnamed answers "localhost" to a bare
+      # hostname but "localhost.localdomain" to the FQDN form, and it is the
+      # latter the agent registers under.
+      ansible.builtin.shell:
+        cmd: hostname -f 2>/dev/null || hostname
+      register: target_hostname
+      failed_when: false
+      changed_when: false
+
+    - name: Refuse to install on a host still named localhost.localdomain
+      # See the Windows play above for why this is checked live rather than
+      # against the asset record. Skipped for check_only: Verify only proves
+      # the transfer works.
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to install: this host still reports its hostname as
+          "{{ (target_hostname.stdout | default('')) | trim }}". The ME Agent registers under the
+          machine's hostname, so it would enroll as localhost.localdomain and collide with every
+          other unnamed host. Give the machine a real hostname, then run this again.
+      when:
+        - not (check_only | default(false) | bool)
+        - ((target_hostname.stdout | default('')) | trim | lower) == 'localhost.localdomain'
 
     - name: Copy installer to /tmp
       ansible.builtin.copy:

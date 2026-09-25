@@ -489,6 +489,33 @@ async function install(req, res, next) {
     if (infoPath && !fs.existsSync(infoPath)) throw new ApiError(422, `serverinfo.json not found: ${infoPath}`);
     if (!binPath && !cmd.trim())              throw new ApiError(422, 'No Linux installer configured.');
 
+    // The agent registers itself in ManageEngine under the machine's own
+    // hostname, so a host left at the RHEL-family default would enroll as
+    // localhost.localdomain and collide with every other unnamed host.
+    // Read live rather than from os_hostname on the record, because the live
+    // value is the one the agent will actually use. -f first: an unnamed box
+    // answers "localhost" to a bare hostname but "localhost.localdomain" to
+    // the FQDN form. If the probe itself can't connect, it is not treated as
+    // a failed check — the install below will report the real error.
+    appendLog(logFile, ip_address, 'INFO', 'Checking the host has a real hostname before installing...');
+    const hostnameProbe = await sshRunCommand({
+      host: ip_address, port, username, password,
+      command: 'hostname -f 2>/dev/null || hostname',
+      timeout: 15000,
+    });
+    const liveHostname = (hostnameProbe.output || '').trim();
+    if (liveHostname.toLowerCase() === 'localhost.localdomain') {
+      const reason = `Refusing to install: this host still reports its hostname as "${liveHostname}". `
+        + 'The ME Agent registers under the machine\'s hostname, so it would enroll as '
+        + 'localhost.localdomain and collide with every other unnamed host. Give the machine a '
+        + 'real hostname, then run this again.';
+      appendLog(logFile, ip_address, 'ERROR', reason);
+      return res.json({
+        connected: true, error: reason, output: liveHostname, exitCode: 1,
+        platform: 'linux', os_type: osType, hostname_rejected: true,
+      });
+    }
+
     if (binPath) {
       const tarCheck = await ensureTarInstalled({ host: ip_address, port, username, password });
       if (/TAR_ALREADY_PRESENT/.test(tarCheck.output || '')) {

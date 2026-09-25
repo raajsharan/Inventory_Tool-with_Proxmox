@@ -40,6 +40,26 @@
       when: not (me_service_before.exists | default(false))
       block:
 
+        - name: Read the target's hostname
+          ansible.windows.win_shell: hostname
+          register: target_hostname
+          failed_when: false
+          changed_when: false
+
+        - name: Refuse to install on a host still named localhost.localdomain
+          # The agent registers itself in ManageEngine under the machine's own
+          # hostname, so installing on an unnamed host files it as
+          # localhost.localdomain — colliding with every other host that was
+          # never renamed. Checked live rather than against the asset record,
+          # since that is the value the agent will actually use.
+          ansible.builtin.fail:
+            msg: >-
+              Refusing to install: this host still reports its hostname as
+              "{{ (target_hostname.stdout | default('')) | trim }}". The ME Agent registers under
+              the machine's hostname, so it would enroll as localhost.localdomain and collide with
+              every other unnamed host. Give the machine a real hostname, then run this again.
+          when: ((target_hostname.stdout | default('')) | trim | lower) == 'localhost.localdomain'
+
         - name: Create the temporary deployment directory
           ansible.windows.win_file:
             path: "{{ me_temp_dir }}"
