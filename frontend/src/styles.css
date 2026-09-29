@@ -1025,6 +1025,15 @@ body[data-theme="dark"] .hscroll-float-track { background: rgba(255,255,255,0.08
   .hscroll-float-track { display: none !important; }
 }
 
+/* Tables that pass `sticky`/`sticky={{ offsetScroll: 0 }}` to AntD's Table
+   get AntD's OWN floating horizontal scrollbar (.ant-table-sticky-scroll)
+   pinned near the viewport bottom, in addition to the one above — two
+   scrollbars stacked for the exact same table. GlobalHorizontalScroll
+   already covers every table site-wide regardless of `sticky`, so hide
+   AntD's redundant one and keep just the sticky header behavior `sticky`
+   was set for. */
+.ant-table-sticky-scroll { display: none !important; }
+
 /* Global search result rows */
 .global-search-row:hover { background: rgba(47, 111, 237, 0.07); }
 body[data-theme="dark"] .global-search-row:hover { background: rgba(47, 111, 237, 0.18); }
