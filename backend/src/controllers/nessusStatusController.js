@@ -107,6 +107,17 @@ async function nessusAgentCheck({ ip_address, port = 22, winrm_port, username, p
 // ── GET /nessus-status ────────────────────────────────────────────────────────
 async function get(req, res, next) {
   try {
+    // Population and applicability must mirror weeklyNessusApplicabilityQ in
+    // dashboardController.js exactly (same scope filters per source, same
+    // Windows/Linux-minus-overrides classification) — otherwise this page's
+    // Total/Installed/Compliance disagree with the Weekly Report's "Nessus
+    // Applicable" figures for what's supposed to be the same population.
+    // Previously this only excluded ESXi/VMware/Appliance/Proxmox/EVE-NG and
+    // skipped the Decom%/ext-scope/Beijing-VM-only filters entirely, so it
+    // counted CentOS/Cisco/Mac boxes (which can never get an agent) as
+    // "Not Installed" and dragged compliance down relative to the Weekly
+    // Report, which buckets those as Not Applicable and excludes them from
+    // the denominator.
     const sql = `
       WITH all_vms AS (
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location,
@@ -118,6 +129,7 @@ async function get(req, res, next) {
                asset_username
           FROM assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
@@ -125,6 +137,8 @@ async function get(req, res, next) {
                asset_username
           FROM beijing_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+           AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
@@ -132,6 +146,12 @@ async function get(req, res, next) {
                asset_username
           FROM ext_assets
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND (server_status IS NULL OR (
+                 server_status NOT ILIKE 'Decom%'
+             AND server_status NOT ILIKE 'Not Applic%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Not in Scope%'
+             AND REPLACE(REPLACE(server_status, '-', ' '), '_', ' ') NOT ILIKE 'Out of Scope%'
+           ))
         UNION ALL
         SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown'),
                vm_name, os_hostname, ip_address::text, server_status,
@@ -139,6 +159,33 @@ async function get(req, res, next) {
                asset_username
           FROM physical_esxi_servers
          WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+      ),
+      classified AS (
+        SELECT *,
+          (os_type ILIKE '%windows%') AS is_windows,
+          (
+            os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
+            OR os_type ILIKE '%centos%'    OR os_type ILIKE '%rhel%'
+            OR os_type ILIKE '%red hat%'   OR os_type ILIKE '%redhat%'
+            OR os_type ILIKE '%debian%'    OR os_type ILIKE '%suse%'
+            OR os_type ILIKE '%fedora%'    OR os_type ILIKE '%rocky%'
+            OR os_type ILIKE '%alma%'      OR os_type ILIKE '%oracle linux%'
+            OR os_type ILIKE '%amazon linux%'
+          ) AS is_linux,
+          -- Hypervisors / appliances / CentOS / Cisco / Mac cannot take an
+          -- agent install — not eligible, even when os_type also happens to
+          -- contain a Linux-sounding substring (e.g. a VCSA appliance).
+          (
+            os_type ILIKE '%centos%'
+            OR os_type ILIKE '%proxmox%'
+            OR os_type ILIKE '%vcenter%'  OR os_type ILIKE '%vmware%' OR os_type ILIKE '%esxi%'
+            OR os_type ILIKE '%appliance%'
+            OR os_type ILIKE '%cisco%'
+            OR os_type ILIKE '%mac%'
+            OR REPLACE(REPLACE(os_type, '-', ''), ' ', '') ILIKE '%eveng%'
+          ) AS is_not_applicable_override
+        FROM all_vms
       )
       SELECT location,
         COUNT(*)::int                                                              AS total,
@@ -150,13 +197,8 @@ async function get(req, res, next) {
           'server_status',server_status,'nessus_installed',nessus_installed,
           'os_type',os_type,'source',source,'asset_username',asset_username
         ) ORDER BY nessus_installed, vm_name) AS vms
-      FROM all_vms
-      -- Hypervisors / appliances cannot take an agent install — not eligible.
-      WHERE os_type NOT ILIKE '%esxi%'
-        AND os_type NOT ILIKE '%vmware%'
-        AND os_type NOT ILIKE '%appliance%'
-        AND os_type NOT ILIKE '%proxmox%'
-        AND REPLACE(REPLACE(os_type, '-', ''), ' ', '') NOT ILIKE '%eveng%'
+      FROM classified
+      WHERE (is_windows OR is_linux) AND NOT is_not_applicable_override
       GROUP BY location ORDER BY location
     `;
     const { rows } = await db.query(sql);
