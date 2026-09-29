@@ -19,9 +19,12 @@ const WINDOWS_FILE_PLACEHOLDER = 'D:\\Installers\\NessusAgent-10.x.x.msi';
 const WINDOWS_PSEXEC_PLACEHOLDER = 'C:\\Tools\\PsExec64.exe';
 const LINUX_CMD_PLACEHOLDER    = 'rpm -ivh {installer}';
 
+// Piped into `sudo bash`, not plain `bash` — the install script shells out to
+// dpkg/rpm internally, which fails with "requested operation requires
+// superuser privilege" when the SSH account isn't root itself.
 const DEFAULT_CURL_CMD =
   `curl -H 'X-Key: <YOUR-KEY>' ` +
-  `'https://sensor.cloud.tenable.com/install/agent?name='\${HOSTNAME}'&groups=Servers' | bash`;
+  `'https://sensor.cloud.tenable.com/install/agent?name='\${HOSTNAME}'&groups=Servers' | sudo bash`;
 
 const WIN_CMD_HINTS = {
   ssh:    { placeholder: 'msiexec /i {installer} /quiet /norestart' },

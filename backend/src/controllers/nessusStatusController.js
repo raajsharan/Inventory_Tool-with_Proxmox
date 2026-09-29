@@ -513,7 +513,17 @@ async function install(req, res, next) {
       // ';' (as Tenable's own copy-paste install commands do) produces `;;`,
       // which bash parses as the case-statement terminator token and rejects
       // with a syntax error outside of a case block.
-      const curlCmd = cmd.trim().replace(/;+\s*$/, '');
+      let curlCmd = cmd.trim().replace(/;+\s*$/, '');
+      // Tenable's cloud install command ends in `| bash`, which runs bash —
+      // and the dpkg/rpm install it performs internally — as whatever user
+      // SSH logged in as. Most asset accounts aren't root, so curl fetches
+      // the script fine but it then dies with "requested operation requires
+      // superuser privilege" the moment it shells out to dpkg/rpm. Elevate
+      // just the piped bash (not the curl fetch itself), unless the
+      // configured command already handles privilege escalation on its own.
+      if (!/\bsudo\b/i.test(curlCmd)) {
+        curlCmd = curlCmd.replace(/\|(\s*)bash\b/i, '|$1sudo bash');
+      }
       const fullScript = [
         'if ! which curl >/dev/null 2>&1; then',
         '  echo "[NESSUS] curl not found, installing...";',
