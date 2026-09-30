@@ -1,4 +1,4 @@
-import { Typography, Button, Tooltip, Result } from 'antd';
+import { Typography, Button, Tooltip, Result, Space } from 'antd';
 import { GlobalOutlined, ExportOutlined, InfoCircleOutlined } from '@ant-design/icons';
 
 const { Title } = Typography;
@@ -14,12 +14,15 @@ const { Title } = Typography;
 // Either way, the page has to actually navigate there, so `embeddable:
 // false` skips the iframe and leads with the one path that works.
 //
-// `newTab` controls whether that navigation opens a separate browser tab
-// (the default, so the app stays open behind it) or replaces this tab —
-// there's no third option once a target refuses framing: a same-tab
-// navigation necessarily leaves the app until the user navigates back.
+// `newTab` picks which one is the primary action — opening a separate tab
+// (the app stays open behind it) or replacing this tab (there's no third
+// option once a target refuses framing: a same-tab navigation necessarily
+// leaves the app until the user navigates back). Either way, a same-tab
+// primary still gets an "Open in new tab" secondary action, so that choice
+// is never a dead end.
 export default function ExternalLinkPage({ title, url, embeddable = true, newTab = true }) {
   const linkProps = newTab ? { target: '_blank', rel: 'noreferrer' } : {};
+  const newTabLinkProps = { target: '_blank', rel: 'noreferrer' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 104px)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
@@ -34,9 +37,16 @@ export default function ExternalLinkPage({ title, url, embeddable = true, newTab
             </Tooltip>
           )}
         </div>
-        <Button icon={<ExportOutlined />} href={url} {...linkProps}>
-          {newTab ? 'Open in new tab' : 'Open'}
-        </Button>
+        <Space>
+          <Button icon={<ExportOutlined />} href={url} {...linkProps}>
+            {newTab ? 'Open in new tab' : 'Open'}
+          </Button>
+          {!newTab && (
+            <Button icon={<ExportOutlined />} href={url} {...newTabLinkProps}>
+              Open in new tab
+            </Button>
+          )}
+        </Space>
       </div>
 
       {embeddable ? (
@@ -55,9 +65,16 @@ export default function ExternalLinkPage({ title, url, embeddable = true, newTab
               : "This site's login only works on a real page load — embedded here, the browser blocks its session cookie and sign-in silently fails. Continuing will leave this app and load it in this same tab."
           }
           extra={
-            <Button type="primary" size="large" icon={<ExportOutlined />} href={url} {...linkProps}>
-              Open {title}
-            </Button>
+            <Space direction="vertical" size={12}>
+              <Button type="primary" size="large" icon={<ExportOutlined />} href={url} {...linkProps}>
+                Open {title}
+              </Button>
+              {!newTab && (
+                <Button type="link" icon={<ExportOutlined />} href={url} {...newTabLinkProps}>
+                  Open in new tab instead
+                </Button>
+              )}
+            </Space>
           }
           style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff' }}
         />
