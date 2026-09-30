@@ -13,7 +13,13 @@ const { Title } = Typography;
 //    protection) — the iframe area just shows "<host> refused to connect."
 // Either way, the page has to actually navigate there, so `embeddable:
 // false` skips the iframe and leads with the one path that works.
-export default function ExternalLinkPage({ title, url, embeddable = true }) {
+//
+// `newTab` controls whether that navigation opens a separate browser tab
+// (the default, so the app stays open behind it) or replaces this tab —
+// there's no third option once a target refuses framing: a same-tab
+// navigation necessarily leaves the app until the user navigates back.
+export default function ExternalLinkPage({ title, url, embeddable = true, newTab = true }) {
+  const linkProps = newTab ? { target: '_blank', rel: 'noreferrer' } : {};
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 104px)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
@@ -23,13 +29,13 @@ export default function ExternalLinkPage({ title, url, embeddable = true }) {
             {title}
           </Title>
           {embeddable && (
-            <Tooltip title="If the page below stays blank, the site is refusing to be embedded — use “Open in new tab” instead.">
+            <Tooltip title={`If the page below stays blank, the site is refusing to be embedded — use “${newTab ? 'Open in new tab' : 'Open'}” instead.`}>
               <InfoCircleOutlined style={{ color: '#8c8c8c', fontSize: 15 }} />
             </Tooltip>
           )}
         </div>
-        <Button icon={<ExportOutlined />} href={url} target="_blank" rel="noreferrer">
-          Open in new tab
+        <Button icon={<ExportOutlined />} href={url} {...linkProps}>
+          {newTab ? 'Open in new tab' : 'Open'}
         </Button>
       </div>
 
@@ -42,10 +48,14 @@ export default function ExternalLinkPage({ title, url, embeddable = true }) {
       ) : (
         <Result
           icon={<GlobalOutlined />}
-          title="Sign-in has to happen in its own tab"
-          subTitle="This site's login only works on a real page load — embedded here, the browser blocks its session cookie and sign-in silently fails."
+          title={newTab ? 'Sign-in has to happen in its own tab' : 'Sign-in has to happen on a real page load'}
+          subTitle={
+            newTab
+              ? "This site's login only works on a real page load — embedded here, the browser blocks its session cookie and sign-in silently fails."
+              : "This site's login only works on a real page load — embedded here, the browser blocks its session cookie and sign-in silently fails. Continuing will leave this app and load it in this same tab."
+          }
           extra={
-            <Button type="primary" size="large" icon={<ExportOutlined />} href={url} target="_blank" rel="noreferrer">
+            <Button type="primary" size="large" icon={<ExportOutlined />} href={url} {...linkProps}>
               Open {title}
             </Button>
           }
