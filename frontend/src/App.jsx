@@ -150,7 +150,7 @@ export default function App() {
         <Route path="/endpoint-central"   element={<EndpointCentral />} />
         <Route path="/test-deploy"        element={<TestDeploy />} />
         <Route path="/admin/test-deploy-config" element={<TestDeployConfig />} />
-        <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="http://192.168.84.103/sign-in" />} />
+        <Route path="/external-portal"    element={<ExternalLinkPage title="DCIM-IPAM Link" url="https://synapse.internal.netbrainlab.com/sign-in" />} />
         <Route path="/me-deploy-link"      element={<ExternalLinkPage title="ME Deploy Link" url="http://agentpusher.netbraintech.local/login?next=%2F" embeddable={false} />} />
 
         <Route path="/admin/users" element={<Users />} />
