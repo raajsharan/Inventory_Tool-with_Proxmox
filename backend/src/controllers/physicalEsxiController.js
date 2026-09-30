@@ -47,6 +47,7 @@ const COLUMNS = [
   { key: 'idrac_username',     header: 'iDRAC Username',      width: 18 },
   { key: 'idrac_password',     header: 'iDRAC Password',      width: 18 },
   { key: 'vcenter',            header: 'Vcenter',             width: 22 },
+  { key: 'cluster',            header: 'Cluster',             width: 22 },
 ];
 
 const IP_RE = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;

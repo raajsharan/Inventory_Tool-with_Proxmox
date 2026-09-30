@@ -121,6 +121,7 @@ export default function PhysicalEsxiForm({ mode }) {
           assignedUser:    d.assigned_user,
           idracUsername:   d.idrac_username,
           vcenter:         d.vcenter,
+          cluster:         d.cluster,
           extras: Object.fromEntries(
             Object.entries(d.extras || {}).map(([k, v]) =>
               [k, v && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? dayjs(v) : v]
@@ -212,6 +213,7 @@ export default function PhysicalEsxiForm({ mode }) {
         assignedUser:      values.assignedUser,
         idracUsername:     values.idracUsername,
         vcenter:           values.vcenter,
+        cluster:           values.cluster,
         ...(values.serverStatus !== undefined ? { serverStatus: values.serverStatus } : {}),
         ...(values.patchingType !== undefined ? { patchingType: values.patchingType } : {}),
         ...(values.serverStatus && /^decom/i.test(values.serverStatus) ? { decommissionReason: values.decommissionReason } : {}),
@@ -399,6 +401,13 @@ export default function PhysicalEsxiForm({ mode }) {
             />
           </Form.Item>
         );
+      case 'cluster':
+        return wrap(overridableFormItem({
+          fieldKey: 'cluster', name: 'cluster',
+          label: labelOf('cluster', 'Cluster'),
+          extra: 'vCenter cluster this host belongs to — used by Topology of Sites’ VMware auto-build',
+          defaultChild: <Input placeholder="e.g. Production Cluster" />,
+        }));
       case 'server_status':
         return wrap(
           <>

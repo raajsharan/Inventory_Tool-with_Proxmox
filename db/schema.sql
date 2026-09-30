@@ -532,6 +532,13 @@ ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS idrac_password_encryp
 -- VMware Discovery > Hosts & Credentials.
 ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS vcenter VARCHAR(255);
 
+-- Cluster — free-text vCenter cluster name this ESXi host belongs to.
+-- No live source to validate against (clusters aren't tracked as their own
+-- entity anywhere), so it's plain admin-entered text, paired with `vcenter`
+-- above. Used by Topology of Sites' VMware auto-build to group ESXi hosts
+-- under vCenter -> Cluster -> Host in the generated diagram.
+ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cluster VARCHAR(255);
+
 -- Remove fields not applicable to physical servers (patching / tools / EOL
 -- are handled at the VM / OS layer, not on bare-metal host registration).
 ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed;

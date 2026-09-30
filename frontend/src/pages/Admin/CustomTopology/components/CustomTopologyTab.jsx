@@ -8,7 +8,7 @@ import {
   Card, Button, Space, Select, Modal, Form, Input, Empty, Spin, App, Tooltip, Divider, Typography,
 } from 'antd';
 import {
-  PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined,
+  PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined, ClusterOutlined,
 } from '@ant-design/icons';
 import api from '../../../../api/client';
 import { useAuth } from '../../../../context/AuthContext.jsx';
@@ -269,6 +269,162 @@ export default function CustomTopologyTab({ platform }) {
     setEdges(eds => [...eds, ...newEdges]);
   }
 
+  // Collects every Physical & ESXi Servers record across pages — the list
+  // endpoint caps pageSize at 200, so real deployments need more than one
+  // fetch to get the full set to group.
+  async function fetchAllPhysicalEsxi() {
+    const all = [];
+    let page = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data } = await api.get('/physical-esxi', { params: { pageSize: 200, page } });
+      all.push(...(data.items || []));
+      if (!data.items?.length || all.length >= (data.total || 0) || page > 50) break;
+      page += 1;
+    }
+    return all;
+  }
+
+  // Groups Physical & ESXi Servers records (vCenter tab only) into
+  // vCenter -> Cluster -> ESXi Host, auto-adds each host's discovered VMs
+  // (reusing addAutoVMNodes, same as the manual "ESXi Host" tool above), and
+  // lays the whole tree out left-to-right. Replaces the current canvas —
+  // nothing is persisted until the admin presses the existing Save button,
+  // so a bad auto-build is just a reload away from undone.
+  async function runAutoBuildVMware() {
+    const [vcRes, hosts] = await Promise.all([
+      api.get('/assets', { params: { osVersion: 'vcenter', pageSize: 200 } }),
+      fetchAllPhysicalEsxi(),
+    ]);
+    const vcLabelMap = new Map(
+      (vcRes.data.items || []).map(a => [a.ip_address, a.vm_name || a.ip_address])
+    );
+    const vcenterLabel = (ip) => vcLabelMap.get(ip) || ip;
+
+    // Only ESXi-type hosts with a vCenter assigned can be placed in this
+    // tree — a bare-metal server or a host nobody's tagged with a vCenter
+    // yet has nothing to hang under.
+    const eligible = hosts.filter(h => /esxi/i.test(h.os_type || '') && h.vcenter);
+    const skipped = hosts.length - eligible.length;
+    if (!eligible.length) {
+      message.warning('No Physical & ESXi Servers records with both an ESXi OS type and a vCenter assigned were found.');
+      return;
+    }
+
+    const vcenterMap = new Map(); // vcenter ip -> Map(cluster name -> host[])
+    for (const h of eligible) {
+      const cl = (h.cluster || '').trim() || 'Unassigned';
+      if (!vcenterMap.has(h.vcenter)) vcenterMap.set(h.vcenter, new Map());
+      const clusterMap = vcenterMap.get(h.vcenter);
+      if (!clusterMap.has(cl)) clusterMap.set(cl, []);
+      clusterMap.get(cl).push(h);
+    }
+
+    const X_VCENTER = 80, X_CLUSTER = 360, X_ESXI = 640, ROW_GAP = 110;
+    const newNodes = [];
+    const newEdges = [];
+    const hostRecords = []; // for the discovered-VM lookups below
+    let rowCounter = 0;
+    let colorIdx = 0;
+
+    const vcenterEntries = [...vcenterMap.entries()]
+      .sort((a, b) => vcenterLabel(a[0]).localeCompare(vcenterLabel(b[0])));
+
+    for (const [vcIp, clusterMap] of vcenterEntries) {
+      // One color per vCenter branch — cycled the same way addAutoVMNodes
+      // cycles per VM, so a multi-vCenter diagram stays visually separable.
+      const vcColor = EDGE_PALETTE[colorIdx % EDGE_PALETTE.length];
+      colorIdx += 1;
+      const vcId = newNodeId();
+      const clusterEntries = [...clusterMap.entries()].sort((a, b) => {
+        if (a[0] === 'Unassigned') return 1;
+        if (b[0] === 'Unassigned') return -1;
+        return a[0].localeCompare(b[0]);
+      });
+      const clusterYs = [];
+
+      for (const [clusterName, clusterHosts] of clusterEntries) {
+        const clId = newNodeId();
+        const sortedHosts = [...clusterHosts].sort(
+          (a, b) => (a.vm_name || a.ip_address || '').localeCompare(b.vm_name || b.ip_address || '')
+        );
+        const hostYs = [];
+
+        for (const h of sortedHosts) {
+          const y = rowCounter * ROW_GAP;
+          rowCounter += 1;
+          const hostId = newNodeId();
+          const hostPos = { x: X_ESXI, y };
+          newNodes.push({
+            id: hostId, type: 'custom', position: hostPos,
+            data: {
+              label: h.vm_name || h.ip_address || 'ESXi Host', sublabel: h.ip_address,
+              tone: 'blue', sourceId: h.id, sourceKind: 'physical',
+            },
+          });
+          newEdges.push({
+            id: `e-${clId}-${hostId}`, source: clId, target: hostId,
+            sourceHandle: 'right', targetHandle: 'left', ...defaultEdgeOptions,
+            data: { color: vcColor }, style: { stroke: vcColor },
+            markerEnd: { type: MarkerType.ArrowClosed, color: vcColor },
+          });
+          hostYs.push(y);
+          hostRecords.push({ id: hostId, position: hostPos, record: h });
+        }
+
+        const clY = hostYs.reduce((a, b) => a + b, 0) / hostYs.length;
+        newNodes.push({
+          id: clId, type: 'custom', position: { x: X_CLUSTER, y: clY },
+          data: { label: clusterName, tone: 'orange' },
+        });
+        newEdges.push({
+          id: `e-${vcId}-${clId}`, source: vcId, target: clId,
+          sourceHandle: 'right', targetHandle: 'left', ...defaultEdgeOptions,
+          data: { color: vcColor }, style: { stroke: vcColor },
+          markerEnd: { type: MarkerType.ArrowClosed, color: vcColor },
+        });
+        clusterYs.push(clY);
+      }
+
+      const vcY = clusterYs.reduce((a, b) => a + b, 0) / clusterYs.length;
+      newNodes.push({
+        id: vcId, type: 'custom', position: { x: X_VCENTER, y: vcY },
+        data: { label: vcenterLabel(vcIp), sublabel: vcIp, tone: 'blue' },
+      });
+    }
+
+    setNodes(newNodes);
+    setEdges(newEdges);
+
+    const results = await Promise.allSettled(
+      hostRecords.map(({ id, position, record }) =>
+        api.get(`/physical-esxi/${record.id}/discovered-vms`).then(({ data }) => {
+          if (data.vms?.length) addAutoVMNodes(id, position, data.vms);
+        })
+      )
+    );
+    const vmFailures = results.filter(r => r.status === 'rejected').length;
+
+    message.success(
+      `Built ${vcenterEntries.length} vCenter(s), ${hostRecords.length} host(s)` +
+      (skipped ? ` — skipped ${skipped} host(s) with no vCenter or non-ESXi OS type` : '') +
+      (vmFailures ? `. Couldn't look up VMs for ${vmFailures} host(s)` : '') +
+      '. Review the layout, then click Save to persist.'
+    );
+  }
+
+  function handleAutoBuildVMware() {
+    if (!activeId) { message.warning('Select or create a diagram first'); return; }
+    modal.confirm({
+      title: 'Auto-build VMware topology?',
+      content: 'This replaces everything currently on this canvas with a tree built from Physical & ESXi Servers records, grouped by vCenter and Cluster, with each host’s discovered VMs auto-added. Nothing is saved until you press Save afterward.',
+      okText: 'Auto-build',
+      onOk: () => runAutoBuildVMware().catch(e => {
+        message.error(e.response?.data?.error || 'Failed to auto-build topology');
+      }),
+    });
+  }
+
   function handleToolClick(type) {
     const meta = NODE_TYPES_OPTS.find(t => t.value === type);
     if (meta.mode === 'name') {
@@ -360,6 +516,13 @@ export default function CustomTopologyTab({ platform }) {
               </Tooltip>
               <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>Delete</Button>
               <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>Save</Button>
+              {platform === 'vmware' && (
+                <Tooltip title="Group Physical & ESXi Servers by vCenter and Cluster, auto-add each host's discovered VMs, and lay out the tree on this canvas. Replaces the current canvas.">
+                  <Button icon={<ClusterOutlined />} onClick={handleAutoBuildVMware}>
+                    Auto-build from Physical &amp; ESXi Servers
+                  </Button>
+                </Tooltip>
+              )}
             </>
           )}
         </Space>

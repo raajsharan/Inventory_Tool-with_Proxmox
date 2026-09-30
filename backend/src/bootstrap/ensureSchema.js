@@ -756,6 +756,10 @@ const STATEMENTS = [
   // VMware Discovery > Hosts & Credentials.
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS vcenter VARCHAR(255)`,
 
+  // ── Cluster — free-text vCenter cluster name, paired with vcenter above.
+  // Used by Topology of Sites' VMware auto-build (vCenter -> Cluster -> Host).
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS cluster VARCHAR(255)`,
+
   // ── Remove fields not applicable to physical/ESXi servers
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS manage_engine_installed`,
   `ALTER TABLE physical_esxi_servers DROP COLUMN IF EXISTS tenable_installed`,

@@ -14,7 +14,7 @@ const ASSET_COLUMNS = [
   'cpu_cores', 'ram_gb', 'total_disks', 'total_disks_unit',
   'ome_status', 'rack_number', 'server_position', 'additional_remarks',
   'idrac_ip', 'idrac_enabled', 'idrac_username', 'asset_tag',
-  'asset_username', 'assigned_user', 'vcenter',
+  'asset_username', 'assigned_user', 'vcenter', 'cluster',
 ];
 
 function mapBody(body) {

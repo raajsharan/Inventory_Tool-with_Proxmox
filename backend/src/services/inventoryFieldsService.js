@@ -58,6 +58,7 @@ const FIELD_GROUP_MAP = {
   rack_number:     'Rack',
   server_position: 'Rack',
   vcenter:         'Hardware',
+  cluster:         'Hardware',
 };
 
 // Default input types for each built-in field. DB-linked fields stay
@@ -101,6 +102,7 @@ const FIELD_DEFAULTS = {
   rack_number:     { label: 'Rack Number',        type: 'text' },
   server_position: { label: 'Server Position (U)', type: 'text' },
   vcenter:         { label: 'Vcenter',             type: 'dropdown', frozen: true, frozen_reason: 'Linked to MSL Assets records' },
+  cluster:         { label: 'Cluster',              type: 'text' },
 };
 
 const PAGE_KEYS = new Set(['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers']);

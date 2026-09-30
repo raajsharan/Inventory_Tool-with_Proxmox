@@ -341,6 +341,10 @@ export default function PhysicalEsxiList() {
       title: labelOf('vcenter', 'Vcenter'), render: dash,
     },
     {
+      key: 'cluster', dataIndex: 'cluster', width: 170,
+      title: labelOf('cluster', 'Cluster'), render: dash,
+    },
+    {
       key: 'serial_number', dataIndex: 'serial_number', width: 150,
       title: labelOf('serial_number', 'Serial Number'), render: dash,
     },
