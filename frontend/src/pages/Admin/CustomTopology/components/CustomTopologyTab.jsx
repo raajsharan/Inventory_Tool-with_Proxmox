@@ -14,6 +14,7 @@ import api from '../../../../api/client';
 import { useAuth } from '../../../../context/AuthContext.jsx';
 import CustomTopologyNode, { TONE_COLORS } from './CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from './ConnectivityFlowEdge.jsx';
+import { EDGE_PALETTE, defaultEdgeOptions, newNodeId, toggleHostVMs } from './vmExpansion.js';
 
 const { Text } = Typography;
 
@@ -33,8 +34,9 @@ body[data-theme="dark"] .ctb-canvas { --ctb-node-bg: #1c1c1c; --ctb-node-title: 
 
 // Every tool's behavior:
 //   'asset'    -> pick from MSL Assets (searchable)
-//   'physical' -> pick from Physical & ESXi Servers (searchable), then
-//                 auto-fetch + auto-connect its real discovered VMs
+//   'physical' -> pick from Physical & ESXi Servers (searchable) — its
+//                 sourceKind marks it so CustomTopologyNode shows a "+" to
+//                 load its real discovered VMs on demand (vmExpansion.js)
 //   'name'     -> just prompt for a name, no linked record
 const NODE_TYPES_OPTS = [
   { value: 'vcenter',      label: 'vCenter',       tone: 'blue',   mode: 'asset' },
@@ -58,21 +60,8 @@ const PLATFORM_TOOLS = {
   hyperv:  ['hyperv_host', 'cluster', 'generic'],
 };
 
-// Cycled per VM so a host with many auto-connected VMs keeps each
-// connection visually traceable instead of every line reading as one
-// indistinguishable blue bundle.
-const EDGE_PALETTE = [
-  '#1677ff', '#52c41a', '#fa8c16', '#eb2f96', '#722ed1',
-  '#13a8a8', '#faad14', '#f5222d', '#2f54eb', '#a0d911',
-];
-
 const reactFlowNodeTypes = { custom: CustomTopologyNode };
 const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
-const defaultEdgeOptions = { type: 'flow', markerEnd: { type: MarkerType.ArrowClosed } };
-
-function newNodeId() {
-  return `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 export default function CustomTopologyTab({ platform }) {
   const { user } = useAuth();
@@ -109,6 +98,15 @@ export default function CustomTopologyTab({ platform }) {
   const [namePromptOpen, setNamePromptOpen] = useState(false);
   const [namePromptType, setNamePromptType] = useState(null);
   const [nameForm] = Form.useForm();
+
+  // Auto-build (VMware tab): pick one vCenter, build just its tree onto the
+  // current canvas. Each vCenter gets its own diagram — build one, Save,
+  // switch/create the next diagram, build again for a different vCenter.
+  const [vcenterPickOpen, setVcenterPickOpen] = useState(false);
+  const [vcenterOptions, setVcenterOptions]   = useState([]);
+  const [vcenterPickValue, setVcenterPickValue] = useState(null);
+  const [vcenterSkippedNote, setVcenterSkippedNote] = useState(null);
+  const autoBuildDataRef = useRef({ hosts: [], vcLabelMap: new Map() });
 
   const loadList = useCallback(() => {
     setListLoading(true);
@@ -147,19 +145,44 @@ export default function CustomTopologyTab({ platform }) {
     setNodes(nds => nds.map(n => (n.id === id ? { ...n, data: { ...n.data, label } } : n)));
   }, [setNodes]);
 
-  // Function props (onRename) aren't part of the persisted node — they're
-  // attached only for the canvas render, never saved to the backend (the
-  // raw `nodes` state PUT in handleSave stays plain JSON).
+  // Expand/collapse a host's VMs on demand (shared with the read-only
+  // Topology of Sites viewer — see vmExpansion.js). VM child nodes/edges
+  // this adds are never part of what Save below persists, so the diagram
+  // in storage always stays the compact vCenter/Cluster/Host tree; VMs are
+  // always fetched fresh, on demand, wherever the diagram is opened.
+  const handleToggleVMs = useCallback((id) => {
+    const hostNode = nodes.find(n => n.id === id);
+    if (hostNode) toggleHostVMs({ hostNode, nodes, setNodes, setEdges, api, message });
+  }, [nodes, setNodes, setEdges, message]);
+
+  // Function props (onRename/onToggleVMs) aren't part of the persisted
+  // node — they're attached only for the canvas render, never saved to the
+  // backend (the raw `nodes` state PUT in handleSave stays plain JSON).
   const nodesForCanvas = useMemo(
-    () => nodes.map(n => ({ ...n, data: { ...n.data, onRename: canWrite ? handleRenameNode : undefined } })),
-    [nodes, handleRenameNode, canWrite]
+    () => nodes.map(n => ({
+      ...n,
+      data: { ...n.data, onRename: canWrite ? handleRenameNode : undefined, onToggleVMs: handleToggleVMs },
+    })),
+    [nodes, handleRenameNode, handleToggleVMs, canWrite]
   );
 
   async function handleSave() {
     if (!activeId) return;
     setSaving(true);
     try {
-      await api.put(`/custom-topology/${activeId}`, { nodes, edges });
+      // Strip on-demand VM nodes/edges (tagged parentHostId) and the
+      // vmsExpanded/vmsLoading view-state flags before persisting — a
+      // saved diagram is always the compact tree, regardless of what's
+      // currently expanded on screen.
+      const cleanNodes = nodes
+        .filter(n => n.data?.parentHostId === undefined)
+        .map(n => {
+          if (n.data?.vmsExpanded === undefined && n.data?.vmsLoading === undefined) return n;
+          const { vmsExpanded, vmsLoading, ...rest } = n.data;
+          return { ...n, data: rest };
+        });
+      const cleanEdges = edges.filter(e => e.data?.parentHostId === undefined);
+      await api.put(`/custom-topology/${activeId}`, { nodes: cleanNodes, edges: cleanEdges });
       message.success('Diagram saved');
       loadList();
     } catch (e) {
@@ -212,8 +235,8 @@ export default function CustomTopologyTab({ platform }) {
     });
   }
 
-  // Appends one node and returns {id, position} so callers (e.g. the auto
-  // VM-node placement below) can position new nodes relative to it.
+  // Appends one node and returns {id, position} so callers can position
+  // related nodes relative to it.
   function placeNode(type, label, sublabel, extraData = {}) {
     const meta = NODE_TYPES_OPTS.find(t => t.value === type) || { tone: 'gray' };
     const id = newNodeId();
@@ -223,50 +246,6 @@ export default function CustomTopologyTab({ platform }) {
       data: { label, sublabel: sublabel || undefined, tone: meta.tone, ...extraData },
     }]);
     return { id, position };
-  }
-
-  function addAutoVMNodes(hostId, hostPos, vms) {
-    // Laid out in a column to the right of the host (wrapping into further
-    // columns for large VM counts) and connected right handle -> left
-    // handle, matching the left-to-right flow of every other connection on
-    // this canvas (root -> host already flows right -> left) instead of
-    // fanning out underneath the host, which reads as a tangled mess once
-    // there are more than a handful of VMs.
-    const PER_COL = 6, COL_GAP = 260, ROW_GAP = 90;
-    const newNodes = [];
-    const newEdges = [];
-    vms.forEach((vm, i) => {
-      const col = Math.floor(i / PER_COL);
-      const row = i % PER_COL;
-      const countInCol = Math.min(PER_COL, vms.length - col * PER_COL);
-      const colStartY = hostPos.y - ((countInCol - 1) * ROW_GAP) / 2;
-      const vmId = newNodeId();
-      const color = EDGE_PALETTE[i % EDGE_PALETTE.length];
-      newNodes.push({
-        id: vmId,
-        type: 'custom',
-        position: { x: hostPos.x + 280 + col * COL_GAP, y: colStartY + row * ROW_GAP },
-        data: { label: vm.hostname || vm.name || 'VM', sublabel: vm.ips?.[0], tone: 'teal' },
-      });
-      // Anchor every auto-connected edge to explicit handles — without a
-      // fixed handle id, React Flow falls back to the node's
-      // first-declared handle ('top') for every edge regardless of where
-      // the target actually sits, bunching dozens of connectors into one
-      // point instead of fanning out from the side facing the VMs. Each
-      // gets its own color (cycled from EDGE_PALETTE) so a host with many
-      // VMs stays visually traceable instead of reading as one blue bundle.
-      newEdges.push({
-        id: `e-${hostId}-${vmId}`,
-        source: hostId, target: vmId,
-        sourceHandle: 'right', targetHandle: 'left',
-        ...defaultEdgeOptions,
-        data: { color },
-        style: { stroke: color },
-        markerEnd: { type: MarkerType.ArrowClosed, color },
-      });
-    });
-    setNodes(nds => [...nds, ...newNodes]);
-    setEdges(eds => [...eds, ...newEdges]);
   }
 
   // Collects every Physical & ESXi Servers record across pages — the list
@@ -285,143 +264,144 @@ export default function CustomTopologyTab({ platform }) {
     return all;
   }
 
-  // Groups Physical & ESXi Servers records (vCenter tab only) into
-  // vCenter -> Cluster -> ESXi Host, auto-adds each host's discovered VMs
-  // (reusing addAutoVMNodes, same as the manual "ESXi Host" tool above), and
-  // lays the whole tree out left-to-right. Replaces the current canvas —
-  // nothing is persisted until the admin presses the existing Save button,
-  // so a bad auto-build is just a reload away from undone.
-  async function runAutoBuildVMware() {
-    const [vcRes, hosts] = await Promise.all([
-      api.get('/assets', { params: { osVersion: 'vcenter', pageSize: 200 } }),
-      fetchAllPhysicalEsxi(),
-    ]);
-    const vcLabelMap = new Map(
-      (vcRes.data.items || []).map(a => [a.ip_address, a.vm_name || a.ip_address])
-    );
-    const vcenterLabel = (ip) => vcLabelMap.get(ip) || ip;
-
-    // Only ESXi-type hosts with a vCenter assigned can be placed in this
-    // tree — a bare-metal server or a host nobody's tagged with a vCenter
-    // yet has nothing to hang under.
-    const eligible = hosts.filter(h => /esxi/i.test(h.os_type || '') && h.vcenter);
-    const skipped = hosts.length - eligible.length;
-    if (!eligible.length) {
-      message.warning('No Physical & ESXi Servers records with both an ESXi OS type and a vCenter assigned were found.');
-      return;
-    }
-
-    const vcenterMap = new Map(); // vcenter ip -> Map(cluster name -> host[])
-    for (const h of eligible) {
+  // Groups one vCenter's Physical & ESXi Servers records into
+  // Cluster -> ESXi Host and lays the tree out left-to-right. VMs are never
+  // fetched here — each host node gets a "+" (see vmExpansion.js) to load
+  // its VMs on demand instead, in the builder and the read-only viewer
+  // alike, so the diagram never has to carry every VM just to exist.
+  // Replaces the current canvas — nothing is persisted until the admin
+  // presses the existing Save button, so a bad auto-build is just a reload
+  // away from undone. One vCenter per diagram by design: build this one,
+  // Save, then switch to (or create) a different diagram for the next.
+  function buildVcenterTree(vcenterIp, hosts, vcLabelMap) {
+    const vcenterHosts = hosts.filter(h => h.vcenter === vcenterIp);
+    const clusterMap = new Map(); // cluster name -> host[]
+    for (const h of vcenterHosts) {
       const cl = (h.cluster || '').trim() || 'Unassigned';
-      if (!vcenterMap.has(h.vcenter)) vcenterMap.set(h.vcenter, new Map());
-      const clusterMap = vcenterMap.get(h.vcenter);
       if (!clusterMap.has(cl)) clusterMap.set(cl, []);
       clusterMap.get(cl).push(h);
     }
 
     const X_VCENTER = 80, X_CLUSTER = 360, X_ESXI = 640, ROW_GAP = 110;
+    const vcColor = EDGE_PALETTE[0];
     const newNodes = [];
     const newEdges = [];
-    const hostRecords = []; // for the discovered-VM lookups below
     let rowCounter = 0;
-    let colorIdx = 0;
 
-    const vcenterEntries = [...vcenterMap.entries()]
-      .sort((a, b) => vcenterLabel(a[0]).localeCompare(vcenterLabel(b[0])));
+    const vcId = newNodeId();
+    const clusterEntries = [...clusterMap.entries()].sort((a, b) => {
+      if (a[0] === 'Unassigned') return 1;
+      if (b[0] === 'Unassigned') return -1;
+      return a[0].localeCompare(b[0]);
+    });
+    const clusterYs = [];
 
-    for (const [vcIp, clusterMap] of vcenterEntries) {
-      // One color per vCenter branch — cycled the same way addAutoVMNodes
-      // cycles per VM, so a multi-vCenter diagram stays visually separable.
-      const vcColor = EDGE_PALETTE[colorIdx % EDGE_PALETTE.length];
-      colorIdx += 1;
-      const vcId = newNodeId();
-      const clusterEntries = [...clusterMap.entries()].sort((a, b) => {
-        if (a[0] === 'Unassigned') return 1;
-        if (b[0] === 'Unassigned') return -1;
-        return a[0].localeCompare(b[0]);
-      });
-      const clusterYs = [];
+    for (const [clusterName, clusterHosts] of clusterEntries) {
+      const clId = newNodeId();
+      const sortedHosts = [...clusterHosts].sort(
+        (a, b) => (a.vm_name || a.ip_address || '').localeCompare(b.vm_name || b.ip_address || '')
+      );
+      const hostYs = [];
 
-      for (const [clusterName, clusterHosts] of clusterEntries) {
-        const clId = newNodeId();
-        const sortedHosts = [...clusterHosts].sort(
-          (a, b) => (a.vm_name || a.ip_address || '').localeCompare(b.vm_name || b.ip_address || '')
-        );
-        const hostYs = [];
-
-        for (const h of sortedHosts) {
-          const y = rowCounter * ROW_GAP;
-          rowCounter += 1;
-          const hostId = newNodeId();
-          const hostPos = { x: X_ESXI, y };
-          newNodes.push({
-            id: hostId, type: 'custom', position: hostPos,
-            data: {
-              label: h.vm_name || h.ip_address || 'ESXi Host', sublabel: h.ip_address,
-              tone: 'blue', sourceId: h.id, sourceKind: 'physical',
-            },
-          });
-          newEdges.push({
-            id: `e-${clId}-${hostId}`, source: clId, target: hostId,
-            sourceHandle: 'right', targetHandle: 'left', ...defaultEdgeOptions,
-            data: { color: vcColor }, style: { stroke: vcColor },
-            markerEnd: { type: MarkerType.ArrowClosed, color: vcColor },
-          });
-          hostYs.push(y);
-          hostRecords.push({ id: hostId, position: hostPos, record: h });
-        }
-
-        const clY = hostYs.reduce((a, b) => a + b, 0) / hostYs.length;
+      for (const h of sortedHosts) {
+        const y = rowCounter * ROW_GAP;
+        rowCounter += 1;
+        const hostId = newNodeId();
         newNodes.push({
-          id: clId, type: 'custom', position: { x: X_CLUSTER, y: clY },
-          data: { label: clusterName, tone: 'orange' },
+          id: hostId, type: 'custom', position: { x: X_ESXI, y },
+          data: {
+            label: h.vm_name || h.ip_address || 'ESXi Host', sublabel: h.ip_address,
+            tone: 'blue', sourceId: h.id, sourceKind: 'physical',
+          },
         });
         newEdges.push({
-          id: `e-${vcId}-${clId}`, source: vcId, target: clId,
+          id: `e-${clId}-${hostId}`, source: clId, target: hostId,
           sourceHandle: 'right', targetHandle: 'left', ...defaultEdgeOptions,
           data: { color: vcColor }, style: { stroke: vcColor },
           markerEnd: { type: MarkerType.ArrowClosed, color: vcColor },
         });
-        clusterYs.push(clY);
+        hostYs.push(y);
       }
 
-      const vcY = clusterYs.reduce((a, b) => a + b, 0) / clusterYs.length;
+      const clY = hostYs.reduce((a, b) => a + b, 0) / hostYs.length;
       newNodes.push({
-        id: vcId, type: 'custom', position: { x: X_VCENTER, y: vcY },
-        data: { label: vcenterLabel(vcIp), sublabel: vcIp, tone: 'blue' },
+        id: clId, type: 'custom', position: { x: X_CLUSTER, y: clY },
+        data: { label: clusterName, tone: 'orange' },
       });
+      newEdges.push({
+        id: `e-${vcId}-${clId}`, source: vcId, target: clId,
+        sourceHandle: 'right', targetHandle: 'left', ...defaultEdgeOptions,
+        data: { color: vcColor }, style: { stroke: vcColor },
+        markerEnd: { type: MarkerType.ArrowClosed, color: vcColor },
+      });
+      clusterYs.push(clY);
     }
+
+    const vcY = clusterYs.reduce((a, b) => a + b, 0) / clusterYs.length;
+    newNodes.push({
+      id: vcId, type: 'custom', position: { x: X_VCENTER, y: vcY },
+      data: { label: vcLabelMap.get(vcenterIp) || vcenterIp, sublabel: vcenterIp, tone: 'blue' },
+    });
 
     setNodes(newNodes);
     setEdges(newEdges);
-
-    const results = await Promise.allSettled(
-      hostRecords.map(({ id, position, record }) =>
-        api.get(`/physical-esxi/${record.id}/discovered-vms`).then(({ data }) => {
-          if (data.vms?.length) addAutoVMNodes(id, position, data.vms);
-        })
-      )
-    );
-    const vmFailures = results.filter(r => r.status === 'rejected').length;
-
     message.success(
-      `Built ${vcenterEntries.length} vCenter(s), ${hostRecords.length} host(s)` +
-      (skipped ? ` — skipped ${skipped} host(s) with no vCenter or non-ESXi OS type` : '') +
-      (vmFailures ? `. Couldn't look up VMs for ${vmFailures} host(s)` : '') +
-      '. Review the layout, then click Save to persist.'
+      `Built "${vcLabelMap.get(vcenterIp) || vcenterIp}": ${clusterEntries.length} cluster(s), ` +
+      `${vcenterHosts.length} host(s). Expand a host's "+" to load its VMs. Review, then click Save to persist.`
     );
   }
 
-  function handleAutoBuildVMware() {
+  async function handleAutoBuildVMware() {
     if (!activeId) { message.warning('Select or create a diagram first'); return; }
+    try {
+      const [vcRes, hosts] = await Promise.all([
+        api.get('/assets', { params: { osVersion: 'vcenter', pageSize: 200 } }),
+        fetchAllPhysicalEsxi(),
+      ]);
+      const vcLabelMap = new Map(
+        (vcRes.data.items || []).map(a => [a.ip_address, a.vm_name || a.ip_address])
+      );
+      // Only ESXi-type hosts with a vCenter assigned can be placed in this
+      // tree — a bare-metal server or a host nobody's tagged with a vCenter
+      // yet has nothing to hang under.
+      const eligible = hosts.filter(h => /esxi/i.test(h.os_type || '') && h.vcenter);
+      if (!eligible.length) {
+        message.warning('No Physical & ESXi Servers records with both an ESXi OS type and a vCenter assigned were found.');
+        return;
+      }
+      const counts = new Map();
+      for (const h of eligible) counts.set(h.vcenter, (counts.get(h.vcenter) || 0) + 1);
+      const options = [...counts.entries()]
+        .sort((a, b) => (vcLabelMap.get(a[0]) || a[0]).localeCompare(vcLabelMap.get(b[0]) || b[0]))
+        .map(([ip, count]) => ({
+          value: ip,
+          label: `${vcLabelMap.get(ip) || ip} (${ip}) — ${count} host${count === 1 ? '' : 's'}`,
+        }));
+
+      autoBuildDataRef.current = { hosts: eligible, vcLabelMap };
+      setVcenterOptions(options);
+      setVcenterPickValue(options[0]?.value ?? null);
+      const skipped = hosts.length - eligible.length;
+      setVcenterSkippedNote(
+        skipped ? `${skipped} record(s) skipped — no vCenter assigned or not an ESXi OS type.` : null
+      );
+      setVcenterPickOpen(true);
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to load Physical & ESXi Servers');
+    }
+  }
+
+  function confirmVcenterPick() {
+    const vcenterIp = vcenterPickValue;
+    if (!vcenterIp) return;
+    setVcenterPickOpen(false);
+    const { hosts, vcLabelMap } = autoBuildDataRef.current;
+    const label = vcLabelMap.get(vcenterIp) || vcenterIp;
     modal.confirm({
-      title: 'Auto-build VMware topology?',
-      content: 'This replaces everything currently on this canvas with a tree built from Physical & ESXi Servers records, grouped by vCenter and Cluster, with each host’s discovered VMs auto-added. Nothing is saved until you press Save afterward.',
-      okText: 'Auto-build',
-      onOk: () => runAutoBuildVMware().catch(e => {
-        message.error(e.response?.data?.error || 'Failed to auto-build topology');
-      }),
+      title: `Build "${label}" onto this canvas?`,
+      content: 'This replaces everything currently on this canvas with a tree for this vCenter only, grouped by Cluster — each vCenter gets its own diagram, so build one, Save, then repeat for the next. Nothing is saved until you press Save.',
+      okText: 'Build',
+      onOk: () => buildVcenterTree(vcenterIp, hosts, vcLabelMap),
     });
   }
 
@@ -460,28 +440,16 @@ export default function CustomTopologyTab({ platform }) {
     }, 300);
   }
 
-  async function confirmRecordPick() {
+  function confirmRecordPick() {
     const opt = pickerOptions.find(o => o.value === pickerValue);
     if (!opt) return;
     const r = opt.record;
     const label = r.vm_name || r.ip_address || 'Unnamed';
-    const { id: hostId, position: hostPos } = placeNode(pickerType, label, r.ip_address, {
-      sourceId: r.id, sourceKind: pickerKind,
-    });
+    // physical-mode nodes (ESXi Host / Proxmox Node) get sourceKind:
+    // 'physical', which is what makes CustomTopologyNode show the "+" to
+    // load this host's VMs on demand — see handleToggleVMs/vmExpansion.js.
+    placeNode(pickerType, label, r.ip_address, { sourceId: r.id, sourceKind: pickerKind });
     setPickerOpen(false);
-
-    if (pickerKind === 'physical') {
-      try {
-        const { data } = await api.get(`/physical-esxi/${r.id}/discovered-vms`);
-        if (!data.vms?.length) {
-          message.info('No discovered VMs found for this host');
-        } else {
-          addAutoVMNodes(hostId, hostPos, data.vms);
-        }
-      } catch {
-        message.error('Failed to look up discovered VMs for this host');
-      }
-    }
   }
 
   function confirmNamePrompt() {
@@ -517,7 +485,7 @@ export default function CustomTopologyTab({ platform }) {
               <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>Delete</Button>
               <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>Save</Button>
               {platform === 'vmware' && (
-                <Tooltip title="Group Physical & ESXi Servers by vCenter and Cluster, auto-add each host's discovered VMs, and lay out the tree on this canvas. Replaces the current canvas.">
+                <Tooltip title="Pick a vCenter, then group its Physical & ESXi Servers by Cluster and lay out the tree on this canvas. Replaces the current canvas — one vCenter per diagram.">
                   <Button icon={<ClusterOutlined />} onClick={handleAutoBuildVMware}>
                     Auto-build from Physical &amp; ESXi Servers
                   </Button>
@@ -548,7 +516,7 @@ export default function CustomTopologyTab({ platform }) {
         {active && (
           <div style={{ marginTop: 8 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              vCenter / Proxmox Host / Hyper-V Host pick from MSL Assets; ESXi / Proxmox Node pick from Physical &amp; ESXi Servers and auto-add their discovered VMs.
+              vCenter / Proxmox Host / Hyper-V Host pick from MSL Assets; ESXi / Proxmox Node pick from Physical &amp; ESXi Servers — click the "+" on a host node to load its VMs, click again to hide them.
               Drag from any edge of a node to another to connect them. Double-click a node to rename it. Select a node or connection and press Delete to remove it.
             </Text>
           </div>
@@ -649,6 +617,32 @@ export default function CustomTopologyTab({ platform }) {
           options={pickerOptions}
           autoFocus
         />
+      </Modal>
+
+      <Modal
+        title="Auto-build VMware topology"
+        open={vcenterPickOpen}
+        onOk={confirmVcenterPick}
+        onCancel={() => setVcenterPickOpen(false)}
+        okText="Continue"
+        okButtonProps={{ disabled: !vcenterPickValue }}
+        destroyOnClose
+      >
+        <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+          Each vCenter builds its own diagram. Pick which one to build onto the current canvas — build it, click Save, then run this again for the next vCenter (on its own diagram).
+        </Text>
+        <Select
+          style={{ width: '100%' }}
+          options={vcenterOptions}
+          value={vcenterPickValue}
+          onChange={setVcenterPickValue}
+          autoFocus
+        />
+        {vcenterSkippedNote && (
+          <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+            {vcenterSkippedNote}
+          </Text>
+        )}
       </Modal>
 
       <Modal

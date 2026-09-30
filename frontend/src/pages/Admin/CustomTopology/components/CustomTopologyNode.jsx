@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
+import { PlusOutlined, MinusOutlined, LoadingOutlined } from '@ant-design/icons';
 
 // One distinct, consistent color per node "type" the toolbar offers.
 export const TONE_COLORS = {
@@ -23,10 +24,16 @@ const SIDES = [
 // data.onRename(id, newLabel), when provided, enables double-click-to-rename
 // — quick-added nodes get a generic default name ("vCenter 1"), so this is
 // how the user actually labels them without a modal getting in the way.
+// data.sourceKind === 'physical' marks a node backed by a real Physical &
+// ESXi Servers record (an ESXi host or Proxmox node) — only these can have
+// VMs to show. data.onToggleVMs, when provided, renders the +/- toggle;
+// omitted entirely (e.g. vCenter/Cluster/generic nodes, or wherever the
+// caller doesn't wire it up) it's just not shown.
 export default function CustomTopologyNode({ id, data, selected }) {
   const color = TONE_COLORS[data.tone] || TONE_COLORS.gray;
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(data.label);
+  const canExpandVMs = data.sourceKind === 'physical' && typeof data.onToggleVMs === 'function';
 
   useEffect(() => { if (!editing) setValue(data.label); }, [data.label, editing]);
 
@@ -41,6 +48,7 @@ export default function CustomTopologyNode({ id, data, selected }) {
     <div
       onDoubleClick={() => data.onRename && setEditing(true)}
       style={{
+        position: 'relative',
         minWidth: 150, padding: '10px 16px', borderRadius: 10,
         border: `1.5px solid ${color}`,
         background: 'var(--ctb-node-bg, #ffffff)',
@@ -73,6 +81,23 @@ export default function CustomTopologyNode({ id, data, selected }) {
       )}
       {data.sublabel && (
         <div style={{ fontSize: 11, color: 'var(--ctb-node-subtitle, #8c8c8c)' }}>{data.sublabel}</div>
+      )}
+      {canExpandVMs && (
+        <button
+          type="button"
+          className="nodrag nopan"
+          title={data.vmsExpanded ? 'Hide VMs' : 'Show VMs'}
+          onClick={(e) => { e.stopPropagation(); data.onToggleVMs(id); }}
+          style={{
+            position: 'absolute', right: -11, bottom: -11, zIndex: 10,
+            width: 22, height: 22, borderRadius: '50%', padding: 0,
+            border: `1.5px solid ${color}`, background: 'var(--ctb-node-bg, #ffffff)',
+            color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, cursor: 'pointer', pointerEvents: 'auto',
+          }}
+        >
+          {data.vmsLoading ? <LoadingOutlined spin /> : data.vmsExpanded ? <MinusOutlined /> : <PlusOutlined />}
+        </button>
       )}
     </div>
   );

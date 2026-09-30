@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow, Background, Controls, MiniMap, ConnectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Card, Select, Space, Empty, Spin, Typography, Alert } from 'antd';
+import { App, Card, Select, Space, Empty, Spin, Typography, Alert } from 'antd';
 import api from '../../../api/client';
 import CustomTopologyNode from '../../Admin/CustomTopology/components/CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from '../../Admin/CustomTopology/components/ConnectivityFlowEdge.jsx';
+import { toggleHostVMs } from '../../Admin/CustomTopology/components/vmExpansion.js';
 
 const { Text } = Typography;
 
@@ -21,6 +22,7 @@ const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
  * every interaction that would mutate the diagram is switched off below.
  */
 export default function CustomDiagramTab({ platform }) {
+  const { message } = App.useApp();
   const [diagrams, setDiagrams]         = useState([]);
   const [activeId, setActiveId]         = useState(null);
   const [listLoading, setListLoading]   = useState(true);
@@ -61,6 +63,20 @@ export default function CustomDiagramTab({ platform }) {
   }, [activeId]);
 
   const active = diagrams.find(d => d.id === activeId);
+
+  // Same on-demand "+ show VMs" toggle as the builder (see vmExpansion.js)
+  // — this page is read-only for everything else, but VMs were never
+  // baked into the saved diagram, so this is the only way to see them here.
+  // Purely client-side: nothing this does is ever written back.
+  const handleToggleVMs = useCallback((id) => {
+    const hostNode = nodes.find(n => n.id === id);
+    if (hostNode) toggleHostVMs({ hostNode, nodes, setNodes, setEdges, api, message });
+  }, [nodes, message]);
+
+  const nodesForCanvas = useMemo(
+    () => nodes.map(n => ({ ...n, data: { ...n.data, onToggleVMs: handleToggleVMs } })),
+    [nodes, handleToggleVMs]
+  );
 
   if (listLoading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
 
@@ -108,7 +124,7 @@ export default function CustomDiagramTab({ platform }) {
             <Spin style={{ display: 'block', margin: '80px auto' }} />
           ) : (
             <ReactFlow
-              nodes={nodes}
+              nodes={nodesForCanvas}
               edges={edges}
               nodeTypes={reactFlowNodeTypes}
               edgeTypes={reactFlowEdgeTypes}
