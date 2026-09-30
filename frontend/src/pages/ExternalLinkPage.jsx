@@ -3,12 +3,16 @@ import { GlobalOutlined, ExportOutlined, InfoCircleOutlined } from '@ant-design/
 
 const { Title } = Typography;
 
-// Signing in inside the iframe silently fails for a plain-http target: its
-// session cookie can only be SameSite=Lax/Strict (SameSite=None requires
-// Secure, which requires HTTPS), and browsers block that cookie in a
-// cross-site iframe. There's no code-side fix for that — the page has to
-// actually navigate there for login to work, so `embeddable: false` skips
-// the iframe and leads with the one path that does.
+// Two separate reasons a target can't be embedded, both needing
+// `embeddable: false` since neither has a code-side fix:
+// 1. Plain-http sign-in: its session cookie can only be SameSite=Lax/Strict
+//    (SameSite=None requires Secure, i.e. HTTPS), and browsers block that
+//    cookie in a cross-site iframe — sign-in silently fails.
+// 2. The target sends X-Frame-Options/CSP frame-ancestors that refuse
+//    framing outright (common on sign-in pages, for clickjacking
+//    protection) — the iframe area just shows "<host> refused to connect."
+// Either way, the page has to actually navigate there, so `embeddable:
+// false` skips the iframe and leads with the one path that works.
 export default function ExternalLinkPage({ title, url, embeddable = true }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 104px)' }}>
