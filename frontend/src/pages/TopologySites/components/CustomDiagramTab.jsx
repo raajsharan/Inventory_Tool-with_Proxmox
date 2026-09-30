@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap, ConnectionMode,
+  ReactFlow, Background, BackgroundVariant, Controls, MiniMap, ConnectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { App, Card, Select, Space, Empty, Spin, Typography, Alert } from 'antd';
@@ -8,6 +8,7 @@ import api from '../../../api/client';
 import CustomTopologyNode from '../../Admin/CustomTopology/components/CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from '../../Admin/CustomTopology/components/ConnectivityFlowEdge.jsx';
 import { toggleHostVMs } from '../../Admin/CustomTopology/components/vmExpansion.js';
+import { useAppTheme } from '../../../context/ThemeContext.jsx';
 
 const { Text } = Typography;
 
@@ -23,6 +24,8 @@ const reactFlowEdgeTypes = { flow: ConnectivityFlowEdge };
  */
 export default function CustomDiagramTab({ platform }) {
   const { message } = App.useApp();
+  const { mode: themeMode } = useAppTheme();
+  const gridColor = themeMode === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(15,23,42,0.08)';
   const [diagrams, setDiagrams]         = useState([]);
   const [activeId, setActiveId]         = useState(null);
   const [listLoading, setListLoading]   = useState(true);
@@ -135,7 +138,7 @@ export default function CustomDiagramTab({ platform }) {
               deleteKeyCode={null}
               fitView
             >
-              <Background gap={16} />
+              <Background variant={BackgroundVariant.Lines} gap={24} size={1} color={gridColor} />
               <Controls showInteractive={false} />
               <MiniMap pannable zoomable />
             </ReactFlow>

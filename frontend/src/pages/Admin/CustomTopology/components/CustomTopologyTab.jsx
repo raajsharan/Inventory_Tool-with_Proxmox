@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap, ConnectionMode, MarkerType,
+  ReactFlow, Background, BackgroundVariant, Controls, MiniMap, ConnectionMode, MarkerType,
   useNodesState, useEdgesState, addEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -12,25 +12,12 @@ import {
 } from '@ant-design/icons';
 import api from '../../../../api/client';
 import { useAuth } from '../../../../context/AuthContext.jsx';
-import CustomTopologyNode, { TONE_COLORS } from './CustomTopologyNode.jsx';
+import { useAppTheme } from '../../../../context/ThemeContext.jsx';
+import CustomTopologyNode, { TONE_COLORS, CUSTOM_TOPOLOGY_CSS } from './CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from './ConnectivityFlowEdge.jsx';
 import { EDGE_PALETTE, defaultEdgeOptions, newNodeId, toggleHostVMs } from './vmExpansion.js';
 
 const { Text } = Typography;
-
-// CSS-variable theming for the node component (dark-first app; see
-// DASH_CSS in components/DashboardStatCard.jsx for the same body[data-theme]
-// convention used everywhere else in this codebase), plus the moving-dot
-// animation for the "Connectivity Flow" edge style.
-export const CUSTOM_TOPOLOGY_CSS = `
-.ctb-canvas { --ctb-node-bg: #ffffff; --ctb-node-title: #262626; --ctb-node-subtitle: #8c8c8c; }
-body[data-theme="dark"] .ctb-canvas { --ctb-node-bg: #1c1c1c; --ctb-node-title: #f0f0f0; --ctb-node-subtitle: #a6a6a6; }
-@keyframes ctb-flowdot { to { offset-distance: 100%; } }
-@media (prefers-reduced-motion: no-preference) {
-  .ctb-flow-dot { animation: ctb-flowdot 1.8s linear infinite; }
-}
-.ctb-flow-dot { fill: #1677ff; }
-`;
 
 // Every tool's behavior:
 //   'asset'    -> pick from MSL Assets (searchable)
@@ -67,6 +54,8 @@ export default function CustomTopologyTab({ platform }) {
   const { user } = useAuth();
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
   const { message, modal } = App.useApp();
+  const { mode: themeMode } = useAppTheme();
+  const gridColor = themeMode === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(15,23,42,0.08)';
   const toolTypes = PLATFORM_TOOLS[platform] || NODE_TYPES_OPTS.map(t => t.value);
 
   const [diagrams, setDiagrams]   = useState([]);
@@ -551,7 +540,7 @@ export default function CustomTopologyTab({ platform }) {
               deleteKeyCode={['Backspace', 'Delete']}
               fitView
             >
-              <Background gap={16} />
+              <Background variant={BackgroundVariant.Lines} gap={24} size={1} color={gridColor} />
               <Controls />
               <MiniMap pannable zoomable />
             </ReactFlow>

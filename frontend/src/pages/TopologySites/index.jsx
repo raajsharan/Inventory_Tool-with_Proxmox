@@ -1,7 +1,7 @@
 import { Typography, Tabs, Card } from 'antd';
 import { ApartmentOutlined, ClusterOutlined, WindowsOutlined } from '@ant-design/icons';
 import CustomDiagramTab from './components/CustomDiagramTab.jsx';
-import { CUSTOM_TOPOLOGY_CSS } from '../Admin/CustomTopology/components/CustomTopologyTab.jsx';
+import { CUSTOM_TOPOLOGY_CSS } from '../Admin/CustomTopology/components/CustomTopologyNode.jsx';
 
 const { Title, Text } = Typography;
 

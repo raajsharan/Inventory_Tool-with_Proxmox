@@ -11,6 +11,24 @@ export const TONE_COLORS = {
   gray:   '#8c8c8c',
 };
 
+// Shared by the editable Custom Topology Builder and the read-only
+// Topology of Sites viewer — both render this node type, so the canvas
+// theming lives here rather than being duplicated (or missing) in one of
+// them. Graph-paper backdrop: pale lavender in light mode so white node
+// cards pop against it, ink-navy-tinted in dark mode to stay on this app's
+// palette (see --ink-900 in styles.css).
+export const CUSTOM_TOPOLOGY_CSS = `
+.ctb-canvas { --ctb-node-bg: #ffffff; --ctb-node-title: #262626; --ctb-node-subtitle: #8c8c8c; }
+body[data-theme="dark"] .ctb-canvas { --ctb-node-bg: #1c1c1c; --ctb-node-title: #f0f0f0; --ctb-node-subtitle: #a6a6a6; }
+.ctb-canvas .react-flow { background: #f6f8fd; }
+body[data-theme="dark"] .ctb-canvas .react-flow { background: #0f1428; }
+@keyframes ctb-flowdot { to { offset-distance: 100%; } }
+@media (prefers-reduced-motion: no-preference) {
+  .ctb-flow-dot { animation: ctb-flowdot 1.8s linear infinite; }
+}
+.ctb-flow-dot { fill: #1677ff; }
+`;
+
 // One handle per side, all acting as both source and target (the canvas
 // runs in React Flow's "loose" connection mode) — lets the user drag a
 // connection from or to any side of any node, in any direction.
