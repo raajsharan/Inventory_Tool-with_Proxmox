@@ -33,7 +33,12 @@ export function buildVmChildren(hostId, hostPos, vms) {
       id: vmId,
       type: 'custom',
       position: { x: hostPos.x + 280 + col * COL_GAP, y: colStartY + row * ROW_GAP },
-      data: { label: vm.hostname || vm.name || 'VM', sublabel: vm.ips?.[0], tone: 'teal', parentHostId: hostId },
+      // vm.name is the VM's actual name as shown throughout VM Discovery
+      // (dataIndex 'name' there) — vm.hostname is the guest OS's own
+      // reported hostname, which is frequently blank or generic (e.g.
+      // "localhost.localdomain" when VMware Tools hasn't reported a real
+      // one), so it's the fallback here, not the primary label.
+      data: { label: vm.name || vm.hostname || 'VM', sublabel: vm.ips?.[0], tone: 'teal', parentHostId: hostId },
     });
     edges.push({
       id: `e-${hostId}-${vmId}`,
