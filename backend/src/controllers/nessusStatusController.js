@@ -268,26 +268,37 @@ async function verify(req, res, next) {
     result.ping  = pingResult;
     result.meta  = { credentials_source: 'stored', os_type: osType };
 
-    // Self-heal: a live check that actually reached the host is strictly
-    // more trustworthy than whatever's stored, so sync tenable_installed to
-    // match whenever the two disagree. An unreachable host gives no new
-    // evidence either way, so a failed/unreachable check never touches the
-    // stored value — only a successful, reachable check can correct it.
-    if (vm.hasTenableCol && result.connected && typeof result.installed === 'boolean'
-        && result.installed !== vm.tenableInstalled) {
-      await db.query(
-        `UPDATE ${vm.table} SET tenable_installed = $1, updated_at = NOW() WHERE id = $2`,
-        [result.installed, vm.id],
-      );
-      await audit.log({
-        user: req.user, action: 'UPDATE', entityType: vm.table, entityId: vm.id,
-        details: {
-          reason: 'nessus_live_check_correction', field: 'tenable_installed',
-          ip_address, from: vm.tenableInstalled, to: result.installed,
-        },
-        ipAddress: req.ip,
-      });
-      result.corrected = { field: 'tenable_installed', from: vm.tenableInstalled, to: result.installed };
+    // Self-heal: a live check that actually reached the host and read its
+    // service status is strictly more trustworthy than whatever's stored,
+    // so sync tenable_installed to match — running -> Yes, anything else
+    // (stopped/inactive/exited/failed/paused/not_found/unknown) -> No. This
+    // is deliberately stricter than result.installed above (which also
+    // counts "service stopped but binary file still present" as
+    // installed) — a stopped agent isn't actually protecting the host or
+    // reporting to Tenable, so for the stored compliance flag, only
+    // "running" counts. An unreachable host, or one where the diagnostic
+    // command couldn't run at all (restricted_shell: service is null),
+    // gives no usable evidence either way, so the stored value is left
+    // alone in both cases.
+    if (vm.hasTenableCol && result.connected && result.service
+        && typeof result.service.status === 'string') {
+      const isRunning = result.service.status === 'running';
+      if (isRunning !== vm.tenableInstalled) {
+        await db.query(
+          `UPDATE ${vm.table} SET tenable_installed = $1, updated_at = NOW() WHERE id = $2`,
+          [isRunning, vm.id],
+        );
+        await audit.log({
+          user: req.user, action: 'UPDATE', entityType: vm.table, entityId: vm.id,
+          details: {
+            reason: 'nessus_live_check_correction', field: 'tenable_installed',
+            ip_address, service_status: result.service.status,
+            from: vm.tenableInstalled, to: isRunning,
+          },
+          ipAddress: req.ip,
+        });
+        result.corrected = { field: 'tenable_installed', from: vm.tenableInstalled, to: isRunning };
+      }
     }
 
     res.json(result);
