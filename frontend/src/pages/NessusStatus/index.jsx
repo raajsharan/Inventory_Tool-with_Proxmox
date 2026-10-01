@@ -6,7 +6,7 @@ import {
   Table, Tag, Tooltip, Typography,
 } from 'antd';
 import {
-  CheckCircleFilled, CloseCircleFilled, CloudDownloadOutlined,
+  CheckCircleFilled, ClearOutlined, CloseCircleFilled, CloudDownloadOutlined,
   ExclamationCircleFilled, FileSearchOutlined, InfoCircleOutlined,
   PlayCircleOutlined, QuestionCircleOutlined, ReloadOutlined,
   SafetyCertificateOutlined, SearchOutlined, SettingOutlined,
@@ -71,7 +71,7 @@ const vmKey        = (v) => `${v.ip_address}||${v.source}`;
 // ── component ─────────────────────────────────────────────────────────────────
 export default function NessusStatus() {
   const { user } = useAuth();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
 
   const [data,          setData]          = useState(null);
@@ -80,6 +80,7 @@ export default function NessusStatus() {
   const [expanded,      setExpanded]      = useState([]);
   const [methodMap,     setMethodMap]     = useState({});
 
+  const [cleanupLoading, setCleanupLoading] = useState(false);
   const [verifyMap,       setVerifyMap]       = useState({});
   const [installMap,      setInstallMap]      = useState({});
   const [serviceActionMap, setServiceActionMap] = useState({});
@@ -141,6 +142,16 @@ export default function NessusStatus() {
         patchMap(setVerifyMap, key, { state: 'done', result: { connected: false, error: err } });
       } else {
         patchMap(setVerifyMap, key, { state: 'done', result: r });
+        // A reachable live check disagreed with the stored record, and the
+        // backend already corrected it (nessusStatusController.verify) —
+        // reload so the Installed badge, counts, and compliance % catch up
+        // instead of reading stale until the next manual refresh.
+        if (r.corrected) {
+          message.info(
+            `${vm.vm_name || vm.ip_address}: live check confirmed Nessus is ${r.corrected.to ? 'installed' : 'not installed'} — record updated to match.`
+          );
+          load();
+        }
       }
     } catch (e) {
       patchMap(setVerifyMap, key, {
@@ -148,7 +159,7 @@ export default function NessusStatus() {
         result: { connected: false, error: e.response?.data?.error || e.message },
       });
     }
-  }, []); // eslint-disable-line
+  }, [load]); // eslint-disable-line
 
   // ── service start / restart ───────────────────────────────────────────────────
   // Credentials come exclusively from the asset record — no manual entry.
@@ -178,6 +189,36 @@ export default function NessusStatus() {
       patchMap(setServiceActionMap, key, { state: 'done', action, result: { connected: false, error: err } });
     }
   }, [runVerify]); // eslint-disable-line
+
+  // ── cleanup: stale "Installed" on now-not-applicable records ───────────────────
+  // A record whose OS Type/Version was later corrected to an appliance,
+  // ESXi/vCenter, EVE-NG, CentOS, Cisco, or Mac can still carry a
+  // tenable_installed=true left over from before that correction — it can
+  // never actually run the agent, so that's just wrong data. Admin-only,
+  // confirmed, and only ever clears true -> false (never the reverse).
+  function runCleanup() {
+    modal.confirm({
+      title: 'Clean up non-applicable "Installed" records?',
+      content: 'Resets Tenable Installed to No on any record whose current OS Type makes it Nessus-not-applicable (appliance, ESXi/vCenter, EVE-NG, CentOS, Cisco, Mac) but still shows Installed = Yes from before that OS Type was set. This only clears stale true values — it never marks anything as installed.',
+      okText: 'Clean up',
+      onOk: async () => {
+        setCleanupLoading(true);
+        try {
+          const { data: r } = await api.post('/nessus-status/cleanup-non-applicable');
+          if (r.corrected_count) {
+            message.success(`Corrected ${r.corrected_count} record(s) — reloading.`);
+            load();
+          } else {
+            message.info('Nothing to correct — no non-applicable records had a stale Installed value.');
+          }
+        } catch (e) {
+          message.error(e.response?.data?.error || 'Failed to clean up records');
+        } finally {
+          setCleanupLoading(false);
+        }
+      },
+    });
+  }
 
   // ── install ──────────────────────────────────────────────────────────────────
   // Credentials come exclusively from the asset record — no manual entry.
@@ -492,9 +533,14 @@ export default function NessusStatus() {
           </div>
         </Space>
         {isAdmin && (
-          <Link to="/admin/nessus-install-config">
-            <Tooltip title="Configure the credentials and method used to install the agent"><Button icon={<SettingOutlined />}>Install Configuration</Button></Tooltip>
-          </Link>
+          <Space>
+            <Tooltip title="Reset Tenable Installed to No on records whose OS Type now makes them Nessus-not-applicable but still show stale Installed = Yes from before that correction">
+              <Button icon={<ClearOutlined />} loading={cleanupLoading} onClick={runCleanup}>Clean Up Non-Applicable</Button>
+            </Tooltip>
+            <Link to="/admin/nessus-install-config">
+              <Tooltip title="Configure the credentials and method used to install the agent"><Button icon={<SettingOutlined />}>Install Configuration</Button></Tooltip>
+            </Link>
+          </Space>
         )}
       </div>
 

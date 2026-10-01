@@ -13,5 +13,6 @@ router.put('/install-config',  ...adminGuard, ctrl.saveInstallConfig);
 router.post('/install',        ...adminGuard, ctrl.install);
 router.get('/install-log',     ...guard,      ctrl.getInstallLog);
 router.delete('/install-log',  ...adminGuard, ctrl.clearInstallLog);
+router.post('/cleanup-non-applicable', ...adminGuard, ctrl.cleanupNonApplicable);
 
 module.exports = router;

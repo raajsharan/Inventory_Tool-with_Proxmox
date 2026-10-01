@@ -15,6 +15,7 @@ const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
 const { verifyWindowsAgentViaAnsible } = require('../utils/ansibleWindowsVerify');
 const { ping } = require('../utils/ping');
 const ApiError = require('../utils/ApiError');
+const audit = require('../services/auditService');
 
 const NESSUS_CFG_OVERRIDE = {
   linuxConfig:   NESSUS_LINUX_CONFIG,
@@ -28,6 +29,34 @@ const SOURCE_TABLE = {
   'Physical Servers': 'physical_esxi_servers',
 };
 
+// physical_esxi_servers has no tenable_installed column at all (dropped in
+// schema.sql — bare-metal/ESXi rows from that table are hardcoded to "not
+// installed" in get() below), so it's excluded here.
+const TENABLE_COLUMN_TABLES = new Set(['assets', 'beijing_assets', 'ext_assets']);
+
+// Same Windows/Linux-minus-overrides classification get()'s SQL builds
+// inline below — pulled out as one string so cleanupNonApplicable()'s plain
+// UPDATEs (not wrapped in that query) can't drift out of sync with it.
+const NOT_APPLICABLE_SQL = `(
+  os_type ILIKE '%centos%'
+  OR os_type ILIKE '%proxmox%'
+  OR os_type ILIKE '%vcenter%'  OR os_type ILIKE '%vmware%' OR os_type ILIKE '%esxi%'
+  OR os_type ILIKE '%appliance%'
+  OR os_type ILIKE '%cisco%'
+  OR os_type ILIKE '%mac%'
+  OR REPLACE(REPLACE(os_type, '-', ''), ' ', '') ILIKE '%eveng%'
+  OR NOT (
+    os_type ILIKE '%windows%'
+    OR os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
+    OR os_type ILIKE '%centos%'       OR os_type ILIKE '%rhel%'
+    OR os_type ILIKE '%red hat%'      OR os_type ILIKE '%redhat%'
+    OR os_type ILIKE '%debian%'       OR os_type ILIKE '%suse%'
+    OR os_type ILIKE '%fedora%'       OR os_type ILIKE '%rocky%'
+    OR os_type ILIKE '%alma%'         OR os_type ILIKE '%oracle linux%'
+    OR os_type ILIKE '%amazon linux%'
+  )
+)`;
+
 function appendLog(logFilePath, ip, level, message) {
   if (!logFilePath) return;
   try {
@@ -37,12 +66,15 @@ function appendLog(logFilePath, ip, level, message) {
 }
 
 // ── shared: resolve credentials ───────────────────────────────────────────────
+// Also surfaces id/table/current tenable_installed so verify() below can
+// self-heal that field against a live check without a second round-trip.
 async function resolveVm(ip_address, source, override_username, override_password) {
   const table = SOURCE_TABLE[source];
   if (!table) throw new ApiError(400, 'Unknown source: ' + source);
+  const hasTenableCol = TENABLE_COLUMN_TABLES.has(table);
 
   const { rows } = await db.query(
-    `SELECT asset_username, asset_password_encrypted, os_type
+    `SELECT id, asset_username, asset_password_encrypted, os_type${hasTenableCol ? ', tenable_installed' : ''}
        FROM ${table}
       WHERE ip_address::text = $1 AND deleted_at IS NULL
       LIMIT 1`,
@@ -57,7 +89,11 @@ async function resolveVm(ip_address, source, override_username, override_passwor
   if (!password && row.asset_password_encrypted) {
     try { password = decrypt(row.asset_password_encrypted); } catch {}
   }
-  return { username, password, osType };
+  return {
+    id: row.id, table, hasTenableCol,
+    tenableInstalled: hasTenableCol ? !!row.tenable_installed : null,
+    username, password, osType,
+  };
 }
 
 const fileCheck = (p) => { if (!p) return null; try { return fs.existsSync(p); } catch { return false; } };
@@ -219,10 +255,11 @@ async function verify(req, res, next) {
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
     // Credentials always come from the asset record — no manual overrides.
-    const [{ username, password, osType }, pingResult] = await Promise.all([
+    const [vm, pingResult] = await Promise.all([
       resolveVm(ip_address, source),
       ping(ip_address),
     ]);
+    const { username, password, osType } = vm;
 
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
@@ -230,6 +267,29 @@ async function verify(req, res, next) {
     const result = await nessusAgentCheck({ ip_address, port, winrm_port, username, password, osType });
     result.ping  = pingResult;
     result.meta  = { credentials_source: 'stored', os_type: osType };
+
+    // Self-heal: a live check that actually reached the host is strictly
+    // more trustworthy than whatever's stored, so sync tenable_installed to
+    // match whenever the two disagree. An unreachable host gives no new
+    // evidence either way, so a failed/unreachable check never touches the
+    // stored value — only a successful, reachable check can correct it.
+    if (vm.hasTenableCol && result.connected && typeof result.installed === 'boolean'
+        && result.installed !== vm.tenableInstalled) {
+      await db.query(
+        `UPDATE ${vm.table} SET tenable_installed = $1, updated_at = NOW() WHERE id = $2`,
+        [result.installed, vm.id],
+      );
+      await audit.log({
+        user: req.user, action: 'UPDATE', entityType: vm.table, entityId: vm.id,
+        details: {
+          reason: 'nessus_live_check_correction', field: 'tenable_installed',
+          ip_address, from: vm.tenableInstalled, to: result.installed,
+        },
+        ipAddress: req.ip,
+      });
+      result.corrected = { field: 'tenable_installed', from: vm.tenableInstalled, to: result.installed };
+    }
+
     res.json(result);
   } catch (e) { next(e); }
 }
@@ -614,4 +674,43 @@ async function clearInstallLog(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { get, verify, serviceAction, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog };
+// ── POST /nessus-status/cleanup-non-applicable ────────────────────────────────
+// A record whose os_type was later corrected to something Nessus-not-
+// applicable (an appliance, ESXi/vCenter, EVE-NG, CentOS, Cisco, Mac — see
+// NOT_APPLICABLE_SQL above) can still carry a stale tenable_installed=true
+// from before that correction. It can never actually run the agent, so
+// that's just wrong data sitting in the compliance figures — reset it.
+// physical_esxi_servers has no tenable_installed column, so it's never
+// touched here (nothing to correct).
+async function cleanupNonApplicable(req, res, next) {
+  try {
+    const corrected = [];
+    for (const table of TENABLE_COLUMN_TABLES) {
+      const { rows } = await db.query(
+        `UPDATE ${table}
+            SET tenable_installed = false, updated_at = NOW()
+          WHERE tenable_installed = true
+            AND deleted_at IS NULL AND decommissioned_at IS NULL
+            AND ${NOT_APPLICABLE_SQL}
+        RETURNING id, vm_name, ip_address, os_type`,
+      );
+      for (const r of rows) corrected.push({ table, ...r });
+    }
+    for (const r of corrected) {
+      await audit.log({
+        user: req.user, action: 'UPDATE', entityType: r.table, entityId: r.id,
+        details: {
+          reason: 'nessus_non_applicable_cleanup', field: 'tenable_installed',
+          from: true, to: false, os_type: r.os_type, ip_address: r.ip_address,
+        },
+        ipAddress: req.ip,
+      });
+    }
+    res.json({ corrected_count: corrected.length, corrected });
+  } catch (e) { next(e); }
+}
+
+module.exports = {
+  get, verify, serviceAction, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog,
+  cleanupNonApplicable,
+};
