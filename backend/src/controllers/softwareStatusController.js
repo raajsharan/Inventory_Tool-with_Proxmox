@@ -540,6 +540,10 @@ async function install(req, res, next) {
     // answers "localhost" to a bare hostname but "localhost.localdomain" to
     // the FQDN form. If the probe itself can't connect, it is not treated as
     // a failed check — the install below will report the real error.
+    // Represented as skipped (not a failed/error install) — same shape as
+    // the skip_if_installed path below, so the UI shows a calm "Skipped"
+    // badge with the real reason instead of a misleading "Check output" /
+    // exit-code-1 failure for something that was never actually attempted.
     appendLog(logFile, ip_address, 'INFO', 'Checking the host has a real hostname before installing...');
     const hostnameProbe = await sshRunCommand({
       host: ip_address, port, username, password,
@@ -548,14 +552,13 @@ async function install(req, res, next) {
     });
     const liveHostname = (hostnameProbe.output || '').trim();
     if (liveHostname.toLowerCase() === 'localhost.localdomain') {
-      const reason = `Refusing to install: this host still reports its hostname as "${liveHostname}". `
+      const reason = `Skipped — this host still reports its hostname as "${liveHostname}". `
         + 'The ME Agent registers under the machine\'s hostname, so it would enroll as '
         + 'localhost.localdomain and collide with every other unnamed host. Give the machine a '
         + 'real hostname, then run this again.';
-      appendLog(logFile, ip_address, 'ERROR', reason);
+      appendLog(logFile, ip_address, 'INFO', reason);
       return res.json({
-        connected: true, error: reason, output: liveHostname, exitCode: 1,
-        platform: 'linux', os_type: osType, hostname_rejected: true,
+        skipped: true, reason, platform: 'linux', os_type: osType, hostname_rejected: true,
       });
     }
 

@@ -390,7 +390,7 @@ export default function SoftwareStatus() {
             return (
               <Space size={4} wrap>
                 <Tag color="blue">Skipped</Tag>
-                <Typography.Text type="secondary" style={{ fontSize: 11 }}>Already installed</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>{is.result.reason || 'Already installed'}</Typography.Text>
                 <Button size="small" icon={<ReloadOutlined />} onClick={() => runInstall(vm)} />
               </Space>
             );
