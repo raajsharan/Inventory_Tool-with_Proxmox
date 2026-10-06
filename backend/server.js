@@ -30,6 +30,17 @@ const wsHub = require('./src/services/wsHub');
 
 const app = express();
 
+// This app always runs behind a single reverse proxy (nginx) in production,
+// which sets X-Forwarded-For/X-Forwarded-Proto. Without this, Express (and
+// anything reading req.ip, like express-rate-limit's IP-based key generator)
+// ignores those headers and sees every request as coming from nginx itself —
+// express-rate-limit specifically refuses to trust X-Forwarded-For at all
+// once it detects that mismatch, throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// on every rate-limited request. `1` trusts exactly one hop (nginx), not an
+// arbitrary chain, since nginx is the only proxy directly in front of this
+// process.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 // Large JSON payloads (asset lists, discovery/dashboard aggregations) and the
 // static frontend bundle all benefit from gzip — cheap win, no correctness risk.
