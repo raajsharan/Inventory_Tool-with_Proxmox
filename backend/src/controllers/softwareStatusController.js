@@ -49,6 +49,13 @@ async function ensureTarInstalled({ host, port, username, password }) {
   }
 }
 
+// ManageEngine's own uninstaller (fixed path — same on every Linux VM it's
+// installed on) prompts interactively for an uninstall OTP rather than
+// taking one as a CLI argument, so it's piped into stdin via `echo` rather
+// than passed as an argument. {otp} is substituted at run time, same
+// convention as {installer} in the install command below.
+const DEFAULT_LINUX_UNINSTALL_CMD = 'echo "{otp}" | sudo /usr/local/manageengine/uems_agent/RemoveUEMSAgent.sh';
+
 const SOURCE_TABLE = {
   'MSL Assets':      'assets',
   'Beijing Assets':  'beijing_assets',
@@ -289,7 +296,7 @@ async function getInstallConfig(req, res, next) {
       return res.json(attachFileChecks(locRow ? { ...locRow } : { location, exists: false }));
     }
     const { rows } = await db.query(
-      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd,
+      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
               windows_method, windows_file_path, windows_cmd,
               windows_psexec_path, windows_winrm_port, windows_smb_port,
               skip_if_installed, log_file_path, updated_at
@@ -343,7 +350,7 @@ async function deleteLocationConfig(req, res, next) {
 async function saveInstallConfig(req, res, next) {
   try {
     const {
-      linux_file_path, linux_serverinfo_path, linux_cmd,
+      linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
       windows_method, windows_file_path, windows_cmd,
       windows_psexec_path, windows_winrm_port, windows_smb_port,
       skip_if_installed, log_file_path,
@@ -353,15 +360,16 @@ async function saveInstallConfig(req, res, next) {
     if (location) {
       const { rows } = await db.query(
         `INSERT INTO software_install_location_config
-           (location, linux_file_path, linux_serverinfo_path, linux_cmd,
+           (location, linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
             windows_method, windows_file_path, windows_cmd,
             windows_psexec_path, windows_winrm_port, windows_smb_port,
             updated_by, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
          ON CONFLICT (location) DO UPDATE
            SET linux_file_path       = EXCLUDED.linux_file_path,
                linux_serverinfo_path = EXCLUDED.linux_serverinfo_path,
                linux_cmd             = EXCLUDED.linux_cmd,
+               linux_uninstall_cmd   = EXCLUDED.linux_uninstall_cmd,
                windows_method        = EXCLUDED.windows_method,
                windows_file_path     = EXCLUDED.windows_file_path,
                windows_cmd           = EXCLUDED.windows_cmd,
@@ -373,7 +381,7 @@ async function saveInstallConfig(req, res, next) {
          RETURNING *`,
         [
           location,
-          linux_file_path || null, linux_serverinfo_path || null, linux_cmd || null,
+          linux_file_path || null, linux_serverinfo_path || null, linux_cmd || null, linux_uninstall_cmd || null,
           windows_method || null, windows_file_path || null, windows_cmd || null,
           windows_psexec_path || null,
           windows_winrm_port || null, windows_smb_port || null,
@@ -384,15 +392,16 @@ async function saveInstallConfig(req, res, next) {
     }
     const { rows } = await db.query(
       `INSERT INTO software_install_config
-         (id, linux_file_path, linux_serverinfo_path, linux_cmd,
+         (id, linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
           windows_method, windows_file_path, windows_cmd,
           windows_psexec_path, windows_winrm_port, windows_smb_port,
           skip_if_installed, log_file_path, updated_by, updated_at)
-       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
        ON CONFLICT (id) DO UPDATE
          SET linux_file_path        = EXCLUDED.linux_file_path,
              linux_serverinfo_path  = EXCLUDED.linux_serverinfo_path,
              linux_cmd              = EXCLUDED.linux_cmd,
+             linux_uninstall_cmd    = EXCLUDED.linux_uninstall_cmd,
              windows_method         = EXCLUDED.windows_method,
              windows_file_path      = EXCLUDED.windows_file_path,
              windows_cmd            = EXCLUDED.windows_cmd,
@@ -403,12 +412,12 @@ async function saveInstallConfig(req, res, next) {
              log_file_path          = EXCLUDED.log_file_path,
              updated_by             = EXCLUDED.updated_by,
              updated_at             = NOW()
-       RETURNING linux_file_path, linux_serverinfo_path, linux_cmd,
+       RETURNING linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
                  windows_method, windows_file_path, windows_cmd,
                  windows_psexec_path, windows_winrm_port, windows_smb_port,
                  skip_if_installed, log_file_path, updated_at`,
       [
-        linux_file_path || null, linux_serverinfo_path || null, linux_cmd || null,
+        linux_file_path || null, linux_serverinfo_path || null, linux_cmd || null, linux_uninstall_cmd || null,
         windows_method || 'auto', windows_file_path || null, windows_cmd || null,
         windows_psexec_path || null, windows_winrm_port || 5985, windows_smb_port || 445,
         skip_if_installed === true || skip_if_installed === 'true', log_file_path || null, req.user.id,
@@ -450,6 +459,102 @@ function installMeWindowsViaAnsible({ ip_address, username, password, cfgRow, os
   });
 }
 
+// ── shared: Linux ME agent install ────────────────────────────────────────────
+// Hostname guard, tar check, upload+run — used directly by install() below,
+// and by reinstall() after a successful uninstall. One place to maintain so
+// the two paths can't silently drift apart.
+async function performLinuxInstall({ ip_address, port, username, password, osType, cfgRow, logFile }) {
+  const binPath  = cfgRow.linux_file_path;
+  const infoPath = cfgRow.linux_serverinfo_path;
+  const cmd      = cfgRow.linux_cmd || '';
+
+  if (binPath  && !fs.existsSync(binPath))  throw new ApiError(422, `Linux installer not found: ${binPath}`);
+  if (infoPath && !fs.existsSync(infoPath)) throw new ApiError(422, `serverinfo.json not found: ${infoPath}`);
+  if (!binPath && !cmd.trim())              throw new ApiError(422, 'No Linux installer configured.');
+
+  // The agent registers itself in ManageEngine under the machine's own
+  // hostname, so a host left at the RHEL-family default would enroll as
+  // localhost.localdomain and collide with every other unnamed host.
+  // Read live rather than from os_hostname on the record, because the live
+  // value is the one the agent will actually use. -f first: an unnamed box
+  // answers "localhost" to a bare hostname but "localhost.localdomain" to
+  // the FQDN form. If the probe itself can't connect, it is not treated as
+  // a failed check — the install below will report the real error.
+  // Represented as skipped (not a failed/error install) — same shape as
+  // the skip_if_installed path in install() below, so the UI shows a calm
+  // "Skipped" badge with the real reason instead of a misleading
+  // "Check output" / exit-code-1 failure for something never attempted.
+  appendLog(logFile, ip_address, 'INFO', 'Checking the host has a real hostname before installing...');
+  const hostnameProbe = await sshRunCommand({
+    host: ip_address, port, username, password,
+    command: 'hostname -f 2>/dev/null || hostname',
+    timeout: 15000,
+  });
+  const liveHostname = (hostnameProbe.output || '').trim();
+  if (liveHostname.toLowerCase() === 'localhost.localdomain') {
+    const reason = `Skipped — this host still reports its hostname as "${liveHostname}". `
+      + 'The ME Agent registers under the machine\'s hostname, so it would enroll as '
+      + 'localhost.localdomain and collide with every other unnamed host. Give the machine a '
+      + 'real hostname, then run this again.';
+    appendLog(logFile, ip_address, 'INFO', reason);
+    return { skipped: true, reason, platform: 'linux', os_type: osType, hostname_rejected: true };
+  }
+
+  if (binPath) {
+    const tarCheck = await ensureTarInstalled({ host: ip_address, port, username, password });
+    if (/TAR_ALREADY_PRESENT/.test(tarCheck.output || '')) {
+      appendLog(logFile, ip_address, 'INFO', 'tar already present');
+    } else if (tarCheck.exitCode === 0) {
+      appendLog(logFile, ip_address, 'INFO', 'tar was missing — installed it automatically before running the agent installer');
+    } else {
+      appendLog(logFile, ip_address, 'WARN', `Could not confirm/install tar (${tarCheck.error || tarCheck.output || 'unknown reason'}) — proceeding with install anyway`);
+    }
+  }
+
+  let result;
+  if (binPath) {
+    const files = [{ localPath: binPath, placeholder: 'installer' }];
+    if (infoPath) files.unshift({ localPath: infoPath, placeholder: 'serverinfo' });
+    result = await sshUploadAndRun({
+      host: ip_address, port, username, password, remoteDir: '/tmp', files,
+      command: cmd || 'chmod +x {installer} && sudo {installer} --silent',
+    });
+  } else {
+    result = await sshRunCommand({ host: ip_address, port, username, password, command: cmd });
+  }
+  if (result.exitCode === 0) {
+    appendLog(logFile, ip_address, 'SUCCESS', 'Linux deployment completed');
+  } else {
+    appendLog(logFile, ip_address, 'ERROR', `Linux deployment failed (exit ${result.exitCode ?? 'null'}): ${result.error || ''}`);
+  }
+  result.platform = 'linux';
+  result.os_type  = osType;
+  result.command  = cmd;
+  return result;
+}
+
+// ── shared: Linux ME agent uninstall via OTP ──────────────────────────────────
+// ManageEngine's RemoveUEMSAgent.sh prompts interactively for an OTP (the
+// admin fetches this from the Endpoint Central console for this specific
+// device) rather than taking one as a CLI argument, so it's piped into
+// stdin here. The OTP is redacted from the returned/logged command — it's
+// a short-lived, single-use code, but no reason to keep it around longer
+// than the one command that consumes it.
+async function performLinuxUninstall({ ip_address, port, username, password, cfgRow, logFile, otp }) {
+  const cmdTemplate = cfgRow.linux_uninstall_cmd || DEFAULT_LINUX_UNINSTALL_CMD;
+  const cmd = cmdTemplate.replace(/\{otp\}/g, otp);
+  appendLog(logFile, ip_address, 'INFO', 'Uninstalling ManageEngine Agent (OTP-authorized)...');
+  const result = await sshRunCommand({ host: ip_address, port, username, password, command: cmd, timeout: 60000 });
+  if (result.exitCode === 0) {
+    appendLog(logFile, ip_address, 'SUCCESS', 'ManageEngine Agent uninstalled');
+  } else {
+    appendLog(logFile, ip_address, 'ERROR', `Uninstall failed (exit ${result.exitCode ?? 'null'}): ${result.error || ''}`);
+  }
+  result.platform = 'linux';
+  result.command  = cmdTemplate.replace(/\{otp\}/g, '••••••');
+  return result;
+}
+
 // ── POST /software-status/install ─────────────────────────────────────────────
 async function install(req, res, next) {
   try {
@@ -467,7 +572,7 @@ async function install(req, res, next) {
 
     // Load config — the VM's location override (if any) merged over the default
     const { rows: cfg } = await db.query(
-      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd,
+      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
               windows_method, windows_file_path, windows_cmd,
               windows_psexec_path, windows_winrm_port, windows_smb_port,
               skip_if_installed, log_file_path
@@ -524,75 +629,69 @@ async function install(req, res, next) {
     }
 
     // ── Linux ──────────────────────────────────────────────────────────────────
-    const binPath  = cfgRow.linux_file_path;
-    const infoPath = cfgRow.linux_serverinfo_path;
-    const cmd      = cfgRow.linux_cmd || '';
-
-    if (binPath  && !fs.existsSync(binPath))  throw new ApiError(422, `Linux installer not found: ${binPath}`);
-    if (infoPath && !fs.existsSync(infoPath)) throw new ApiError(422, `serverinfo.json not found: ${infoPath}`);
-    if (!binPath && !cmd.trim())              throw new ApiError(422, 'No Linux installer configured.');
-
-    // The agent registers itself in ManageEngine under the machine's own
-    // hostname, so a host left at the RHEL-family default would enroll as
-    // localhost.localdomain and collide with every other unnamed host.
-    // Read live rather than from os_hostname on the record, because the live
-    // value is the one the agent will actually use. -f first: an unnamed box
-    // answers "localhost" to a bare hostname but "localhost.localdomain" to
-    // the FQDN form. If the probe itself can't connect, it is not treated as
-    // a failed check — the install below will report the real error.
-    // Represented as skipped (not a failed/error install) — same shape as
-    // the skip_if_installed path below, so the UI shows a calm "Skipped"
-    // badge with the real reason instead of a misleading "Check output" /
-    // exit-code-1 failure for something that was never actually attempted.
-    appendLog(logFile, ip_address, 'INFO', 'Checking the host has a real hostname before installing...');
-    const hostnameProbe = await sshRunCommand({
-      host: ip_address, port, username, password,
-      command: 'hostname -f 2>/dev/null || hostname',
-      timeout: 15000,
-    });
-    const liveHostname = (hostnameProbe.output || '').trim();
-    if (liveHostname.toLowerCase() === 'localhost.localdomain') {
-      const reason = `Skipped — this host still reports its hostname as "${liveHostname}". `
-        + 'The ME Agent registers under the machine\'s hostname, so it would enroll as '
-        + 'localhost.localdomain and collide with every other unnamed host. Give the machine a '
-        + 'real hostname, then run this again.';
-      appendLog(logFile, ip_address, 'INFO', reason);
-      return res.json({
-        skipped: true, reason, platform: 'linux', os_type: osType, hostname_rejected: true,
-      });
-    }
-
-    if (binPath) {
-      const tarCheck = await ensureTarInstalled({ host: ip_address, port, username, password });
-      if (/TAR_ALREADY_PRESENT/.test(tarCheck.output || '')) {
-        appendLog(logFile, ip_address, 'INFO', 'tar already present');
-      } else if (tarCheck.exitCode === 0) {
-        appendLog(logFile, ip_address, 'INFO', 'tar was missing — installed it automatically before running the agent installer');
-      } else {
-        appendLog(logFile, ip_address, 'WARN', `Could not confirm/install tar (${tarCheck.error || tarCheck.output || 'unknown reason'}) — proceeding with install anyway`);
-      }
-    }
-
-    let result;
-    if (binPath) {
-      const files = [{ localPath: binPath, placeholder: 'installer' }];
-      if (infoPath) files.unshift({ localPath: infoPath, placeholder: 'serverinfo' });
-      result = await sshUploadAndRun({
-        host: ip_address, port, username, password, remoteDir, files,
-        command: cmd || 'chmod +x {installer} && sudo {installer} --silent',
-      });
-    } else {
-      result = await sshRunCommand({ host: ip_address, port, username, password, command: cmd });
-    }
-    if (result.exitCode === 0) {
-      appendLog(logFile, ip_address, 'SUCCESS', 'Linux deployment completed');
-    } else {
-      appendLog(logFile, ip_address, 'ERROR', `Linux deployment failed (exit ${result.exitCode ?? 'null'}): ${result.error || ''}`);
-    }
-    result.platform = 'linux';
-    result.os_type  = osType;
-    result.command  = cmd;
+    const result = await performLinuxInstall({ ip_address, port, username, password, osType, cfgRow, logFile });
     res.json(result);
+  } catch (e) { next(e); }
+}
+
+// ── POST /software-status/reinstall ───────────────────────────────────────────
+// OTP-authorized uninstall (admin fetches the OTP from the Endpoint Central
+// console for this device), then — only if that uninstall actually
+// succeeded — a normal install, reusing the exact same performLinuxInstall
+// path as a fresh deploy. A failed/unreachable uninstall stops here rather
+// than attempting to install on top of a host in an unknown state.
+// Linux only for now — ManageEngine's Windows uninstaller isn't wired up.
+async function reinstall(req, res, next) {
+  try {
+    const { ip_address, source, port = 22, otp } = req.body;
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+    if (!otp || !String(otp).trim()) throw new ApiError(400, 'otp is required');
+
+    const { username, password, osType, location } = await resolveVm(ip_address, source);
+    if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
+    if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
+
+    if (isWindows(osType)) {
+      throw new ApiError(422, 'Reinstall via OTP is currently only supported for Linux hosts.');
+    }
+
+    const { rows: cfg } = await db.query(
+      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd, log_file_path
+         FROM software_install_config WHERE id = 1`,
+    );
+    const locCfg  = await getLocationConfigRow(location);
+    const cfgRow  = mergeLocationConfig(cfg[0] || {}, locCfg);
+    const logFile = cfgRow.log_file_path || null;
+    if (locCfg) appendLog(logFile, ip_address, 'INFO', `Using "${location}" location installer configuration`);
+
+    const uninstallResult = await performLinuxUninstall({
+      ip_address, port, username, password, cfgRow, logFile, otp: String(otp).trim(),
+    });
+
+    await audit.log({
+      user: req.user, action: 'UPDATE', entityType: 'manage_engine_reinstall', entityId: ip_address,
+      details: { ip_address, step: 'uninstall', exitCode: uninstallResult.exitCode, connected: uninstallResult.connected },
+      ipAddress: req.ip,
+    });
+
+    if (!uninstallResult.connected || uninstallResult.exitCode !== 0) {
+      // Don't attempt an install on top of an uninstall that didn't clearly
+      // succeed — the agent could be left in a half-removed, unknown state.
+      return res.json({ uninstall: uninstallResult, install: null });
+    }
+
+    const installResult = await performLinuxInstall({ ip_address, port, username, password, osType, cfgRow, logFile });
+
+    await audit.log({
+      user: req.user, action: 'UPDATE', entityType: 'manage_engine_reinstall', entityId: ip_address,
+      details: {
+        ip_address, step: 'install',
+        exitCode: installResult.exitCode, connected: installResult.connected, skipped: !!installResult.skipped,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({ uninstall: uninstallResult, install: installResult });
   } catch (e) { next(e); }
 }
 
@@ -621,6 +720,6 @@ async function clearInstallLog(req, res, next) {
 }
 
 module.exports = {
-  get, verify, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog,
+  get, verify, getInstallConfig, saveInstallConfig, install, reinstall, getInstallLog, clearInstallLog,
   getInstallConfigLocations, deleteLocationConfig,
 };

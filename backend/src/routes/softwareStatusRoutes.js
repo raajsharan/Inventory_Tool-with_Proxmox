@@ -12,6 +12,7 @@ router.get('/install-config/locations', ...guard,      ctrl.getInstallConfigLoca
 router.put('/install-config',           ...adminGuard, ctrl.saveInstallConfig);
 router.delete('/install-config',        ...adminGuard, ctrl.deleteLocationConfig);
 router.post('/install',        ...adminGuard, ctrl.install);
+router.post('/reinstall',      ...adminGuard, ctrl.reinstall);
 router.get('/install-log',     ...guard,      ctrl.getInstallLog);
 router.delete('/install-log',  ...adminGuard, ctrl.clearInstallLog);
 

@@ -454,6 +454,7 @@ const STATEMENTS = [
       linux_file_path        TEXT,
       linux_serverinfo_path  TEXT,
       linux_cmd              TEXT,
+      linux_uninstall_cmd    TEXT,
       windows_method         VARCHAR(16) DEFAULT 'ssh',
       windows_file_path      TEXT,
       windows_cmd            TEXT,
@@ -496,6 +497,7 @@ const STATEMENTS = [
       linux_file_path        TEXT,
       linux_serverinfo_path  TEXT,
       linux_cmd              TEXT,
+      linux_uninstall_cmd    TEXT,
       windows_method         VARCHAR(16),
       windows_file_path      TEXT,
       windows_cmd            TEXT,
@@ -505,6 +507,12 @@ const STATEMENTS = [
       updated_by             UUID REFERENCES users(id) ON DELETE SET NULL,
       updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+
+  // ── ME agent reinstall-via-OTP (linux_uninstall_cmd): existing
+  // deployments predate this column, so CREATE TABLE IF NOT EXISTS above
+  // won't add it to an already-existing table — explicit ALTERs for those.
+  `ALTER TABLE software_install_config          ADD COLUMN IF NOT EXISTS linux_uninstall_cmd TEXT`,
+  `ALTER TABLE software_install_location_config ADD COLUMN IF NOT EXISTS linux_uninstall_cmd TEXT`,
 
   // ── VMware-to-Proxmox migration tracker tables ───────────────────────────
   `CREATE TABLE IF NOT EXISTS migration_hosts (

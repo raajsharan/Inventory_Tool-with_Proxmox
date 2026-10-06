@@ -21,6 +21,7 @@ const WINDOWS_FILE_PLACEHOLDER    = 'D:\\Installers\\ManageEngine_UEMS_Agent.exe
 const WINDOWS_PSEXEC_PLACEHOLDER  = 'C:\\Tools\\PsExec64.exe';
 
 const LINUX_CMD_PLACEHOLDER = `chmod +x {installer} && sudo {installer} --silent`;
+const LINUX_UNINSTALL_CMD_PLACEHOLDER = `echo "{otp}" | sudo /usr/local/manageengine/uems_agent/RemoveUEMSAgent.sh`;
 
 const WIN_CMD_HINTS = {
   ssh:      { label: 'PowerShell / CMD command', placeholder: '{installer} /Silent' },
@@ -287,6 +288,28 @@ export default function InstallConfig() {
                 <Input.TextArea
                   rows={3}
                   placeholder={LINUX_CMD_PLACEHOLDER}
+                  style={{ fontFamily: 'monospace', fontSize: 12 }}
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="linux_uninstall_cmd"
+                label={
+                  <Space>
+                    Uninstall command <Tag style={{ marginLeft: 4 }}>runs on remote VM</Tag>
+                  </Space>
+                }
+                extra={
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    Used by "Reinstall" on the Software Status page. <code>{'{otp}'}</code> = the OTP
+                    the admin enters at reinstall time (fetched from Endpoint Central for that device) —
+                    piped into the uninstaller's interactive prompt, not passed as an argument.
+                  </Text>
+                }
+              >
+                <Input.TextArea
+                  rows={2}
+                  placeholder={LINUX_UNINSTALL_CMD_PLACEHOLDER}
                   style={{ fontFamily: 'monospace', fontSize: 12 }}
                 />
               </Form.Item>

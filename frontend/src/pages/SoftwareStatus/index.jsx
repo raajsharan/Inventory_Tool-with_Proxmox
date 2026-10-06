@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Alert, App, Badge, Button, Card, Col, Descriptions, Form, Input,
+  Alert, App, Badge, Button, Card, Col, Descriptions, Divider, Form, Input,
   InputNumber, Modal, Progress, Row, Select, Space, Spin, Statistic,
   Table, Tag, Tooltip, Typography,
 } from 'antd';
@@ -86,6 +86,14 @@ export default function SoftwareStatus() {
 
   // install state per VM: idle | loading | done
   const [installMap, setInstallMap] = useState({});
+
+  // reinstall (OTP-authorized uninstall, then install) state per VM: idle | loading | done
+  const [reinstallMap, setReinstallMap] = useState({});
+  // OTP prompt modal — opened by the Reinstall button, collects the OTP the
+  // admin fetched from Endpoint Central for this specific device.
+  const [otpPrompt, setOtpPrompt] = useState({ open: false, vm: null, otp: '' });
+  // combined uninstall+install output modal
+  const [reinstallDetail, setReinstallDetail] = useState({ open: false, vm: null, result: null });
 
   // credential modal (shared for verify + install)
 
@@ -220,6 +228,43 @@ export default function SoftwareStatus() {
       setInstallDetail({ open: true, vm, result: { connected: false, error: err } });
     }
   }, [methodMap, installConfig, locConfigMap]); // eslint-disable-line
+
+  // ── reinstall (OTP-authorized uninstall, then install) ─────────────────────────
+  // Linux only — see softwareStatusController.reinstall. Credentials come
+  // exclusively from the asset record; only the OTP is manually entered,
+  // fetched by the admin from Endpoint Central for this specific device.
+  const runReinstall = useCallback(async (vm, otp) => {
+    const key = vmKey(vm);
+    patchMap(setReinstallMap, key, { state: 'loading', result: null });
+    try {
+      const { data: r } = await api.post('/software-status/reinstall', {
+        ip_address: vm.ip_address, source: vm.source, port: 22, otp,
+      });
+      if (r.needs_credentials) {
+        const err = missingCredsError(vm, r);
+        message.warning(err);
+        patchMap(setReinstallMap, key, { state: 'done', result: { uninstall: { connected: false, error: err }, install: null } });
+      } else {
+        patchMap(setReinstallMap, key, { state: 'done', result: r });
+        setReinstallDetail({ open: true, vm, result: r });
+      }
+    } catch (e) {
+      const err = e.response?.data?.error || e.message;
+      const result = { uninstall: { connected: false, error: err }, install: null };
+      patchMap(setReinstallMap, key, { state: 'done', result });
+      setReinstallDetail({ open: true, vm, result });
+    }
+  }, []); // eslint-disable-line
+
+  function openOtpPrompt(vm) {
+    setOtpPrompt({ open: true, vm, otp: '' });
+  }
+  function confirmOtpPrompt() {
+    const { vm, otp } = otpPrompt;
+    if (!otp.trim()) return;
+    setOtpPrompt({ open: false, vm: null, otp: '' });
+    runReinstall(vm, otp.trim());
+  }
 
   // ── filtered data ────────────────────────────────────────────────────────────
   const locationOptions = useMemo(
@@ -380,65 +425,97 @@ export default function SoftwareStatus() {
         const win    = isWindows(vm.os_type);
         const method = methodMap[key] || cfgFor(vm).windows_method || 'auto';
 
+        let installContent;
         if (is.state === 'loading') {
           const label = WIN_METHOD_OPTIONS.find(o => o.value === (is.method || method))?.label || method;
-          return <Space size={4}><Spin size="small" /><Typography.Text type="secondary" style={{ fontSize: 11 }}>Installing via {label}…</Typography.Text></Space>;
-        }
-
-        if (is.state === 'done' && is.result) {
+          installContent = <Space size={4}><Spin size="small" /><Typography.Text type="secondary" style={{ fontSize: 11 }}>Installing via {label}…</Typography.Text></Space>;
+        } else if (is.state === 'done' && is.result) {
           if (is.result.skipped) {
-            return (
+            installContent = (
               <Space size={4} wrap>
                 <Tag color="blue">Skipped</Tag>
                 <Typography.Text type="secondary" style={{ fontSize: 11 }}>{is.result.reason || 'Already installed'}</Typography.Text>
                 <Button size="small" icon={<ReloadOutlined />} onClick={() => runInstall(vm)} />
               </Space>
             );
+          } else {
+            const success = is.result.connected && is.result.exitCode === 0;
+            const usedMethod = is.result.succeeded_method || is.result.method || method;
+            installContent = (
+              <Space size={4} wrap>
+                <Tag color={success ? 'success' : 'warning'}>
+                  {success ? 'Done' : is.result.connected ? 'Check output' : 'Failed'}
+                </Tag>
+                {usedMethod && <Tag color={WIN_METHOD_COLORS[usedMethod] || 'default'} style={{ fontSize: 10 }}>{usedMethod}</Tag>}
+                <Button size="small" type="link" style={{ padding: 0 }}
+                  onClick={() => setInstallDetail({ open: true, vm, result: is.result })}>Output</Button>
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => runInstall(vm)} />
+              </Space>
+            );
           }
-          const success = is.result.connected && is.result.exitCode === 0;
-          const usedMethod = is.result.succeeded_method || is.result.method || method;
-          return (
-            <Space size={4} wrap>
-              <Tag color={success ? 'success' : 'warning'}>
-                {success ? 'Done' : is.result.connected ? 'Check output' : 'Failed'}
-              </Tag>
-              {usedMethod && <Tag color={WIN_METHOD_COLORS[usedMethod] || 'default'} style={{ fontSize: 10 }}>{usedMethod}</Tag>}
-              <Button size="small" type="link" style={{ padding: 0 }}
-                onClick={() => setInstallDetail({ open: true, vm, result: is.result })}>Output</Button>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => runInstall(vm)} />
-            </Space>
+        } else {
+          installContent = (
+            <Space.Compact size="small">
+              {win && (
+                <Select
+                  size="small"
+                  value={method}
+                  onChange={v => setMethodMap(prev => ({ ...prev, [key]: v }))}
+                  popupMatchSelectWidth={false}
+                  style={{ width: 88 }}
+                  options={WIN_METHOD_OPTIONS.map(o => ({
+                    value: o.value,
+                    label: (
+                      <Tooltip title={o.description} placement="left">
+                        <span>{o.label}</span>
+                      </Tooltip>
+                    ),
+                  }))}
+                />
+              )}
+              <Tooltip title={!ok ? 'No installer configured — go to Admin → Install Configuration' : undefined}>
+                <Button
+                  size="small" type="primary" icon={<CloudDownloadOutlined />}
+                  disabled={!ok}
+                  onClick={() => runInstall(vm)}
+                >
+                  {win ? 'Install' : 'Install (SSH)'}
+                </Button>
+              </Tooltip>
+            </Space.Compact>
           );
         }
 
-        return (
-          <Space.Compact size="small">
-            {win && (
-              <Select
-                size="small"
-                value={method}
-                onChange={v => setMethodMap(prev => ({ ...prev, [key]: v }))}
-                popupMatchSelectWidth={false}
-                style={{ width: 88 }}
-                options={WIN_METHOD_OPTIONS.map(o => ({
-                  value: o.value,
-                  label: (
-                    <Tooltip title={o.description} placement="left">
-                      <span>{o.label}</span>
-                    </Tooltip>
-                  ),
-                }))}
-              />
-            )}
-            <Tooltip title={!ok ? 'No installer configured — go to Admin → Install Configuration' : undefined}>
-              <Button
-                size="small" type="primary" icon={<CloudDownloadOutlined />}
-                disabled={!ok}
-                onClick={() => runInstall(vm)}
-              >
-                {win ? 'Install' : 'Install (SSH)'}
+        // Reinstall (OTP-authorized uninstall, then install) — Linux only,
+        // see softwareStatusController.reinstall. Independent of whatever
+        // the regular Install flow above is currently showing.
+        const ri = reinstallMap[key] || { state: 'idle' };
+        const reinstallContent = win ? null : (
+          ri.state === 'loading' ? (
+            <Space size={4}><Spin size="small" /><Typography.Text type="secondary" style={{ fontSize: 11 }}>Reinstalling…</Typography.Text></Space>
+          ) : ri.state === 'done' && ri.result ? (
+            <Space size={4} wrap>
+              <Tag color={ri.result.install?.connected && ri.result.install?.exitCode === 0 ? 'success' : 'warning'}>
+                Reinstall: {ri.result.install?.connected && ri.result.install?.exitCode === 0 ? 'Done' : 'Check output'}
+              </Tag>
+              <Button size="small" type="link" style={{ padding: 0 }}
+                onClick={() => setReinstallDetail({ open: true, vm, result: ri.result })}>Output</Button>
+              <Button size="small" icon={<ReloadOutlined />} onClick={() => openOtpPrompt(vm)} />
+            </Space>
+          ) : (
+            <Tooltip title="Uninstalls the agent (requires an OTP from Endpoint Central for this device), then installs it fresh">
+              <Button size="small" icon={<ReloadOutlined />} onClick={() => openOtpPrompt(vm)}>
+                Reinstall
               </Button>
             </Tooltip>
-          </Space.Compact>
+          )
+        );
+
+        return (
+          <Space direction="vertical" size={4}>
+            {installContent}
+            {reinstallContent}
+          </Space>
         );
       },
     }] : []),
@@ -642,6 +719,47 @@ export default function SoftwareStatus() {
         {installDetail.result && <InstallDetail vm={installDetail.vm} result={installDetail.result} />}
       </Modal>
 
+      {/* ── Reinstall: OTP prompt ─────────────────────────────────────────── */}
+      <Modal
+        title={<Space><ReloadOutlined />Reinstall — {otpPrompt.vm?.vm_name || otpPrompt.vm?.ip_address}</Space>}
+        open={otpPrompt.open}
+        onOk={confirmOtpPrompt}
+        onCancel={() => setOtpPrompt({ open: false, vm: null, otp: '' })}
+        okText="Uninstall &amp; Reinstall"
+        okButtonProps={{ danger: true, disabled: !otpPrompt.otp.trim() }}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          Fetch an uninstall OTP from Endpoint Central for this device, then enter it below. The
+          agent is uninstalled first (authorized by this OTP), and only if that succeeds is it
+          installed fresh again.
+        </Typography.Paragraph>
+        <Input
+          placeholder="Enter OTP"
+          value={otpPrompt.otp}
+          onChange={e => setOtpPrompt(s => ({ ...s, otp: e.target.value }))}
+          onPressEnter={confirmOtpPrompt}
+          autoFocus
+        />
+      </Modal>
+
+      {/* ── Reinstall output modal ────────────────────────────────────────── */}
+      <Modal
+        open={reinstallDetail.open}
+        title={<Space><ReloadOutlined />Reinstall Output — {reinstallDetail.vm?.vm_name || reinstallDetail.vm?.ip_address}</Space>}
+        onCancel={() => setReinstallDetail({ open: false, vm: null, result: null })}
+        footer={[
+          <Button key="ver" icon={<ThunderboltOutlined />}
+            onClick={() => { setReinstallDetail(s => ({ ...s, open: false })); runVerify(reinstallDetail.vm); }}>
+            Verify Now
+          </Button>,
+          <Button key="cl" type="primary" onClick={() => setReinstallDetail({ open: false, vm: null, result: null })}>Close</Button>,
+        ]}
+        width={700} destroyOnClose
+      >
+        {reinstallDetail.result && <ReinstallDetail vm={reinstallDetail.vm} result={reinstallDetail.result} />}
+      </Modal>
+
       <style>{`
         .row-warning td { background: #fff2f0 !important; }
         .row-warning:hover td { background: #ffe7e4 !important; }
@@ -820,6 +938,72 @@ function InstallDetail({ vm, result }) {
           </Typography.Text>
           <TerminalBox>{result.output}</TerminalBox>
         </>
+      )}
+    </Space>
+  );
+}
+
+// One step (uninstall or install) within the Reinstall output modal — same
+// connected/exitCode/command/output shape as InstallDetail above, just
+// titled and stacked rather than being the whole modal body.
+function StepResult({ title, result }) {
+  if (!result) return null;
+  const success = result.connected && result.exitCode === 0;
+
+  if (result.skipped) {
+    return (
+      <Space direction="vertical" style={{ width: '100%' }} size={8}>
+        <Typography.Text strong>{title}</Typography.Text>
+        <Alert type="info" showIcon message="Skipped" description={result.reason} />
+      </Space>
+    );
+  }
+  if (!result.connected) {
+    return (
+      <Space direction="vertical" style={{ width: '100%' }} size={8}>
+        <Typography.Text strong>{title}</Typography.Text>
+        <Alert type="error" showIcon message="Connection failed" description={result.error} />
+      </Space>
+    );
+  }
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={8}>
+      <Space wrap>
+        <Typography.Text strong>{title}</Typography.Text>
+        <Tag color={success ? 'success' : 'warning'}>Exit code: {result.exitCode ?? '—'}</Tag>
+      </Space>
+      {result.command && (
+        <>
+          <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            Command
+          </Typography.Text>
+          <TerminalBox>{result.command}</TerminalBox>
+        </>
+      )}
+      {result.output && (
+        <>
+          <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+            Output
+          </Typography.Text>
+          <TerminalBox>{result.output}</TerminalBox>
+        </>
+      )}
+    </Space>
+  );
+}
+
+function ReinstallDetail({ vm, result }) {
+  const { uninstall, install } = result;
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={20}>
+      <StepResult title="1. Uninstall" result={uninstall} />
+      <Divider style={{ margin: 0 }} />
+      {install ? (
+        <StepResult title="2. Install" result={install} />
+      ) : (
+        <Alert type="warning" showIcon
+          message="Install step not attempted"
+          description="The uninstall step didn't clearly succeed, so the install step was skipped — review the uninstall output above before retrying." />
       )}
     </Space>
   );
