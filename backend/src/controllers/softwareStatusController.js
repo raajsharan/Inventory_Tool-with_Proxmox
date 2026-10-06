@@ -12,6 +12,7 @@ const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
 const { verifyWindowsAgentViaAnsible } = require('../utils/ansibleWindowsVerify');
 const { WINDOWS_CONFIG } = require('../utils/sshVerify');
 const ApiError    = require('../utils/ApiError');
+const audit       = require('../services/auditService');
 
 function appendLog(logFilePath, ip, level, message) {
   if (!logFilePath) return;
@@ -55,13 +56,21 @@ const SOURCE_TABLE = {
   'Physical Servers':'physical_esxi_servers',
 };
 
+// physical_esxi_servers has no manage_engine_installed column at all
+// (dropped in schema.sql — bare-metal/ESXi rows from that table are
+// hardcoded to "not installed" in get() above), so it's excluded here.
+const ME_COLUMN_TABLES = new Set(['assets', 'beijing_assets', 'ext_assets']);
+
 // ── shared: resolve credentials for a VM ─────────────────────────────────────
+// Also surfaces id/table/current manage_engine_installed so verify() below
+// can self-heal that field against a live check without a second round-trip.
 async function resolveVm(ip_address, source, override_username, override_password) {
   const table = SOURCE_TABLE[source];
   if (!table) throw new ApiError(400, 'Unknown source: ' + source);
+  const hasMeCol = ME_COLUMN_TABLES.has(table);
 
   const { rows } = await db.query(
-    `SELECT asset_username, asset_password_encrypted, os_type, location
+    `SELECT id, asset_username, asset_password_encrypted, os_type, location${hasMeCol ? ', manage_engine_installed' : ''}
        FROM ${table}
       WHERE ip_address::text = $1
         AND deleted_at IS NULL
@@ -79,7 +88,11 @@ async function resolveVm(ip_address, source, override_username, override_passwor
     try { password = decrypt(row.asset_password_encrypted); } catch {}
   }
 
-  return { username, password, osType, location: (row.location || '').trim() };
+  return {
+    id: row.id, table, hasMeCol,
+    meInstalled: hasMeCol ? !!row.manage_engine_installed : null,
+    username, password, osType, location: (row.location || '').trim(),
+  };
 }
 
 // Merge a location override row over the global config — NULL/empty override
@@ -205,10 +218,11 @@ async function verify(req, res, next) {
     const { ip_address, source, port = 22 } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
-    const [{ username, password, osType, location }, pingResult] = await Promise.all([
+    const [vm, pingResult] = await Promise.all([
       resolveVm(ip_address, source),
       ping(ip_address),
     ]);
+    const { username, password, osType, location } = vm;
 
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType, ping: pingResult });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType, ping: pingResult });
@@ -219,6 +233,35 @@ async function verify(req, res, next) {
 
     result.ping = pingResult;
     result.meta = { credentials_source: 'stored', os_type: osType };
+
+    // Self-heal: a live check that actually reached the host and read its
+    // service status is strictly more trustworthy than whatever's stored,
+    // so sync manage_engine_installed to match — running -> Yes, anything
+    // else (stopped/inactive/exited/failed/paused/not_found/unknown) -> No.
+    // Unreachable hosts, or ones where the diagnostic command couldn't run
+    // at all (restricted_shell: service is null), give no usable evidence
+    // either way, so the stored value is left alone in both cases.
+    if (vm.hasMeCol && result.connected && result.service
+        && typeof result.service.status === 'string') {
+      const isRunning = result.service.status === 'running';
+      if (isRunning !== vm.meInstalled) {
+        await db.query(
+          `UPDATE ${vm.table} SET manage_engine_installed = $1, updated_at = NOW() WHERE id = $2`,
+          [isRunning, vm.id],
+        );
+        await audit.log({
+          user: req.user, action: 'UPDATE', entityType: vm.table, entityId: vm.id,
+          details: {
+            reason: 'me_agent_live_check_correction', field: 'manage_engine_installed',
+            ip_address, service_status: result.service.status,
+            from: vm.meInstalled, to: isRunning,
+          },
+          ipAddress: req.ip,
+        });
+        result.corrected = { field: 'manage_engine_installed', from: vm.meInstalled, to: isRunning };
+      }
+    }
+
     res.json(result);
   } catch (e) { next(e); }
 }

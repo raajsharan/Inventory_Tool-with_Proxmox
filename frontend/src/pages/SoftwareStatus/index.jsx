@@ -174,6 +174,16 @@ export default function SoftwareStatus() {
         patchMap(setVerifyMap, key, { state: 'done', result: { connected: false, error: err } });
       } else {
         patchMap(setVerifyMap, key, { state: 'done', result: r });
+        // A reachable live check disagreed with the stored record, and the
+        // backend already corrected it (softwareStatusController.verify) —
+        // reload so the Installed badge, counts, and compliance % catch up
+        // instead of reading stale until the next manual refresh.
+        if (r.corrected) {
+          message.info(
+            `${vm.vm_name || vm.ip_address}: live check confirmed ManageEngine Agent is ${r.corrected.to ? 'running' : 'not running'} — record updated to match.`
+          );
+          load();
+        }
       }
     } catch (e) {
       patchMap(setVerifyMap, key, {
@@ -181,7 +191,7 @@ export default function SoftwareStatus() {
         result: { connected: false, error: e.response?.data?.error || e.message },
       });
     }
-  }, []); // eslint-disable-line
+  }, [load]); // eslint-disable-line
 
   // ── install ─────────────────────────────────────────────────────────────────
   // Credentials come exclusively from the asset record — no manual entry.
