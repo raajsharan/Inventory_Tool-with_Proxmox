@@ -20,6 +20,7 @@ import api from '../api/client';
 import { useAppTheme } from '../context/ThemeContext.jsx';
 import InfrastructureDashboard from '../components/InfrastructureDashboard.jsx';
 import { DASH_CSS, useCountUp } from '../components/DashboardStatCard.jsx';
+import WorldLocationMap, { LOCATION_COLORS } from '../components/WorldLocationMap.jsx';
 import {
   resolveTabs, resolveDefaultView, resolveDefaultTab, resolveWidget, customWidgetsFor,
   DASHBOARD_WIDGETS,
@@ -235,12 +236,14 @@ function resolveExtChips(ec, extCfg = {}) {
     .map(c => ({ ...c, label: labels[c.key] || c.defaultLabel, value: ec[c.key] }));
 }
 
-function ExecutiveOverview({ data, compCfg = {} }) {
+function ExecutiveOverview({ data, compCfg = {}, isDark }) {
   const h = data.headline || {};
   const a = data.assetInventory || {};
   const e = data.extendedInventory || {};
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
+  const vmLoc = data.vmCountByLocation || [];
+  const vmLocTotal = vmLoc.reduce((s, r) => s + (r.count ?? 0), 0);
 
   const totalInventory = useCountUp(h.totalInventory ?? 0);
   const patchingCompliancePct = useCountUp((h.patchingCompliancePct ?? 0) * 10);
@@ -483,6 +486,68 @@ function ExecutiveOverview({ data, compCfg = {} }) {
       </Card></Wgt>
       </Col>
       </Row>
+
+      <Wgt tab="exec" k="vm_location_map"><Card style={{ marginTop: 24 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(19,168,168,0.14)', color: '#13a8a8',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <EnvironmentOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="vm_location_map" d="VM Count by Location" /></Typography.Title>
+              <Typography.Text type="secondary">Live VM inventory across office locations</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        {vmLoc.length === 0 ? (
+          <Typography.Text type="secondary">No location data assigned yet.</Typography.Text>
+        ) : (
+          <Row gutter={[24, 24]} align="middle">
+            <Col xs={24} lg={8}>
+              <div style={{ position: 'relative', width: 180, height: 180, margin: '0 auto' }}>
+                <Pie
+                  data={vmLoc.map(r => ({ key: r.location, value: r.count }))}
+                  angleField="value" colorField="key"
+                  innerRadius={0.7} radius={0.95}
+                  color={vmLoc.map((_, i) => LOCATION_COLORS[i % LOCATION_COLORS.length])}
+                  legend={false} tooltip={false} animate={false}
+                  label={false}
+                  height={180}
+                />
+                <div style={{
+                  position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>{vmLocTotal.toLocaleString()}</div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>VMs</Typography.Text>
+                </div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                {vmLoc.map((r, i) => (
+                  <div key={r.location} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0',
+                  }}>
+                    <Space size={8}>
+                      <span style={{
+                        width: 10, height: 10, borderRadius: '50%', display: 'inline-block',
+                        background: LOCATION_COLORS[i % LOCATION_COLORS.length],
+                      }} />
+                      <Typography.Text>{r.location}</Typography.Text>
+                    </Space>
+                    <Typography.Text strong>{(r.count ?? 0).toLocaleString()}</Typography.Text>
+                  </div>
+                ))}
+              </div>
+            </Col>
+            <Col xs={24} lg={16}>
+              <WorldLocationMap rows={vmLoc} isDark={isDark} />
+            </Col>
+          </Row>
+        )}
+      </Card></Wgt>
     </div>
   );
 }
@@ -1870,7 +1935,7 @@ export default function Dashboard() {
   }
 
   const TAB_CONTENT = {
-    exec:   (d) => <><ExecutiveOverview data={d} compCfg={compCfg} /><CustomWidgets tab="exec" /></>,
+    exec:   (d) => <><ExecutiveOverview data={d} compCfg={compCfg} isDark={isDark} /><CustomWidgets tab="exec" /></>,
     asset:  (d) => <><AssetInventoryTab data={d} isDark={isDark} axisStyle={axisStyle}
                      labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} /><CustomWidgets tab="asset" /></>,
     ext:    (d) => <><ExtendedInventoryTab data={d} compCfg={compCfg} /><CustomWidgets tab="ext" /></>,
