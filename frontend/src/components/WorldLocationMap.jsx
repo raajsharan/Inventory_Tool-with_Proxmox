@@ -1,4 +1,4 @@
-import { ComposableMap, Geographies, Geography, Marker, Line } from 'react-simple-maps';
+import { ComposableMap, Geographies, Geography, Marker, useMapContext } from 'react-simple-maps';
 import landTopo from 'world-atlas/land-110m.json';
 
 // Office locations come from the admin-configured "Locations" dropdown
@@ -33,18 +33,94 @@ export const LOCATION_COLORS = [
   '#13a8a8', '#1677ff', '#fa8c16', '#722ed1', '#eb2f96', '#52c41a', '#faad14',
 ];
 
+// Same "moving dot along an offset-path" technique as the Custom Topology
+// canvas's ConnectivityFlowEdge/.ctb-flow-dot — CSS offset-path takes the
+// same "M.. Q.." syntax an SVG path's "d" attribute does, so the arc string
+// built below works directly as both. Three dots per arc, started at
+// staggered negative delays so the stream reads as continuous motion from
+// the very first frame instead of bunching up and slowly spreading out.
+const FLOW_CSS = `
+@keyframes wlm-flow { to { offset-distance: 100%; } }
+@media (prefers-reduced-motion: no-preference) {
+  .wlm-flow-dot { animation: wlm-flow 2.6s linear infinite; }
+}
+`;
+const DOT_DELAYS = ['0s', '-0.87s', '-1.73s'];
+
+// One quadratic-bezier arc between two projected points, bowed toward the
+// top of the map — reads as a flight path / live data link rather than the
+// straight "ruler line" a plain d3 LineString between two far-apart points
+// would otherwise draw.
+function arcPath(projection, from, to) {
+  const p1 = projection(from);
+  const p2 = projection(to);
+  if (!p1 || !p2) return null;
+  const [x1, y1] = p1;
+  const [x2, y2] = p2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy) || 1;
+  const bow = dist * 0.22;
+  let cx = (x1 + x2) / 2 - (dy / dist) * bow;
+  let cy = (y1 + y2) / 2 + (dx / dist) * bow;
+  const my = (y1 + y2) / 2;
+  if (cy > my) { // always bow upward, regardless of which way the line runs
+    cx = (x1 + x2) / 2 + (dy / dist) * bow;
+    cy = (y1 + y2) / 2 - (dx / dist) * bow;
+  }
+  return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
+}
+
+// Rendered inside <ComposableMap> so useMapContext() can resolve lng/lat to
+// the map's current projected screen coordinates for the arcs below.
+function LiveLinks({ links }) {
+  const { projection } = useMapContext();
+  return (
+    <>
+      <style>{FLOW_CSS}</style>
+      {links.map(({ key, from, to, color }) => {
+        const d = arcPath(projection, from, to);
+        if (!d) return null;
+        return (
+          <g key={key}>
+            <path d={d} fill="none" stroke={color} strokeWidth={1} strokeOpacity={0.45} />
+            {DOT_DELAYS.map((delay, i) => (
+              <circle
+                key={i} r={3} className="wlm-flow-dot" fill={color}
+                style={{ offsetPath: `path('${d}')`, animationDelay: delay, filter: `drop-shadow(0 0 3px ${color})` }}
+              />
+            ))}
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
 // Connects every other plotted location back to whichever one has the
 // highest count (almost always the HQ) — a simple hub-and-spoke read of
 // "these sites are one connected inventory" rather than a literal network
 // topology, since this app has no real inter-site link data to draw from.
+// The animated dots are a visual "there's live traffic between these sites"
+// cue, not a feed of actual transactions — no such per-site traffic data
+// exists anywhere in this app to drive it for real.
 export default function WorldLocationMap({ rows, isDark }) {
   const plotted = (rows || []).filter(r => LOCATION_COORDS[r.location]);
   if (!plotted.length) return null;
 
   const hub = plotted.reduce((a, b) => (b.count > a.count ? b : a), plotted[0]);
   const landFill = isDark ? '#283046' : '#e2e8f5';
-  const lineColor = isDark ? '#3b82f6' : '#93c5fd';
+  const linkColor = isDark ? '#60a5fa' : '#1677ff';
   const labelFill = isDark ? '#f0f0f0' : '#262626';
+
+  const links = plotted
+    .filter(r => r.location !== hub.location)
+    .map(r => ({
+      key: r.location,
+      from: LOCATION_COORDS[hub.location],
+      to: LOCATION_COORDS[r.location],
+      color: linkColor,
+    }));
 
   return (
     <ComposableMap
@@ -63,17 +139,7 @@ export default function WorldLocationMap({ rows, isDark }) {
         }
       </Geographies>
 
-      {plotted.filter(r => r.location !== hub.location).map(r => (
-        <Line
-          key={`line-${r.location}`}
-          from={LOCATION_COORDS[hub.location]}
-          to={LOCATION_COORDS[r.location]}
-          stroke={lineColor}
-          strokeWidth={1.5}
-          strokeDasharray="4 3"
-          fill="none"
-        />
-      ))}
+      <LiveLinks links={links} />
 
       {plotted.map((r, i) => {
         const { dx, dy, anchor } = LABEL_OFFSETS[r.location] || DEFAULT_LABEL_OFFSET;
