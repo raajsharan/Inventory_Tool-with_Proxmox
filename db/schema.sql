@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     role                VARCHAR(64) NOT NULL DEFAULT 'viewer',
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,
     can_view_passwords  BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_agents   BOOLEAN NOT NULL DEFAULT FALSE,
     last_login_at       TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -26,6 +27,9 @@ ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 
 -- Add can_view_passwords for existing deployments.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_passwords BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Add can_manage_agents for existing deployments.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_agents BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);

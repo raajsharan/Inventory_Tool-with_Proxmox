@@ -73,4 +73,23 @@ function requirePasswordAccess(req, _res, next) {
     .catch(next);
 }
 
-module.exports = { authenticate, authorize, requirePageAccess, requirePasswordAccess };
+// Middleware: ensures user may install/reinstall agents (ManageEngine, Nessus).
+// admin/superadmin always pass; anyone else needs the per-user can_manage_agents
+// flag (set on Administration > Password & Page Control), checked fresh so a
+// grant or revoke takes effect on the next request rather than waiting for
+// the token to expire — same pattern as requirePasswordAccess above.
+function requireAgentManageAccess(req, _res, next) {
+  if (!req.user) return next(new ApiError(401, 'Unauthenticated'));
+  if (req.user.role === 'superadmin' || req.user.role === 'admin') return next();
+  const db = require('../config/db');
+  db.query(`SELECT can_manage_agents FROM users WHERE id = $1`, [req.user.id])
+    .then(({ rows }) => {
+      if (!rows[0]?.can_manage_agents) {
+        return next(new ApiError(403, 'Agent install/reinstall not permitted for your account'));
+      }
+      return next();
+    })
+    .catch(next);
+}
+
+module.exports = { authenticate, authorize, requirePageAccess, requirePasswordAccess, requireAgentManageAccess };

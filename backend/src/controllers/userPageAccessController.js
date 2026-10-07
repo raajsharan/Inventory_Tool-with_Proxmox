@@ -14,8 +14,8 @@ async function getMyAccess(req, res, next) {
 
 async function saveAccess(req, res, next) {
   try {
-    const { can_view_passwords, page_access } = req.body;
-    await svc.saveUserAccess(req.params.userId, { can_view_passwords, page_access }, req.user.id);
+    const { can_view_passwords, can_manage_agents, page_access } = req.body;
+    await svc.saveUserAccess(req.params.userId, { can_view_passwords, can_manage_agents, page_access }, req.user.id);
     res.json({ ok: true });
   } catch (e) { next(e); }
 }

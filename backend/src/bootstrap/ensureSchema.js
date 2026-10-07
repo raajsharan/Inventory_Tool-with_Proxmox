@@ -13,6 +13,7 @@ const STATEMENTS = [
   `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`,
   `ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(64)`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_passwords BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_agents BOOLEAN NOT NULL DEFAULT FALSE`,
   `CREATE TABLE IF NOT EXISTS custom_roles (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(64) UNIQUE NOT NULL,

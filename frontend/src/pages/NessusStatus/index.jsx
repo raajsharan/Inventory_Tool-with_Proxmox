@@ -70,9 +70,14 @@ const vmKey        = (v) => `${v.ip_address}||${v.source}`;
 
 // ── component ─────────────────────────────────────────────────────────────────
 export default function NessusStatus() {
-  const { user } = useAuth();
+  const { user, canManageAgents } = useAuth();
   const { message, modal } = App.useApp();
-  const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
+  const isAdmin   = ['admin', 'superadmin'].includes(user?.role);
+  // Install/Install Missing specifically also open up to users granted
+  // can_manage_agents (Administration > Password & Page Control) — every
+  // other admin-only action here (service start/stop, Clean Up, Install
+  // Configuration) stays gated on isAdmin, matching the backend routes.
+  const canInstall = isAdmin || canManageAgents;
 
   const [data,          setData]          = useState(null);
   const [loading,       setLoading]       = useState(true);
@@ -374,7 +379,7 @@ export default function NessusStatus() {
         );
       },
     },
-    ...(isAdmin ? [{
+    ...(canInstall ? [{
       title: (
         <Space>
           Install
@@ -498,7 +503,7 @@ export default function NessusStatus() {
               }}>
               Verify All ({pendingV})
             </Button>
-            {isAdmin && (
+            {canInstall && (
               <Tooltip title={anyNoCmd ? 'Some VMs have no installer configured' : undefined}>
                 <Button size="small" type="primary" icon={<CloudDownloadOutlined />}
                   style={{ background: ACCENT, borderColor: ACCENT }}

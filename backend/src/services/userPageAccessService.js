@@ -3,7 +3,7 @@ const db = require('../config/db');
 async function listUsersWithAccess() {
   const [usersRes, accessRes] = await Promise.all([
     db.query(
-      `SELECT id, email, full_name, role, is_active, can_view_passwords
+      `SELECT id, email, full_name, role, is_active, can_view_passwords, can_manage_agents
          FROM users
         WHERE role <> 'superadmin'
         ORDER BY role, full_name`
@@ -25,25 +25,26 @@ async function listUsersWithAccess() {
 
 async function getMyAccess(userId) {
   const [userRes, accessRes] = await Promise.all([
-    db.query(`SELECT can_view_passwords FROM users WHERE id = $1`, [userId]),
+    db.query(`SELECT can_view_passwords, can_manage_agents FROM users WHERE id = $1`, [userId]),
     db.query(`SELECT page_key, allowed FROM user_page_access WHERE user_id = $1`, [userId]),
   ]);
   const pageAccess = {};
   for (const r of accessRes.rows) pageAccess[r.page_key] = r.allowed;
   return {
     can_view_passwords: userRes.rows[0]?.can_view_passwords ?? false,
+    can_manage_agents: userRes.rows[0]?.can_manage_agents ?? false,
     page_access: pageAccess,
   };
 }
 
-async function saveUserAccess(userId, { can_view_passwords, page_access }, updatedBy) {
+async function saveUserAccess(userId, { can_view_passwords, can_manage_agents, page_access }, updatedBy) {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
 
     await client.query(
-      `UPDATE users SET can_view_passwords = $1 WHERE id = $2`,
-      [!!can_view_passwords, userId]
+      `UPDATE users SET can_view_passwords = $1, can_manage_agents = $2 WHERE id = $3`,
+      [!!can_view_passwords, !!can_manage_agents, userId]
     );
 
     if (page_access && typeof page_access === 'object') {

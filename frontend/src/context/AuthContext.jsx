@@ -19,6 +19,7 @@ export function AuthProvider({ children }) {
   const [pageAccess, setPageAccess] = useState({});
   const [userPageAccess, setUserPageAccess] = useState({});   // user-specific overrides
   const [canViewPasswords, setCanViewPasswords] = useState(false);
+  const [canManageAgents, setCanManageAgents] = useState(false);
   const [builtinOverrides, setBuiltinOverrides] = useState({});
   const [branding, setBranding] = useState(() => {
     const raw = localStorage.getItem('branding');
@@ -48,6 +49,7 @@ export function AuthProvider({ children }) {
       const { data } = await api.get('/user-page-control/my-access');
       setUserPageAccess(data.page_access || {});
       setCanViewPasswords(data.can_view_passwords || false);
+      setCanManageAgents(data.can_manage_agents || false);
     } catch {
       setUserPageAccess({});
     }
@@ -84,6 +86,7 @@ export function AuthProvider({ children }) {
       setUserPageAccess({});
       setBuiltinOverrides({});
       setCanViewPasswords(false);
+      setCanManageAgents(false);
     }
   }, [user, refreshPageAccess, refreshBuiltinOverrides, refreshUserPageAccess]);
 
@@ -138,7 +141,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, login, logout, loading, refreshMe, setUser,
       canSee, pageAccess, refreshPageAccess,
-      userPageAccess, refreshUserPageAccess, canViewPasswords,
+      userPageAccess, refreshUserPageAccess, canViewPasswords, canManageAgents,
       builtinOverrides, refreshBuiltinOverrides, getPageLabel,
       branding, refreshBranding,
     }}>

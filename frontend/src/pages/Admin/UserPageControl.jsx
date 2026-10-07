@@ -3,7 +3,7 @@ import {
   App, Avatar, Button, Col, Collapse, Row, Space, Spin, Switch, Tag, Typography, Alert, Tooltip,
 } from 'antd';
 import {
-  LockOutlined, SafetyCertificateOutlined, SaveOutlined,
+  LockOutlined, SafetyCertificateOutlined, SaveOutlined, ToolOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
@@ -62,6 +62,7 @@ function initUserData(users) {
   for (const u of users) {
     map[u.id] = {
       can_view_passwords: u.can_view_passwords || false,
+      can_manage_agents: u.can_manage_agents || false,
       page_access: { ...u.page_access },
       dirty: false,
       saving: false,
@@ -108,6 +109,31 @@ function UserPanel({ userId, userData, onChange }) {
           </Typography.Text>
           <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
             Allow this user to reveal passwords in Asset Inventory &amp; Extended Inventory
+          </Typography.Text>
+        </div>
+      </div>
+
+      {/* Agent install/reinstall */}
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 14,
+          padding: '12px 16px', borderRadius: 8, marginBottom: 20,
+          background: userData.can_manage_agents ? '#fffbe6' : '#fafafa',
+          border: `1px solid ${userData.can_manage_agents ? '#ffe58f' : '#f0f0f0'}`,
+          transition: 'background 0.25s, border-color 0.25s',
+        }}
+      >
+        <Switch
+          checked={userData.can_manage_agents}
+          onChange={(v) => setField('can_manage_agents', v)}
+        />
+        <div>
+          <Typography.Text strong>
+            <ToolOutlined style={{ marginRight: 6, color: '#faad14' }} />
+            Can install/reinstall agents
+          </Typography.Text>
+          <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+            Allow this user to install/reinstall the ManageEngine and Nessus agents
           </Typography.Text>
         </div>
       </div>
@@ -183,6 +209,7 @@ export default function UserPageControl() {
     try {
       await api.put(`/user-page-control/${userId}`, {
         can_view_passwords: ud.can_view_passwords,
+        can_manage_agents: ud.can_manage_agents,
         page_access: ud.page_access,
       });
       message.success(`Saved access settings for ${user?.full_name || user?.email}.`);

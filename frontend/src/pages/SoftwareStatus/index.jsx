@@ -69,9 +69,13 @@ const vmKey = (v) => `${v.ip_address}||${v.source}`;
 
 // ── component ─────────────────────────────────────────────────────────────────
 export default function SoftwareStatus() {
-  const { user } = useAuth();
+  const { user, canManageAgents } = useAuth();
   const { message } = App.useApp();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
+  // Install/Reinstall specifically also open up to users granted
+  // can_manage_agents (Administration > Password & Page Control) — Install
+  // Configuration stays admin-only, matching the backend routes.
+  const canInstall = isAdmin || canManageAgents;
 
   const [data, setData]                 = useState(null);
   const [loading, setLoading]           = useState(true);
@@ -408,7 +412,7 @@ export default function SoftwareStatus() {
         );
       },
     },
-    ...(isAdmin ? [{
+    ...(canInstall ? [{
       title: (
         <Space>
           Install
@@ -569,7 +573,7 @@ export default function SoftwareStatus() {
               }}>
               Verify All ({pendingV})
             </Button>
-            {isAdmin && (
+            {canInstall && (
               <Tooltip title={anyNoCmd ? 'Some VMs have no installer configured' : undefined}>
                 <Button size="small" type="primary" icon={<CloudDownloadOutlined />}
                   loading={installing}
