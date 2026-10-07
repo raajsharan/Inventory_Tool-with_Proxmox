@@ -440,6 +440,34 @@ function ExecutiveOverview({ data, compCfg = {}, isDark }) {
         </div>
       </div></Wgt>
 
+      <Wgt tab="exec" k="location_overview"><Card style={{ marginTop: 24 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(19,168,168,0.14)', color: '#13a8a8',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <EnvironmentOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="location_overview" d="VM / Physical & ESXi Servers Count by Location" /></Typography.Title>
+              <Typography.Text type="secondary">Live inventory across office locations, by IP subnet</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        <Row gutter={[24, 24]} align="middle">
+          <Col xs={24} lg={14}>
+            <WorldLocationMap rows={combinedLocIp} isDark={isDark} />
+          </Col>
+          <Col xs={24} lg={10}>
+            <Space direction="vertical" size={20} style={{ width: '100%' }}>
+              <MiniLocationDonut icon={<DesktopOutlined />} label="Virtual Machines" rows={vmLocIp} />
+              <MiniLocationDonut icon={<HddOutlined />} label="Physical & ESXi Servers" rows={physicalLocIp} />
+            </Space>
+          </Col>
+        </Row>
+      </Card></Wgt>
+
       <Row gutter={16} style={{ marginTop: 24 }}>
       <Col xs={24} lg={12}>
       <Wgt tab="exec" k="msl_compliance"><Card style={{ height: '100%' }}
@@ -548,34 +576,6 @@ function ExecutiveOverview({ data, compCfg = {}, isDark }) {
       </Card></Wgt>
       </Col>
       </Row>
-
-      <Wgt tab="exec" k="location_overview"><Card style={{ marginTop: 24 }}
-        title={
-          <Space>
-            <div style={{ background: 'rgba(19,168,168,0.14)', color: '#13a8a8',
-              width: 36, height: 36, borderRadius: 8, display: 'flex',
-              alignItems: 'center', justifyContent: 'center' }}>
-              <EnvironmentOutlined />
-            </div>
-            <div>
-              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="location_overview" d="VM / Physical & ESXi Servers Count by Location" /></Typography.Title>
-              <Typography.Text type="secondary">Live inventory across office locations, by IP subnet</Typography.Text>
-            </div>
-          </Space>
-        }
-      >
-        <Row gutter={[24, 24]} align="middle">
-          <Col xs={24} lg={14}>
-            <WorldLocationMap rows={combinedLocIp} isDark={isDark} />
-          </Col>
-          <Col xs={24} lg={10}>
-            <Space direction="vertical" size={20} style={{ width: '100%' }}>
-              <MiniLocationDonut icon={<DesktopOutlined />} label="Virtual Machines" rows={vmLocIp} />
-              <MiniLocationDonut icon={<HddOutlined />} label="Physical & ESXi Servers" rows={physicalLocIp} />
-            </Space>
-          </Col>
-        </Row>
-      </Card></Wgt>
     </div>
   );
 }
