@@ -36,16 +36,19 @@ export const LOCATION_COLORS = [
 // Same "moving dot along an offset-path" technique as the Custom Topology
 // canvas's ConnectivityFlowEdge/.ctb-flow-dot — CSS offset-path takes the
 // same "M.. Q.." syntax an SVG path's "d" attribute does, so the arc string
-// built below works directly as both. Three dots per arc, started at
-// staggered negative delays so the stream reads as continuous motion from
-// the very first frame instead of bunching up and slowly spreading out.
+// built below works directly as both. Two dots travel hub->spoke and two
+// more travel spoke->hub (.reverse just plays the same keyframes backwards),
+// staggered at negative delays so the link reads as continuous bidirectional
+// traffic from the very first frame rather than four dots bunched up at one
+// end and slowly spreading out.
 const FLOW_CSS = `
 @keyframes wlm-flow { to { offset-distance: 100%; } }
 @media (prefers-reduced-motion: no-preference) {
   .wlm-flow-dot { animation: wlm-flow 2.6s linear infinite; }
+  .wlm-flow-dot.reverse { animation-direction: reverse; }
 }
 `;
-const DOT_DELAYS = ['0s', '-0.87s', '-1.73s'];
+const DOT_DELAYS = ['0s', '-1.3s'];
 
 // One quadratic-bezier arc between two projected points, bowed toward the
 // top of the map — reads as a flight path / live data link rather than the
@@ -83,10 +86,17 @@ function LiveLinks({ links }) {
         if (!d) return null;
         return (
           <g key={key}>
-            <path d={d} fill="none" stroke={color} strokeWidth={1} strokeOpacity={0.45} />
+            <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.55}
+              strokeLinecap="round" strokeDasharray="0.5 6" />
             {DOT_DELAYS.map((delay, i) => (
               <circle
-                key={i} r={3} className="wlm-flow-dot" fill={color}
+                key={`f${i}`} r={2.5} className="wlm-flow-dot" fill={color}
+                style={{ offsetPath: `path('${d}')`, animationDelay: delay, filter: `drop-shadow(0 0 3px ${color})` }}
+              />
+            ))}
+            {DOT_DELAYS.map((delay, i) => (
+              <circle
+                key={`r${i}`} r={2.5} className="wlm-flow-dot reverse" fill={color}
                 style={{ offsetPath: `path('${d}')`, animationDelay: delay, filter: `drop-shadow(0 0 3px ${color})` }}
               />
             ))}
