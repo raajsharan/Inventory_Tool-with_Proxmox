@@ -100,6 +100,24 @@ export default function CustomTopologyNode({ id, data, selected }) {
       {data.sublabel && (
         <div style={{ fontSize: 11, color: 'var(--ctb-node-subtitle, #8c8c8c)' }}>{data.sublabel}</div>
       )}
+      {data.sourceKind === 'physical' && data.vmCounts && (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 6 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600,
+            padding: '1px 7px', borderRadius: 10, background: '#f6ffed', color: '#389e0d',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#52c41a' }} />
+            {data.vmCounts.on}
+          </span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600,
+            padding: '1px 7px', borderRadius: 10, background: '#fafafa', color: '#595959',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8c8c8c' }} />
+            {data.vmCounts.off}
+          </span>
+        </div>
+      )}
       {canExpandVMs && (
         <button
           type="button"

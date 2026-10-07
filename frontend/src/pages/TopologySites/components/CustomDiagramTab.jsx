@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow, Background, BackgroundVariant, Controls, MiniMap, ConnectionMode,
 } from '@xyflow/react';
@@ -7,7 +7,7 @@ import { App, Card, Select, Space, Empty, Spin, Typography, Alert } from 'antd';
 import api from '../../../api/client';
 import CustomTopologyNode from '../../Admin/CustomTopology/components/CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from '../../Admin/CustomTopology/components/ConnectivityFlowEdge.jsx';
-import { toggleHostVMs } from '../../Admin/CustomTopology/components/vmExpansion.js';
+import { toggleHostVMs, fetchVmCounts } from '../../Admin/CustomTopology/components/vmExpansion.js';
 import { useAppTheme } from '../../../context/ThemeContext.jsx';
 
 const { Text } = Typography;
@@ -75,6 +75,22 @@ export default function CustomDiagramTab({ platform }) {
     const hostNode = nodes.find(n => n.id === id);
     if (hostNode) toggleHostVMs({ hostNode, nodes, setNodes, setEdges, api, message });
   }, [nodes, message]);
+
+  // Same auto-populate-on-load behavior as the builder (see
+  // CustomTopologyTab.jsx) — nothing here is ever written back, this page
+  // has no Save at all, so there's no stripping to do on this side.
+  const countsAttempted = useRef(new Set());
+  useEffect(() => {
+    const pending = nodes.filter(n => (
+      n.data?.sourceKind === 'physical' && n.data?.vmCounts === undefined && !countsAttempted.current.has(n.id)
+    ));
+    pending.forEach(n => {
+      countsAttempted.current.add(n.id);
+      fetchVmCounts(n.data.sourceId, api)
+        .then(vmCounts => setNodes(nds => nds.map(x => (x.id === n.id ? { ...x, data: { ...x.data, vmCounts } } : x))))
+        .catch(() => {});
+    });
+  }, [nodes]);
 
   const nodesForCanvas = useMemo(
     () => nodes.map(n => ({ ...n, data: { ...n.data, onToggleVMs: handleToggleVMs } })),

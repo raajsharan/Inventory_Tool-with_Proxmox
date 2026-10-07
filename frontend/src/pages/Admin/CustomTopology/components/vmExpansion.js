@@ -37,8 +37,13 @@ export function buildVmChildren(hostId, hostPos, vms) {
       // (dataIndex 'name' there) — vm.hostname is the guest OS's own
       // reported hostname, which is frequently blank or generic (e.g.
       // "localhost.localdomain" when VMware Tools hasn't reported a real
-      // one), so it's the fallback here, not the primary label.
-      data: { label: vm.name || vm.hostname || 'VM', sublabel: vm.ips?.[0], tone: 'teal', parentHostId: hostId },
+      // one), so it's the fallback here, not the primary label. Tone also
+      // doubles as a powered-off signal — gray rather than teal — mirroring
+      // the host-level on/off count below.
+      data: {
+        label: vm.name || vm.hostname || 'VM', sublabel: vm.ips?.[0],
+        tone: vm.power === 'off' ? 'gray' : 'teal', parentHostId: hostId,
+      },
     });
     edges.push({
       id: `e-${hostId}-${vmId}`,
@@ -51,6 +56,23 @@ export function buildVmChildren(hostId, hostPos, vms) {
     });
   });
   return { nodes, edges };
+}
+
+function tallyPower(vms) {
+  const counts = { on: 0, off: 0, other: 0 };
+  for (const vm of vms) counts[vm.power === 'on' || vm.power === 'off' ? vm.power : 'other'] += 1;
+  return counts;
+}
+
+// Powered-on/off counts for one host, shown on the host node itself
+// (CustomTopologyNode) without needing to expand its VMs — a single read-only
+// GET, same endpoint the expand toggle below uses, so just as safe to call
+// from the read-only viewer as the builder. Callers decide whether this gets
+// persisted (the builder's Save strips it, matching vmsExpanded/vmsLoading,
+// so counts are always refetched fresh rather than going stale in storage).
+export async function fetchVmCounts(sourceId, api) {
+  const { data } = await api.get(`/physical-esxi/${sourceId}/discovered-vms`);
+  return tallyPower(data.vms || []);
 }
 
 // Shared "+ show VMs / collapse" behavior for any host-type node
@@ -79,9 +101,10 @@ export async function toggleHostVMs({ hostNode, nodes, setNodes, setEdges, api, 
   setNodes(nds => nds.map(n => (n.id === hostId ? { ...n, data: { ...n.data, vmsLoading: true } } : n)));
   try {
     const { data } = await api.get(`/physical-esxi/${sourceId}/discovered-vms`);
+    const vmCounts = tallyPower(data.vms || []);
     if (!data.vms?.length) {
       message.info('No discovered VMs found for this host');
-      setNodes(nds => nds.map(n => (n.id === hostId ? { ...n, data: { ...n.data, vmsLoading: false } } : n)));
+      setNodes(nds => nds.map(n => (n.id === hostId ? { ...n, data: { ...n.data, vmsLoading: false, vmCounts } } : n)));
       return;
     }
     // Re-read the host's current position from the live array passed in —
@@ -89,7 +112,7 @@ export async function toggleHostVMs({ hostNode, nodes, setNodes, setEdges, api, 
     const live = nodes.find(n => n.id === hostId) || hostNode;
     const { nodes: vmNodes, edges: vmEdges } = buildVmChildren(hostId, live.position, data.vms);
     setNodes(nds => [
-      ...nds.map(n => (n.id === hostId ? { ...n, data: { ...n.data, vmsLoading: false, vmsExpanded: true } } : n)),
+      ...nds.map(n => (n.id === hostId ? { ...n, data: { ...n.data, vmsLoading: false, vmsExpanded: true, vmCounts } } : n)),
       ...vmNodes,
     ]);
     setEdges(eds => [...eds, ...vmEdges]);

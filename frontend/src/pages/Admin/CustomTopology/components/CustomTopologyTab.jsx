@@ -15,7 +15,7 @@ import { useAuth } from '../../../../context/AuthContext.jsx';
 import { useAppTheme } from '../../../../context/ThemeContext.jsx';
 import CustomTopologyNode, { TONE_COLORS, CUSTOM_TOPOLOGY_CSS } from './CustomTopologyNode.jsx';
 import ConnectivityFlowEdge from './ConnectivityFlowEdge.jsx';
-import { EDGE_PALETTE, defaultEdgeOptions, newNodeId, toggleHostVMs } from './vmExpansion.js';
+import { EDGE_PALETTE, defaultEdgeOptions, newNodeId, toggleHostVMs, fetchVmCounts } from './vmExpansion.js';
 
 const { Text } = Typography;
 
@@ -144,6 +144,25 @@ export default function CustomTopologyTab({ platform }) {
     if (hostNode) toggleHostVMs({ hostNode, nodes, setNodes, setEdges, api, message });
   }, [nodes, setNodes, setEdges, message]);
 
+  // Auto-populate each physical host's on/off VM counts as soon as the
+  // diagram loads, without requiring the admin to click "+" — purely a
+  // view concern (see fetchVmCounts in vmExpansion.js), so it's never part
+  // of what Save persists. The ref tracks which host IDs a fetch has
+  // already been attempted for, so this doesn't refire every render or
+  // re-request for a host whose lookup failed/returned empty.
+  const countsAttempted = useRef(new Set());
+  useEffect(() => {
+    const pending = nodes.filter(n => (
+      n.data?.sourceKind === 'physical' && n.data?.vmCounts === undefined && !countsAttempted.current.has(n.id)
+    ));
+    pending.forEach(n => {
+      countsAttempted.current.add(n.id);
+      fetchVmCounts(n.data.sourceId, api)
+        .then(vmCounts => setNodes(nds => nds.map(x => (x.id === n.id ? { ...x, data: { ...x.data, vmCounts } } : x))))
+        .catch(() => {});
+    });
+  }, [nodes, setNodes]);
+
   // Function props (onRename/onToggleVMs) aren't part of the persisted
   // node — they're attached only for the canvas render, never saved to the
   // backend (the raw `nodes` state PUT in handleSave stays plain JSON).
@@ -166,8 +185,8 @@ export default function CustomTopologyTab({ platform }) {
       const cleanNodes = nodes
         .filter(n => n.data?.parentHostId === undefined)
         .map(n => {
-          if (n.data?.vmsExpanded === undefined && n.data?.vmsLoading === undefined) return n;
-          const { vmsExpanded, vmsLoading, ...rest } = n.data;
+          if (n.data?.vmsExpanded === undefined && n.data?.vmsLoading === undefined && n.data?.vmCounts === undefined) return n;
+          const { vmsExpanded, vmsLoading, vmCounts, ...rest } = n.data;
           return { ...n, data: rest };
         });
       const cleanEdges = edges.filter(e => e.data?.parentHostId === undefined);

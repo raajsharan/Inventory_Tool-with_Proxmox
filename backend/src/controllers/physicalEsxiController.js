@@ -150,6 +150,31 @@ async function viewIdracPassword(req, res, next) {
 // for the full rationale). Whichever platform matches first wins; if none
 // do (e.g. a manually-registered server never synced from a discovery
 // run), platform comes back null with an empty vms list.
+//
+// Each platform names/values its own power state differently — normalized
+// here to 'on' | 'off' | 'other' (suspended/paused/saved/unknown) so the
+// Topology of Sites host nodes can show one consistent powered-on/off count
+// regardless of which platform a given host turned out to be.
+function normalizePower(vm, platform) {
+  if (platform === 'vmware') {
+    if (vm.power_state === 'poweredOn') return 'on';
+    if (vm.power_state === 'poweredOff') return 'off';
+    return 'other'; // suspended, unknown
+  }
+  if (platform === 'proxmox') {
+    if (vm.status === 'running') return 'on';
+    if (vm.status === 'stopped') return 'off';
+    return 'other'; // paused
+  }
+  if (platform === 'hyperv') {
+    const st = (vm.state || '').toLowerCase();
+    if (st === 'running') return 'on';
+    if (st === 'off') return 'off';
+    return 'other'; // saved, paused
+  }
+  return 'other';
+}
+
 async function getDiscoveredVMs(req, res, next) {
   try {
     const host = await svc.get(req.params.id);
@@ -169,7 +194,10 @@ async function getDiscoveredVMs(req, res, next) {
 
     res.json({
       platform,
-      vms: vms.map(v => ({ name: v.name, hostname: v.hostname || null, ips: v.ips || [] })),
+      vms: vms.map(v => ({
+        name: v.name, hostname: v.hostname || null, ips: v.ips || [],
+        power: normalizePower(v, platform),
+      })),
     });
   } catch (e) { next(e); }
 }
