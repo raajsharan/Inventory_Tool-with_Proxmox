@@ -36,8 +36,7 @@ export const DASHBOARD_WIDGETS = {
     { key: 'ext_summary',    defaultTitle: 'Extended Inventory Summary' },
     { key: 'msl_compliance', defaultTitle: 'Total Inventory MSL Compliance' },
     { key: 'ext_compliance', defaultTitle: 'Ext. Endpoint Compliance' },
-    { key: 'physical_location_map', defaultTitle: 'Physical & ESXi Servers by Location' },
-    { key: 'vm_location_map', defaultTitle: 'VM Count by Location' },
+    { key: 'location_overview', defaultTitle: 'VM / Physical & ESXi Servers Count by Location' },
   ],
   asset: [
     { key: 'kpi_cards',       defaultTitle: 'Headline KPI cards', renamable: false },
