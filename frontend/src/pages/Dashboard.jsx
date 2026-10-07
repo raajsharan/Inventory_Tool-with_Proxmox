@@ -220,6 +220,76 @@ function ExtChip({ label, value, tone }) {
   );
 }
 
+// Donut + legend + world map for one location breakdown — used twice in
+// ExecutiveOverview (Physical & ESXi Servers, VMs), parameterized so the two
+// don't duplicate this layout.
+function LocationMapCard({ tab, widgetKey, icon, iconBg, iconColor, defaultTitle, subtitle, rows, unitLabel, isDark }) {
+  const total = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+  return (
+    <Card style={{ marginTop: 24 }}
+      title={
+        <Space>
+          <div style={{ background: iconBg, color: iconColor,
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            {icon}
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab={tab} k={widgetKey} d={defaultTitle} /></Typography.Title>
+            <Typography.Text type="secondary">{subtitle}</Typography.Text>
+          </div>
+        </Space>
+      }
+    >
+      {rows.length === 0 ? (
+        <Typography.Text type="secondary">No location data assigned yet.</Typography.Text>
+      ) : (
+        <Row gutter={[24, 24]} align="middle">
+          <Col xs={24} lg={8}>
+            <div style={{ position: 'relative', width: 180, height: 180, margin: '0 auto' }}>
+              <Pie
+                data={rows.map(r => ({ key: r.location, value: r.count }))}
+                angleField="value" colorField="key"
+                innerRadius={0.7} radius={0.95}
+                color={rows.map((_, i) => LOCATION_COLORS[i % LOCATION_COLORS.length])}
+                legend={false} tooltip={false} animate={false}
+                label={false}
+                height={180}
+              />
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+              }}>
+                <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>{total.toLocaleString()}</div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{unitLabel}</Typography.Text>
+              </div>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              {rows.map((r, i) => (
+                <div key={r.location} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0',
+                }}>
+                  <Space size={8}>
+                    <span style={{
+                      width: 10, height: 10, borderRadius: '50%', display: 'inline-block',
+                      background: LOCATION_COLORS[i % LOCATION_COLORS.length],
+                    }} />
+                    <Typography.Text>{r.location}</Typography.Text>
+                  </Space>
+                  <Typography.Text strong>{(r.count ?? 0).toLocaleString()}</Typography.Text>
+                </div>
+              ))}
+            </div>
+          </Col>
+          <Col xs={24} lg={16}>
+            <WorldLocationMap rows={rows} isDark={isDark} />
+          </Col>
+        </Row>
+      )}
+    </Card>
+  );
+}
+
 // Build the ordered, filtered, label-resolved chip list for the Ext. Endpoint Compliance card.
 const EXT_CHIP_DEFS = [
   { key: 'meInstalled',     defaultLabel: 'ManageEngine Installed', tone: 'emerald' },
@@ -242,8 +312,8 @@ function ExecutiveOverview({ data, compCfg = {}, isDark }) {
   const e = data.extendedInventory || {};
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
-  const vmLoc = data.vmCountByLocation || [];
-  const vmLocTotal = vmLoc.reduce((s, r) => s + (r.count ?? 0), 0);
+  const vmLocIp = data.vmCountByLocationIp || [];
+  const physicalLocIp = data.physicalCountByLocationIp || [];
 
   const totalInventory = useCountUp(h.totalInventory ?? 0);
   const patchingCompliancePct = useCountUp((h.patchingCompliancePct ?? 0) * 10);
@@ -487,67 +557,21 @@ function ExecutiveOverview({ data, compCfg = {}, isDark }) {
       </Col>
       </Row>
 
-      <Wgt tab="exec" k="vm_location_map"><Card style={{ marginTop: 24 }}
-        title={
-          <Space>
-            <div style={{ background: 'rgba(19,168,168,0.14)', color: '#13a8a8',
-              width: 36, height: 36, borderRadius: 8, display: 'flex',
-              alignItems: 'center', justifyContent: 'center' }}>
-              <EnvironmentOutlined />
-            </div>
-            <div>
-              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="vm_location_map" d="VM Count by Location" /></Typography.Title>
-              <Typography.Text type="secondary">Live VM inventory across office locations</Typography.Text>
-            </div>
-          </Space>
-        }
-      >
-        {vmLoc.length === 0 ? (
-          <Typography.Text type="secondary">No location data assigned yet.</Typography.Text>
-        ) : (
-          <Row gutter={[24, 24]} align="middle">
-            <Col xs={24} lg={8}>
-              <div style={{ position: 'relative', width: 180, height: 180, margin: '0 auto' }}>
-                <Pie
-                  data={vmLoc.map(r => ({ key: r.location, value: r.count }))}
-                  angleField="value" colorField="key"
-                  innerRadius={0.7} radius={0.95}
-                  color={vmLoc.map((_, i) => LOCATION_COLORS[i % LOCATION_COLORS.length])}
-                  legend={false} tooltip={false} animate={false}
-                  label={false}
-                  height={180}
-                />
-                <div style={{
-                  position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
-                }}>
-                  <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>{vmLocTotal.toLocaleString()}</div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>VMs</Typography.Text>
-                </div>
-              </div>
-              <div style={{ marginTop: 16 }}>
-                {vmLoc.map((r, i) => (
-                  <div key={r.location} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0',
-                  }}>
-                    <Space size={8}>
-                      <span style={{
-                        width: 10, height: 10, borderRadius: '50%', display: 'inline-block',
-                        background: LOCATION_COLORS[i % LOCATION_COLORS.length],
-                      }} />
-                      <Typography.Text>{r.location}</Typography.Text>
-                    </Space>
-                    <Typography.Text strong>{(r.count ?? 0).toLocaleString()}</Typography.Text>
-                  </div>
-                ))}
-              </div>
-            </Col>
-            <Col xs={24} lg={16}>
-              <WorldLocationMap rows={vmLoc} isDark={isDark} />
-            </Col>
-          </Row>
-        )}
-      </Card></Wgt>
+      <Wgt tab="exec" k="physical_location_map">
+        <LocationMapCard tab="exec" widgetKey="physical_location_map"
+          icon={<HddOutlined />} iconBg="rgba(8,151,156,0.14)" iconColor="#08979c"
+          defaultTitle="Physical & ESXi Servers by Location"
+          subtitle="Live Physical & ESXi Server inventory across office locations, by IP subnet"
+          rows={physicalLocIp} unitLabel="Servers" isDark={isDark} />
+      </Wgt>
+
+      <Wgt tab="exec" k="vm_location_map">
+        <LocationMapCard tab="exec" widgetKey="vm_location_map"
+          icon={<EnvironmentOutlined />} iconBg="rgba(19,168,168,0.14)" iconColor="#13a8a8"
+          defaultTitle="VM Count by Location"
+          subtitle="Live VM inventory across office locations, by IP subnet"
+          rows={vmLocIp} unitLabel="VMs" isDark={isDark} />
+      </Wgt>
     </div>
   );
 }

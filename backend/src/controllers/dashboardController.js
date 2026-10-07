@@ -380,6 +380,44 @@ async function summary(_req, res, next) {
         LIMIT 10;
     `);
 
+    // IP-subnet-derived location, for the Executive Overview "VM Count by
+    // Location" / "Physical & ESXi Servers by Location" map widgets — these
+    // read location off the IP's own office subnet rather than the free-text
+    // `location` column (which is sparsely/inconsistently filled in practice),
+    // per the office's actual subnet assignments:
+    //   10.99.97.x        -> Toronto
+    //   10.10.x.x          -> Beijing
+    //   192.168.70-79.x    -> Boston Bomgar
+    //   192.168.x.x (rest) -> Burlington
+    //   anything else      -> Unspecified
+    // Order matters: Boston Bomgar's 192.168.70-79 carve-out must be checked
+    // before the general 192.168.x.x Burlington rule, since it's a subset of it.
+    const IP_LOCATION_CASE = `
+      CASE
+        WHEN ip_address ~ '^10\\.99\\.97\\.'    THEN 'Toronto'
+        WHEN ip_address ~ '^10\\.10\\.'         THEN 'Beijing'
+        WHEN ip_address ~ '^192\\.168\\.7[0-9]\\.' THEN 'Boston Bomgar'
+        WHEN ip_address ~ '^192\\.168\\.'       THEN 'Burlington'
+        ELSE 'Unspecified'
+      END
+    `;
+    const vmLocationByIpQ = db.query(`
+      SELECT ${IP_LOCATION_CASE} AS location, COUNT(*)::int AS count
+        FROM (
+          SELECT ip_address FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL SELECT ip_address FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        ) x
+        GROUP BY 1
+        ORDER BY 2 DESC;
+    `);
+    const physicalLocationByIpQ = db.query(`
+      SELECT ${IP_LOCATION_CASE} AS location, COUNT(*)::int AS count
+        FROM physical_esxi_servers
+        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        GROUP BY 1
+        ORDER BY 2 DESC;
+    `);
+
     // ---------------------------------------------------------------
     // Weekly Report: VM-side "gaps" (no password / missing hosted_ip /
     // OS-hostname collisions) and the Ext patching-status row.
@@ -728,14 +766,14 @@ async function summary(_req, res, next) {
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
            meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw,
-           weeklyNessusApplicability] = await Promise.all([
+           weeklyNessusApplicability, vmLocationByIp, physicalLocationByIp] = await Promise.all([
       invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
       meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ, beijingRawQ,
-      weeklyNessusApplicabilityQ,
+      weeklyNessusApplicabilityQ, vmLocationByIpQ, physicalLocationByIpQ,
     ]);
 
     const i = inv.rows[0];
@@ -846,6 +884,8 @@ async function summary(_req, res, next) {
       assetInventoryPatchingStatus: patchingStatus.rows[0],
       extInventoryPatchingStatus:   extPatchingStatus.rows[0],
       vmCountByLocation: vmLocation.rows,
+      vmCountByLocationIp: vmLocationByIp.rows,
+      physicalCountByLocationIp: physicalLocationByIp.rows,
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
       weeklyNessusApplicability: {
