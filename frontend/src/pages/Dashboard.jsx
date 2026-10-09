@@ -288,10 +288,8 @@ function resolveExtChips(ec, extCfg = {}) {
     .map(c => ({ ...c, label: labels[c.key] || c.defaultLabel, value: ec[c.key] }));
 }
 
-function ExecutiveOverview({ data, compCfg = {}, isDark }) {
+function ExecutiveOverview({ data, isDark }) {
   const h = data.headline || {};
-  const msl = data.mslCompliance || {};
-  const ec  = data.extEndpointCompliance || {};
   const vmLocIp = data.vmCountByLocationIp || [];
   const physicalLocIp = data.physicalCountByLocationIp || [];
   // One shared map needs one shared per-location count — VMs and Physical &
@@ -409,115 +407,6 @@ function ExecutiveOverview({ data, compCfg = {}, isDark }) {
           </Col>
         </Row>
       </Card></Wgt>
-
-      <Row gutter={16} style={{ marginTop: 24 }}>
-      <Col xs={24} lg={12}>
-      <Wgt tab="exec" k="msl_compliance"><Card style={{ height: '100%' }}
-        title={
-          <Space>
-            <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
-              width: 36, height: 36, borderRadius: 8, display: 'flex',
-              alignItems: 'center', justifyContent: 'center' }}>
-              <RiseOutlined />
-            </div>
-            <div>
-              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="msl_compliance" d="Total Inventory MSL Compliance" /></Typography.Title>
-              <Typography.Text type="secondary">MSL includes VMs in Alive/Powered Off scope and excludes Decom/Not Applicable</Typography.Text>
-            </div>
-          </Space>
-        }
-      >
-        {ratioLine({ label: 'MSL',                numerator: msl.mslNumerator ?? 0,      denominator: msl.mslDenominator ?? 0,      tone: 'blue' })}
-        {ratioLine({ label: 'Extended Inventory', numerator: msl.extNumerator ?? 0,      denominator: msl.extDenominator ?? 0,      tone: 'indigo' })}
-        {ratioLine({ label: 'MSL + E-INV',        numerator: msl.combinedNumerator ?? 0, denominator: msl.combinedDenominator ?? 0, tone: 'green' })}
-
-        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 16, marginBottom: 8,
-          textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 12, fontWeight: 600 }}>
-          Location-wise count
-        </Typography.Text>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
-          {(msl.locations || []).map(loc => (
-            <div key={loc.location} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '6px 12px', fontSize: 13,
-              border: '1px solid var(--ant-color-border-secondary, #f0f0f0)', borderRadius: 6,
-            }}>
-              <Typography.Text>{loc.location}</Typography.Text>
-              <Typography.Text strong style={{ color: '#1677ff' }}>{(loc.count ?? 0).toLocaleString()}</Typography.Text>
-            </div>
-          ))}
-        </div>
-      </Card></Wgt>
-      </Col>
-
-      <Col xs={24} lg={12}>
-      <Wgt tab="exec" k="ext_compliance"><Card style={{ height: '100%' }}
-        title={
-          <Space>
-            <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
-              width: 36, height: 36, borderRadius: 8, display: 'flex',
-              alignItems: 'center', justifyContent: 'center' }}>
-              <AppstoreOutlined />
-            </div>
-            <div>
-              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="ext_compliance" d="Ext. Endpoint Compliance" /></Typography.Title>
-              <Typography.Text type="secondary">Password and agent compliance across extended inventory endpoints</Typography.Text>
-            </div>
-          </Space>
-        }
-      >
-        <Typography.Paragraph style={{ marginBottom: 4 }}>
-          Total <strong>{(ec.total ?? 0).toLocaleString()}</strong> endpoints
-        </Typography.Paragraph>
-        <Typography.Paragraph style={{ marginBottom: 4 }}>
-          For <strong>{(ec.withPassword ?? 0).toLocaleString()}</strong> endpoints we received password info.
-        </Typography.Paragraph>
-        <Typography.Paragraph strong style={{ color: '#1d4ed8', marginBottom: 16 }}>
-          Compliance: {(ec.withPassword ?? 0).toLocaleString()} out of {(ec.total ?? 0).toLocaleString()} ={' '}
-          {(ec.total ? (ec.withPassword / ec.total) * 100 : 0).toFixed(2)}%
-        </Typography.Paragraph>
-
-        <Row gutter={[12, 12]}>
-          {resolveExtChips(ec, compCfg.ext).map(c => (
-            <Col xs={24} md={12} key={c.key}>
-              <ExtChip label={c.label} value={c.value} tone={c.tone} />
-            </Col>
-          ))}
-        </Row>
-
-        <div style={{ marginTop: 20, maxWidth: 340 }}>
-          <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, color: '#1d4ed8' }}>
-            Location-wise endpoint count:
-          </Typography.Text>
-          <Table
-            rowKey="location"
-            size="small"
-            dataSource={ec.locationCount || []}
-            pagination={false}
-            tableLayout="fixed"
-            locale={{ emptyText: 'No location data assigned in Extended Inventory' }}
-            columns={[
-              { title: 'Location', dataIndex: 'location' },
-              { title: 'Count', dataIndex: 'count', align: 'right',
-                render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
-            ]}
-            summary={(rows) => {
-              if (!rows.length) return null;
-              const grand = rows.reduce((s, r) => s + (r.count ?? 0), 0);
-              return (
-                <Table.Summary.Row style={{ fontWeight: 700 }}>
-                  <Table.Summary.Cell index={0}><strong>Grand Total</strong></Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
-                    <strong>{grand.toLocaleString()}</strong>
-                  </Table.Summary.Cell>
-                </Table.Summary.Row>
-              );
-            }}
-          />
-        </div>
-      </Card></Wgt>
-      </Col>
-      </Row>
     </div>
   );
 }
@@ -570,6 +459,7 @@ function StatusBox({ value, label, tone }) {
 function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, chartTheme }) {
   const h  = data.headline || {};
   const a  = data.assetInventory || {};
+  const msl = data.mslCompliance || {};
   const as = data.assetInventoryActiveStatus || {};
   const ps = data.assetInventoryPatchingStatus || {};
   const vmLoc = data.vmCountByLocation || [];
@@ -809,6 +699,43 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
           <StatTile icon={<CloseCircleOutlined />}     value={a.notAlive}        label="Not Alive"        color={C.rose} />
         </div>
       </div></Wgt>
+
+      <Wgt tab="asset" k="msl_compliance"><Card className="dashcard" style={{ marginBottom: 16 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <RiseOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="msl_compliance" d="Total Inventory MSL Compliance" /></Typography.Title>
+              <Typography.Text type="secondary">MSL includes VMs in Alive/Powered Off scope and excludes Decom/Not Applicable</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        {ratioLine({ label: 'MSL',                numerator: msl.mslNumerator ?? 0,      denominator: msl.mslDenominator ?? 0,      tone: 'blue' })}
+        {ratioLine({ label: 'Extended Inventory', numerator: msl.extNumerator ?? 0,      denominator: msl.extDenominator ?? 0,      tone: 'indigo' })}
+        {ratioLine({ label: 'MSL + E-INV',        numerator: msl.combinedNumerator ?? 0, denominator: msl.combinedDenominator ?? 0, tone: 'green' })}
+
+        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 16, marginBottom: 8,
+          textTransform: 'uppercase', letterSpacing: 0.6, fontSize: 12, fontWeight: 600 }}>
+          Location-wise count
+        </Typography.Text>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+          {(msl.locations || []).map(loc => (
+            <div key={loc.location} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '6px 12px', fontSize: 13,
+              border: '1px solid var(--ant-color-border-secondary, #f0f0f0)', borderRadius: 6,
+            }}>
+              <Typography.Text>{loc.location}</Typography.Text>
+              <Typography.Text strong style={{ color: '#1677ff' }}>{(loc.count ?? 0).toLocaleString()}</Typography.Text>
+            </div>
+          ))}
+        </div>
+      </Card></Wgt>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}><Wgt tab="asset" k="os_chart">
@@ -1940,7 +1867,7 @@ export default function Dashboard() {
   }
 
   const TAB_CONTENT = {
-    exec:   (d) => <><ExecutiveOverview data={d} compCfg={compCfg} isDark={isDark} /><CustomWidgets tab="exec" /></>,
+    exec:   (d) => <><ExecutiveOverview data={d} isDark={isDark} /><CustomWidgets tab="exec" /></>,
     asset:  (d) => <><AssetInventoryTab data={d} isDark={isDark} axisStyle={axisStyle}
                      labelStyle={labelStyle} legendStyle={legendStyle} chartTheme={chartTheme} /><CustomWidgets tab="asset" /></>,
     ext:    (d) => <><ExtendedInventoryTab data={d} compCfg={compCfg} /><CustomWidgets tab="ext" /></>,
