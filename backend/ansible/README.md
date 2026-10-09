@@ -1,4 +1,4 @@
-# Test Deploy — Ansible setup
+# Ansible setup
 
 One-time setup on the backend host (must be Linux/macOS/WSL — Ansible's
 control node cannot run natively on Windows):
@@ -16,9 +16,9 @@ with `couldn't resolve module/action 'ansible.windows.win_shell'`.
 `/usr/share/ansible/collections` is already on Ansible's default search path.
 
 Also install `sshpass` via the OS package manager (not pip) — Ansible's
-`ssh` connection plugin (used for Linux targets) requires it whenever
-authenticating with a password instead of a key, which is what Test
-Deploy always does (the asset record's stored password):
+`ssh` connection plugin (used for Linux targets, e.g. `rename_hostname.yml`)
+requires it whenever authenticating with a password instead of a key, which
+is what every playbook here does (the asset record's stored password):
 
 ```
 sudo apt-get install -y sshpass   # Debian/Ubuntu
@@ -36,14 +36,10 @@ Prerequisites this doesn't and can't set up for you:
 
 - **WinRM must already be enabled/configured on every Windows target.**
   Ansible has no other way to reach a Windows host.
-- Fill in the real silent-install command for the ME Agent installer in
-  the Test Deploy Config admin page (Windows/Linux, default + per-location)
-  — `me_agent_deploy.yml` ships with a placeholder switch until then.
-- **windows_share_path / linux_share_path must be a local directory on
-  THIS backend server** (the Ansible control node), containing that OS's
-  installer — e.g. `/opt/inventory/installers/windows`. `win_copy`
-  (Windows) and `ansible.builtin.copy` (Linux) read the file straight off
-  local disk and push it to each target over the same WinRM/SSH connection
-  already used for everything else, so there's no network share to set up
-  and no `cifs-utils` dependency on the targets. Just place the installer
-  (and, for Linux, `serverinfo.json`) in that directory on this server.
+- **The installer files `me_agent_windows.yml` / `nessus_agent_windows.yml`
+  copy to each target must already exist on THIS backend server** (the
+  Ansible control node), configured via the ME Install Config / Nessus
+  Install Config admin pages. `win_copy` reads the file straight off local
+  disk and pushes it to each target over the same WinRM connection already
+  used for everything else, so there's no network share to set up and no
+  `cifs-utils` dependency on the targets.

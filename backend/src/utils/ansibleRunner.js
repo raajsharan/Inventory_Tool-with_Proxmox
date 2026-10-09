@@ -4,11 +4,8 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 
-const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'me_agent_deploy.yml');
 // Windows-only agent installs. Their Linux counterparts never come through
-// Ansible — see nessusStatusController.js / softwareStatusController.js. Note
-// ME_WINDOWS_PLAYBOOK (Software Status) is a different file from
-// PLAYBOOK_PATH above (Test Deploy), despite both installing the ME agent.
+// Ansible — see nessusStatusController.js / softwareStatusController.js.
 const NESSUS_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'nessus_agent_windows.yml');
 const ME_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'me_agent_windows.yml');
 // Agent-agnostic Windows service/binary check — which agent to look for is
@@ -46,23 +43,7 @@ function connectionVars(t) {
   };
 }
 
-function buildInventory(targets) {
-  const groups = { windows: { hosts: {} }, linux: { hosts: {} } };
-  for (const t of targets) {
-    const group = t.isWindows ? 'windows' : 'linux';
-    groups[group].hosts[t.ip_address] = {
-      ...connectionVars(t),
-      share_path: t.sharePath || '',
-      installer_file: t.installerFile || '',
-      install_cmd: t.installCmd || '',
-      serverinfo_file: t.serverinfoFile || '',
-    };
-  }
-  return JSON.stringify(groups, null, 2);
-}
-
-// Same connection settings, but the playbook's own variables are passed
-// per-target in `vars` instead of the fixed Test Deploy set above.
+// The playbook's own variables are passed per-target in `vars`.
 function buildVarsInventory(targets) {
   const groups = { windows: { hosts: {} }, linux: { hosts: {} } };
   for (const t of targets) {
@@ -74,7 +55,7 @@ function buildVarsInventory(targets) {
 
 // mode 0600 because host vars carry decrypted passwords — and, for the Nessus
 // playbook, the Tenable linking key. Callers delete the file when the run ends.
-async function writeTempInventory(targets, { build = buildInventory, prefix = 'test-deploy-inv' } = {}) {
+async function writeTempInventory(targets, { build = buildVarsInventory, prefix = 'ansible-inv' } = {}) {
   const filePath = path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}.yml`);
   await fs.promises.writeFile(filePath, build(targets), { mode: 0o600 });
   return filePath;
@@ -83,9 +64,7 @@ async function writeTempInventory(targets, { build = buildInventory, prefix = 't
 // Runs `ansible-playbook -i <inventory> <playbook>`, resolving once the
 // process exits with the full captured stdout+stderr (interleaved, in arrival
 // order) — one combined run log rather than per-host streams.
-// extraVars.check_only=true skips the install task (see me_agent_deploy.yml)
-// so a verify-only run just proves the file transfer step works.
-function runPlaybook(inventoryPath, extraVars = {}, playbookPath = PLAYBOOK_PATH) {
+function runPlaybook(inventoryPath, extraVars = {}, playbookPath) {
   return new Promise((resolve) => {
     const args = ['-i', inventoryPath, playbookPath];
     if (Object.keys(extraVars).length) args.push('--extra-vars', JSON.stringify(extraVars));
@@ -106,6 +85,6 @@ function runPlaybook(inventoryPath, extraVars = {}, playbookPath = PLAYBOOK_PATH
 }
 
 module.exports = {
-  buildInventory, buildVarsInventory, writeTempInventory, runPlaybook,
-  PLAYBOOK_PATH, NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK, VERIFY_WINDOWS_PLAYBOOK,
+  buildVarsInventory, writeTempInventory, runPlaybook,
+  NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK, VERIFY_WINDOWS_PLAYBOOK,
 };

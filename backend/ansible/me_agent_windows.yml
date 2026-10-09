@@ -2,9 +2,6 @@
 # page). Linux ME installs do NOT come through here: they stay on the
 # controller's own SSH upload/exec paths in softwareStatusController.js.
 #
-# Not to be confused with me_agent_deploy.yml, which belongs to the Test
-# Deploy page and has its own config, its own inventory vars and a Linux play.
-#
 # Everything comes from software_install_config, with the target's location
 # override merged over it, via the generated inventory:
 #   me_source       ← windows_file_path (the installer on THIS backend server)
