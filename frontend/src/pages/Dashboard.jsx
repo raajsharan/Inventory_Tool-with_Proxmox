@@ -305,6 +305,62 @@ function MiniLocationDonut({ icon, label, rows }) {
   );
 }
 
+// Same icon+label+donut+legend shape as MiniLocationDonut above, but for one
+// agent's install *rate* rather than a location's share of a raw count — the
+// donut is a 2-slice installed/not-installed gauge (center shows the overall
+// %) and the legend lists each location's own % instead of its count.
+function MiniAgentDonut({ icon, label, rows }) {
+  const total = rows.reduce((s, r) => s + (r.total ?? 0), 0);
+  const installed = rows.reduce((s, r) => s + (r.installed ?? 0), 0);
+  const overallPct = total ? Math.round((installed / total) * 1000) / 10 : 0;
+  // Plain SVG ring rather than a 2-slice Pie — a categorical chart's palette
+  // is meant for telling several named slices apart, not for pinning one
+  // specific "done" color against a neutral track, and it kept winning out
+  // over an explicit two-color array here.
+  const ringR = 46, ringC = 2 * Math.PI * ringR;
+  const ringOffset = ringC - (Math.max(0, Math.min(100, overallPct)) / 100) * ringC;
+  return (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+      <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
+        <svg width="110" height="110" viewBox="0 0 110 110" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx="55" cy="55" r={ringR} stroke="rgba(0,0,0,0.08)" strokeWidth="10" fill="none" />
+          <circle cx="55" cy="55" r={ringR} stroke="#52c41a" strokeWidth="10" fill="none"
+            strokeDasharray={ringC} strokeDashoffset={ringOffset} strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+        }}>
+          <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1 }}>{overallPct}%</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Space size={6} style={{ marginBottom: 6 }}>
+          {icon}
+          <Typography.Text strong style={{ fontSize: 13 }}>{label}</Typography.Text>
+        </Space>
+        {rows.length === 0 ? (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>No location data yet.</Typography.Text>
+        ) : rows.map((r, i) => (
+          <div key={r.location} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1px 0',
+          }}>
+            <Space size={6}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', display: 'inline-block',
+                background: LOCATION_COLORS[i % LOCATION_COLORS.length],
+              }} />
+              <Typography.Text style={{ fontSize: 12 }}>{r.location}</Typography.Text>
+            </Space>
+            <Typography.Text strong style={{ fontSize: 12 }}>{r.pct}%</Typography.Text>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Build the ordered, filtered, label-resolved chip list for the Ext. Endpoint Compliance card.
 const EXT_CHIP_DEFS = [
   { key: 'meInstalled',     defaultLabel: 'ManageEngine Installed', tone: 'emerald' },
@@ -335,6 +391,7 @@ function ExecutiveOverview({ data, isDark }) {
   const combinedLocIp = [...combinedLocMap.entries()]
     .map(([location, count]) => ({ location, count }))
     .sort((a, b) => b.count - a.count);
+  const agentInstallLoc = data.agentInstallByLocation || [];
 
   const totalInventory = useCountUp(h.totalInventory ?? 0);
   const patchingCompliancePct = useCountUp((h.patchingCompliancePct ?? 0) * 10);
@@ -441,6 +498,41 @@ function ExecutiveOverview({ data, isDark }) {
         </Row>
       </Card></Wgt>
 
+      <Wgt tab="exec" k="agent_install_by_location"><Card style={{ marginTop: 24 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(114,46,209,0.12)', color: '#722ed1',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <SafetyCertificateOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="agent_install_by_location" d="ManageEngine & Nessus Agent Installation Status by Location" /></Typography.Title>
+              <Typography.Text type="secondary">Agent install success rate per location, across the VM inventory</Typography.Text>
+            </div>
+          </Space>
+        }
+      >
+        <Row gutter={[24, 24]} align="middle">
+          <Col xs={24} lg={14}>
+            <WorldLocationMap
+              rows={agentInstallLoc.map(r => ({ location: r.location, count: r.total }))}
+              isDark={isDark}
+              showLinks={false}
+              formatLabel={r => r.location}
+            />
+          </Col>
+          <Col xs={24} lg={10}>
+            <Space direction="vertical" size={20} style={{ width: '100%' }}>
+              <MiniAgentDonut icon={<SafetyOutlined />} label="ManageEngine"
+                rows={agentInstallLoc.map(r => ({ location: r.location, installed: r.me.installed, total: r.total, pct: r.me.pct }))} />
+              <MiniAgentDonut icon={<BugOutlined />} label="Nessus Agent"
+                rows={agentInstallLoc.map(r => ({ location: r.location, installed: r.nessus.installed, total: r.total, pct: r.nessus.pct }))} />
+            </Space>
+          </Col>
+        </Row>
+      </Card></Wgt>
+
       <Wgt tab="exec" k="recent_activity"><Card style={{ marginTop: 24 }}
         title={
           <Space>
@@ -532,7 +624,6 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
   const as = data.assetInventoryActiveStatus || {};
   const ps = data.assetInventoryPatchingStatus || {};
   const vmLoc = data.vmCountByLocation || [];
-  const agentInstallLoc = data.agentInstallByLocation || [];
   const activePct  = as.total ? (as.active / as.total) * 100 : 0;
   const patchedPct = ps.total ? ((ps.auto_patching + ps.manual_patching) / ps.total) * 100 : 0;
   const labelColor = isDark ? '#f0f0f0' : '#262626';
@@ -730,50 +821,6 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
     </Card>
   );
 
-  const meLocationCard = (
-    <Card className="dashcard" style={{ marginBottom: 16, animationDelay: '260ms' }}
-      title={
-        <Space>
-          <div style={{ background: 'rgba(114,46,209,0.12)', color: '#722ed1',
-            width: 36, height: 36, borderRadius: 8, display: 'flex',
-            alignItems: 'center', justifyContent: 'center' }}>
-            <SafetyCertificateOutlined />
-          </div>
-          <div>
-            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="agent_install_by_location" d="ManageEngine & Nessus Agent Installation Status by Location" /></Typography.Title>
-            <Typography.Text type="secondary">Agent install success rate per location, across the VM inventory</Typography.Text>
-          </div>
-        </Space>
-      }
-    >
-      <WorldLocationMap
-        rows={agentInstallLoc.map(r => ({ location: r.location, count: r.total }))}
-        isDark={isDark}
-        showLinks={false}
-        formatLabel={r => r.location}
-      />
-      <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {agentInstallLoc.map((r, i) => (
-          <div key={r.location}>
-            <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>{r.location}</Typography.Text>
-
-            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>ManageEngine</Typography.Text>
-              <Typography.Text style={{ fontSize: 12 }}>{r.me.pct}% ({r.me.installed}/{r.total})</Typography.Text>
-            </Space>
-            <Progress percent={r.me.pct} showInfo={false} size="small" strokeColor={LOCATION_COLORS[i % LOCATION_COLORS.length]} />
-
-            <Space style={{ width: '100%', justifyContent: 'space-between', marginTop: 6 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>Nessus Agent</Typography.Text>
-              <Typography.Text style={{ fontSize: 12 }}>{r.nessus.pct}% ({r.nessus.installed}/{r.total})</Typography.Text>
-            </Space>
-            <Progress percent={r.nessus.pct} showInfo={false} size="small" strokeColor="#eb2f96" />
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-
   return (
     <div>
       <style>{DASH_CSS}</style>
@@ -891,7 +938,6 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
       <Wgt tab="asset" k="active_status">{activeStatusCard}</Wgt>
       <Wgt tab="asset" k="patching_status">{patchingStatusCard}</Wgt>
       <Wgt tab="asset" k="vm_by_location">{vmLocationCard}</Wgt>
-      <Wgt tab="asset" k="agent_install_by_location">{meLocationCard}</Wgt>
 
       <Wgt tab="asset" k="recent_assets"><Card className="dashcard" style={{ marginTop: 16, animationDelay: '280ms' }} title={<WTitle tab="asset" k="recent_assets" d="Recent Assets" />}>
         <Table
