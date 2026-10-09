@@ -1,8 +1,8 @@
-﻿import { createContext, useContext, useEffect, useState } from 'react';
+﻿import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Row, Col, Card, Table, Tag, Spin, Alert, Typography, Tabs, Space, Statistic, Progress, Button,
-  App, Input, Tooltip, Select, DatePicker, Badge,
+  App, Input, Tooltip, Select, DatePicker, Badge, List, Empty,
 } from 'antd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime.js';
@@ -14,7 +14,7 @@ import {
   CloseCircleOutlined, BlockOutlined,
   BarChartOutlined, CalendarOutlined, FundOutlined, RiseOutlined,
   EnvironmentOutlined, ApartmentOutlined, ClusterOutlined, PlayCircleOutlined,
-  SyncOutlined, InfoCircleOutlined,
+  SyncOutlined, InfoCircleOutlined, DisconnectOutlined, KeyOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 import { Pie, Column, Bar } from '@ant-design/plots';
 import api from '../api/client';
@@ -22,6 +22,7 @@ import { useAppTheme } from '../context/ThemeContext.jsx';
 import InfrastructureDashboard from '../components/InfrastructureDashboard.jsx';
 import { DASH_CSS, useCountUp } from '../components/DashboardStatCard.jsx';
 import WorldLocationMap, { LOCATION_COLORS } from '../components/WorldLocationMap.jsx';
+import { INTEGRATION_META } from '../components/AlertBell.jsx';
 import {
   resolveTabs, resolveDefaultView, resolveDefaultTab, resolveWidget, customWidgetsFor,
   DASHBOARD_WIDGETS,
@@ -377,6 +378,86 @@ function resolveExtChips(ec, extCfg = {}) {
     .map(c => ({ ...c, label: labels[c.key] || c.defaultLabel, value: ec[c.key] }));
 }
 
+// Same live data the header's AlertBell uses (GET /alerts — hosts the
+// VMware/Proxmox/Hyper-V discovery scheduler currently can't reach), but as
+// an inline dashboard card instead of a popover: fetches on mount and on the
+// refresh button, no WebSocket push here since the bell already owns that
+// job and a second live socket per dashboard view would just be redundant.
+function DiscoveryAlertsCard() {
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get('/alerts')
+      .then(r => setAlerts(r.data.alerts || []))
+      .catch(() => {})
+      .finally(() => { setLoading(false); setLoaded(true); });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <Card style={{ marginTop: 24 }}
+      title={
+        <Space>
+          <div style={{ background: 'rgba(255,77,79,0.12)', color: '#ff4d4f',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <DisconnectOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="discovery_alerts" d="Discovery Alerts" /></Typography.Title>
+            <Typography.Text type="secondary">Hosts the VMware/Proxmox/Hyper-V discovery scheduler can't currently reach</Typography.Text>
+          </div>
+        </Space>
+      }
+      extra={<Button size="small" type="text" icon={<ReloadOutlined />} loading={loading} onClick={load} />}
+    >
+      {loaded && alerts.length === 0 ? (
+        <Empty
+          image={<CheckCircleOutlined style={{ fontSize: 32, color: '#52c41a' }} />}
+          description="All integrations are healthy"
+          style={{ padding: '16px 0' }}
+        />
+      ) : (
+        <List
+          size="small"
+          dataSource={alerts}
+          renderItem={(a) => (
+            <List.Item>
+              <List.Item.Meta
+                avatar={a.isAuthError
+                  ? <KeyOutlined style={{ color: '#faad14' }} />
+                  : <DisconnectOutlined style={{ color: '#ff4d4f' }} />}
+                title={
+                  <Space size={6} wrap>
+                    <Tag color={INTEGRATION_META[a.integration]?.color}>{a.label}</Tag>
+                    <Typography.Text strong>{a.host}</Typography.Text>
+                    {a.isAuthError && <Tag color="warning">Credential error</Tag>}
+                  </Space>
+                }
+                description={
+                  <Tooltip title={a.errorMessage}>
+                    <Typography.Paragraph
+                      type="secondary"
+                      style={{ margin: 0, fontSize: 12 }}
+                      ellipsis={{ rows: 2 }}
+                    >
+                      {a.errorMessage}
+                    </Typography.Paragraph>
+                  </Tooltip>
+                }
+              />
+            </List.Item>
+          )}
+        />
+      )}
+    </Card>
+  );
+}
+
 function ExecutiveOverview({ data, isDark }) {
   const h = data.headline || {};
   const vmLocIp = data.vmCountByLocationIp || [];
@@ -532,6 +613,8 @@ function ExecutiveOverview({ data, isDark }) {
           </Col>
         </Row>
       </Card></Wgt>
+
+      <Wgt tab="exec" k="discovery_alerts"><DiscoveryAlertsCard /></Wgt>
 
       <Wgt tab="exec" k="recent_activity"><Card style={{ marginTop: 24 }}
         title={

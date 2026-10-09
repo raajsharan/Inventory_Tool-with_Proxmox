@@ -9,7 +9,7 @@ import api from '../api/client';
 // Each page's "Hosts & Credentials" tab is internal tab state, not its own
 // route, so clicking an alert can only jump to the integration's page —
 // the user picks the Hosts tab from there.
-const INTEGRATION_META = {
+export const INTEGRATION_META = {
   vmware:  { color: 'purple',   hostsPath: '/vmware-discovery' },
   proxmox: { color: 'geekblue', hostsPath: '/proxmox-discovery' },
   hyperv:  { color: 'blue',     hostsPath: '/hyperv-discovery' },
