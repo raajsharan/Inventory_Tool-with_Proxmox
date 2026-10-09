@@ -20,11 +20,23 @@ async function login(req, res, next) {
     const user = rows[0];
     if (!user || !user.is_active) {
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      await audit.log({
+        user: { email: (email || '').toLowerCase() },
+        action: 'LOGIN_FAILED',
+        ipAddress: req.ip,
+      });
       throw new ApiError(401, 'Invalid credentials');
     }
 
     const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) throw new ApiError(401, 'Invalid credentials');
+    if (!ok) {
+      await audit.log({
+        user: { id: user.id, email: user.email },
+        action: 'LOGIN_FAILED',
+        ipAddress: req.ip,
+      });
+      throw new ApiError(401, 'Invalid credentials');
+    }
 
     await db.query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [user.id]);
 

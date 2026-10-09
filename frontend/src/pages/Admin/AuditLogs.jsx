@@ -4,7 +4,7 @@ import { HistoryOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 
-const ACTIONS = ['LOGIN','CREATE','UPDATE','DELETE','IMPORT','EXPORT'];
+const ACTIONS = ['LOGIN','LOGIN_FAILED','CREATE','UPDATE','DELETE','IMPORT','EXPORT'];
 
 export default function AuditLogs() {
   const [data, setData] = useState({ items: [], total: 0 });

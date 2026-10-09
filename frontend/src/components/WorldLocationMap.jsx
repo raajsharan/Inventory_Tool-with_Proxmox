@@ -114,23 +114,29 @@ function LiveLinks({ links }) {
 // The animated dots are a visual "there's live traffic between these sites"
 // cue, not a feed of actual transactions — no such per-site traffic data
 // exists anywhere in this app to drive it for real.
-export default function WorldLocationMap({ rows, isDark }) {
+export default function WorldLocationMap({ rows, isDark, showLinks = true, formatLabel }) {
   const plotted = (rows || []).filter(r => LOCATION_COORDS[r.location]);
   if (!plotted.length) return null;
 
-  const hub = plotted.reduce((a, b) => (b.count > a.count ? b : a), plotted[0]);
   const landFill = isDark ? '#283046' : '#e2e8f5';
   const linkColor = isDark ? '#60a5fa' : '#1677ff';
   const labelFill = isDark ? '#f0f0f0' : '#262626';
+  const label = formatLabel || ((r) => `${r.location} (${r.count})`);
 
-  const links = plotted
-    .filter(r => r.location !== hub.location)
-    .map(r => ({
-      key: r.location,
-      from: LOCATION_COORDS[hub.location],
-      to: LOCATION_COORDS[r.location],
-      color: linkColor,
-    }));
+  // The hub-and-spoke arcs are a "shared inventory" cue tied to raw counts —
+  // skip them entirely for rows plotting something else (e.g. a per-location
+  // percentage), where a "highest count" hub wouldn't mean anything.
+  const hub = showLinks ? plotted.reduce((a, b) => (b.count > a.count ? b : a), plotted[0]) : null;
+  const links = showLinks
+    ? plotted
+        .filter(r => r.location !== hub.location)
+        .map(r => ({
+          key: r.location,
+          from: LOCATION_COORDS[hub.location],
+          to: LOCATION_COORDS[r.location],
+          color: linkColor,
+        }))
+    : [];
 
   return (
     <ComposableMap
@@ -157,7 +163,7 @@ export default function WorldLocationMap({ rows, isDark }) {
           <Marker key={r.location} coordinates={LOCATION_COORDS[r.location]}>
             <circle r={6} fill={LOCATION_COLORS[i % LOCATION_COLORS.length]} stroke="#fff" strokeWidth={1.5} />
             <text x={dx} y={dy} textAnchor={anchor} style={{ fontSize: 11, fontWeight: 600, fill: labelFill }}>
-              {r.location} ({r.count})
+              {label(r)}
             </text>
           </Marker>
         );

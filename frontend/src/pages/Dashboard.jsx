@@ -5,6 +5,7 @@ import {
   App, Input, Tooltip, Select, DatePicker, Badge,
 } from 'antd';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime.js';
 import {
   DatabaseOutlined, SafetyCertificateOutlined, ThunderboltOutlined,
   HddOutlined, DesktopOutlined, AppstoreOutlined, SafetyOutlined, BugOutlined,
@@ -25,6 +26,8 @@ import {
   resolveTabs, resolveDefaultView, resolveDefaultTab, resolveWidget, customWidgetsFor,
   DASHBOARD_WIDGETS,
 } from './Admin/dashboardRegistry.js';
+
+dayjs.extend(relativeTime);
 
 // -- Widget gate + title override -------------------------------------------
 const DashCfgCtx = createContext({ cfg: {} });
@@ -220,6 +223,36 @@ function ExtChip({ label, value, tone }) {
   );
 }
 
+const ACTIVITY_ACTION_TONES = {
+  LOGIN:          '#64748b',
+  LOGIN_FAILED:   '#dc2626',
+  CREATE:         '#16a34a',
+  UPDATE:         '#7c3aed',
+  UPDATE_PASSWORD:'#7c3aed',
+  DELETE:         '#dc2626',
+  IMPORT:         '#0891b2',
+  EXPORT:         '#0891b2',
+  TRANSFER:       '#d97706',
+  RENAME_HOSTNAME:'#2563eb',
+};
+
+function formatActionLabel(action) {
+  return String(action || '')
+    .split('_')
+    .map(w => w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w)
+    .join(' ') || '—';
+}
+
+function ActivityActionTag({ action }) {
+  const color = ACTIVITY_ACTION_TONES[action] || '#64748b';
+  return (
+    <Space size={6}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />
+      <Typography.Text style={{ color }}>{formatActionLabel(action)}</Typography.Text>
+    </Space>
+  );
+}
+
 // Compact donut + legend for one location breakdown, with no map of its own —
 // two of these sit side by side (VMs, Physical & ESXi Servers) next to the
 // one shared map in the combined location card below.
@@ -407,6 +440,42 @@ function ExecutiveOverview({ data, isDark }) {
           </Col>
         </Row>
       </Card></Wgt>
+
+      <Wgt tab="exec" k="recent_activity"><Card style={{ marginTop: 24 }}
+        title={
+          <Space>
+            <div style={{ background: 'rgba(124,58,237,0.14)', color: '#7c3aed',
+              width: 36, height: 36, borderRadius: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <ClockCircleOutlined />
+            </div>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="recent_activity" d="Recent Activity" /></Typography.Title>
+              <Typography.Text type="secondary">Latest actions across the inventory tool</Typography.Text>
+            </div>
+          </Space>
+        }
+        extra={<Link to="/admin/audit"><Button size="small">View All</Button></Link>}
+      >
+        <Table
+          rowKey="id"
+          size="small"
+          dataSource={data.recentActivity || []}
+          pagination={false}
+          rowClassName="dashcard-row"
+          scroll={{ x: 'max-content' }}
+          locale={{ emptyText: 'No recent activity yet' }}
+          columns={[
+            { title: 'User', dataIndex: 'user_email', render: v => v || '—' },
+            { title: 'Action', dataIndex: 'action', width: 160, render: a => <ActivityActionTag action={a} /> },
+            { title: 'Description', render: (_, r) => r.entity_type
+                ? <>{r.entity_type}{r.entity_id ? <Typography.Text type="secondary"> · {r.entity_id}</Typography.Text> : null}</>
+                : '—' },
+            { title: 'When', dataIndex: 'created_at', width: 140, align: 'right',
+              render: v => <Tooltip title={new Date(v).toLocaleString()}>{dayjs(v).fromNow()}</Tooltip> },
+          ]}
+        />
+      </Card></Wgt>
     </div>
   );
 }
@@ -463,6 +532,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
   const as = data.assetInventoryActiveStatus || {};
   const ps = data.assetInventoryPatchingStatus || {};
   const vmLoc = data.vmCountByLocation || [];
+  const agentInstallLoc = data.agentInstallByLocation || [];
   const activePct  = as.total ? (as.active / as.total) * 100 : 0;
   const patchedPct = ps.total ? ((ps.auto_patching + ps.manual_patching) / ps.total) * 100 : 0;
   const labelColor = isDark ? '#f0f0f0' : '#262626';
@@ -660,6 +730,50 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
     </Card>
   );
 
+  const meLocationCard = (
+    <Card className="dashcard" style={{ marginBottom: 16, animationDelay: '260ms' }}
+      title={
+        <Space>
+          <div style={{ background: 'rgba(114,46,209,0.12)', color: '#722ed1',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <SafetyCertificateOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="agent_install_by_location" d="ManageEngine & Nessus Agent Installation Status by Location" /></Typography.Title>
+            <Typography.Text type="secondary">Agent install success rate per location, across the VM inventory</Typography.Text>
+          </div>
+        </Space>
+      }
+    >
+      <WorldLocationMap
+        rows={agentInstallLoc.map(r => ({ location: r.location, count: r.total }))}
+        isDark={isDark}
+        showLinks={false}
+        formatLabel={r => r.location}
+      />
+      <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {agentInstallLoc.map((r, i) => (
+          <div key={r.location}>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>{r.location}</Typography.Text>
+
+            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>ManageEngine</Typography.Text>
+              <Typography.Text style={{ fontSize: 12 }}>{r.me.pct}% ({r.me.installed}/{r.total})</Typography.Text>
+            </Space>
+            <Progress percent={r.me.pct} showInfo={false} size="small" strokeColor={LOCATION_COLORS[i % LOCATION_COLORS.length]} />
+
+            <Space style={{ width: '100%', justifyContent: 'space-between', marginTop: 6 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>Nessus Agent</Typography.Text>
+              <Typography.Text style={{ fontSize: 12 }}>{r.nessus.pct}% ({r.nessus.installed}/{r.total})</Typography.Text>
+            </Space>
+            <Progress percent={r.nessus.pct} showInfo={false} size="small" strokeColor="#eb2f96" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+
   return (
     <div>
       <style>{DASH_CSS}</style>
@@ -777,6 +891,7 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
       <Wgt tab="asset" k="active_status">{activeStatusCard}</Wgt>
       <Wgt tab="asset" k="patching_status">{patchingStatusCard}</Wgt>
       <Wgt tab="asset" k="vm_by_location">{vmLocationCard}</Wgt>
+      <Wgt tab="asset" k="agent_install_by_location">{meLocationCard}</Wgt>
 
       <Wgt tab="asset" k="recent_assets"><Card className="dashcard" style={{ marginTop: 16, animationDelay: '280ms' }} title={<WTitle tab="asset" k="recent_assets" d="Recent Assets" />}>
         <Table

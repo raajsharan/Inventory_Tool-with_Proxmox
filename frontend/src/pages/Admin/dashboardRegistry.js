@@ -33,6 +33,7 @@ export const DASHBOARD_WIDGETS = {
   exec: [
     { key: 'kpi_cards',      defaultTitle: 'Headline KPI cards', renamable: false },
     { key: 'location_overview', defaultTitle: 'VM / Physical & ESXi Servers Count by Location' },
+    { key: 'recent_activity', defaultTitle: 'Recent Activity' },
   ],
   asset: [
     { key: 'kpi_cards',       defaultTitle: 'Headline KPI cards', renamable: false },
@@ -45,6 +46,7 @@ export const DASHBOARD_WIDGETS = {
     { key: 'active_status',   defaultTitle: 'Asset Inventory Active Status' },
     { key: 'patching_status', defaultTitle: 'Asset Inventory Patching Status' },
     { key: 'vm_by_location',  defaultTitle: 'VM Count by Location' },
+    { key: 'agent_install_by_location', defaultTitle: 'ManageEngine & Nessus Agent Installation Status by Location' },
     { key: 'recent_assets',   defaultTitle: 'Recent Assets' },
   ],
   ext: [

@@ -3,13 +3,14 @@ const { DEFAULT_CONFIG: COMPLIANCE_DEFAULTS } = require('./complianceConfigContr
 const vmwareDb  = require('../services/vmwareDbService');
 const proxmoxDb = require('../services/proxmoxDbService');
 const hypervDb  = require('../services/hypervDbService');
+const auditService = require('../services/auditService');
 
 // Fields allowed in name-conflict cross-table JOINs (whitelist, never interpolate user input).
 const VALID_CONFLICT_FIELDS = new Set(['vm_name', 'os_hostname', 'asset_name', 'ip_address', 'mac_address']);
 
 // VM-like inventories rolled up: assets + beijing_assets + physical_esxi_servers.
 // ext_assets is reported separately.
-async function summary(_req, res, next) {
+async function summary(req, res, next) {
   try {
     // Fetch compliance config first so dynamic queries can be built before the parallel fan-out.
     let compCfg;
@@ -114,6 +115,8 @@ async function summary(_req, res, next) {
             FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         ) x
         ORDER BY created_at DESC LIMIT 10`);
+
+    const activityQ = auditService.list({ page: 1, pageSize: 8, viewerRole: req.user?.role });
 
     // Weekly Report counters (created in the last 7 days vs prior 7 days).
     const weeklyQ = db.query(`
@@ -414,6 +417,24 @@ async function summary(_req, res, next) {
       SELECT ${IP_LOCATION_CASE} AS location, COUNT(*)::int AS count
         FROM physical_esxi_servers
         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        GROUP BY 1
+        ORDER BY 2 DESC;
+    `);
+    // ManageEngine and the Nessus (Tenable) agent are both OS-level agents, so
+    // only the two VM-like inventories that actually carry those columns
+    // count here — physical_esxi_servers has neither column (see invQ above)
+    // and would just deflate every location's rate if folded into the
+    // denominator.
+    const agentInstallByLocationQ = db.query(`
+      SELECT ${IP_LOCATION_CASE} AS location,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE manage_engine_installed = TRUE)::int AS me_installed,
+             COUNT(*) FILTER (WHERE tenable_installed = TRUE)::int      AS tenable_installed
+        FROM (
+          SELECT ip_address, manage_engine_installed, tenable_installed FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+          UNION ALL
+          SELECT ip_address, manage_engine_installed, tenable_installed FROM beijing_assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        ) x
         GROUP BY 1
         ORDER BY 2 DESC;
     `);
@@ -762,18 +783,18 @@ async function summary(_req, res, next) {
       ORDER BY 2 DESC;
     `);
 
-    const [inv, ext, os, st, lo, eol, recent, weekly, mslRow, extComp, nameConflict, locationCount,
+    const [inv, ext, os, st, lo, eol, recent, activity, weekly, mslRow, extComp, nameConflict, locationCount,
            activeStatus, patchingStatus, vmLocation, extDeptDist, weeklyVmGaps, extPatchingStatus,
            weeklyLocationPatching, weeklyDepartmentPatching,
            meMslBreakdown, meExtBreakdown, extLocationCount, assetExtLocationCount, beijingRaw,
-           weeklyNessusApplicability, vmLocationByIp, physicalLocationByIp] = await Promise.all([
-      invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, weeklyQ,
+           weeklyNessusApplicability, vmLocationByIp, physicalLocationByIp, agentInstallByLocation] = await Promise.all([
+      invQ, extQ, osQ, statusQ, locQ, eolQ, recentQ, activityQ, weeklyQ,
       mslQ, extComplianceQ, nameConflictQ, locationCountQ,
       activeStatusQ, patchingStatusQ, vmLocationQ, extDeptDistQ,
       weeklyVmGapsQ, extPatchingStatusQ,
       weeklyLocationPatchingQ, weeklyDepartmentPatchingQ,
       meMslBreakdownQ, meExtBreakdownQ, extLocationCountQ, assetExtLocationCountQ, beijingRawQ,
-      weeklyNessusApplicabilityQ, vmLocationByIpQ, physicalLocationByIpQ,
+      weeklyNessusApplicabilityQ, vmLocationByIpQ, physicalLocationByIpQ, agentInstallByLocationQ,
     ]);
 
     const i = inv.rows[0];
@@ -849,6 +870,7 @@ async function summary(_req, res, next) {
         byEolStatus: eol.rows,
       },
       recentAssets: recent.rows,
+      recentActivity: activity.items,
       weekly: {
         addedThisWeek: weekly.rows[0].added_this_week,
         addedLastWeek: weekly.rows[0].added_last_week,
@@ -886,6 +908,12 @@ async function summary(_req, res, next) {
       vmCountByLocation: vmLocation.rows,
       vmCountByLocationIp: vmLocationByIp.rows,
       physicalCountByLocationIp: physicalLocationByIp.rows,
+      agentInstallByLocation: agentInstallByLocation.rows.map(r => ({
+        location: r.location,
+        total: r.total,
+        me:      { installed: r.me_installed,      pct: r.total ? Math.round((r.me_installed / r.total) * 1000) / 10 : 0 },
+        nessus:  { installed: r.tenable_installed,  pct: r.total ? Math.round((r.tenable_installed / r.total) * 1000) / 10 : 0 },
+      })),
       extDeptDistribution: extDeptDist.rows,
       weeklyVmGaps: weeklyVmGaps.rows[0],
       weeklyNessusApplicability: {
