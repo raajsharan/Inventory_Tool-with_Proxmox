@@ -290,8 +290,6 @@ function resolveExtChips(ec, extCfg = {}) {
 
 function ExecutiveOverview({ data, compCfg = {}, isDark }) {
   const h = data.headline || {};
-  const a = data.assetInventory || {};
-  const e = data.extendedInventory || {};
   const msl = data.mslCompliance || {};
   const ec  = data.extEndpointCompliance || {};
   const vmLocIp = data.vmCountByLocationIp || [];
@@ -383,62 +381,6 @@ function ExecutiveOverview({ data, compCfg = {}, isDark }) {
           </Card>
         </Col>
       </Row></Wgt>
-
-      <Wgt tab="exec" k="asset_summary"><div style={{ marginTop: 24 }}>
-        <Space size={10} style={{ marginBottom: 12 }}>
-          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
-            width: 36, height: 36, borderRadius: 8, display: 'flex',
-            alignItems: 'center', justifyContent: 'center' }}>
-            <BarChartOutlined />
-          </div>
-          <div>
-            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="asset_summary" d="Asset Inventory Summary" /></Typography.Title>
-            <Typography.Text type="secondary">Live counts across VM and Physical Server inventory</Typography.Text>
-          </div>
-        </Space>
-
-        <div className="stat-grid-5">
-          <StatTile icon={<DatabaseOutlined />}        value={a.totalAssets}     label="Total Assets"     color={C.slate} />
-          <StatTile icon={<DesktopOutlined />}         value={a.virtualMachines} label="Virtual Machines" color={C.blue} />
-          <StatTile icon={<HddOutlined />}             value={a.physicalServers} label="Physical Servers" color={C.cyan} />
-          <StatTile icon={<AppstoreOutlined />}        value={a.manageEngine}    label="ManageEngine"     color={C.purple} />
-          <StatTile icon={<BugOutlined />}             value={a.tenable}         label="Tenable"          color={C.red} />
-
-          <StatTile icon={<ThunderboltOutlined />}     value={a.autoPatching}    label="Auto Patching"    color={C.green} />
-          <StatTile icon={<ToolOutlined />}            value={a.manualPatching}  label="Manual Patching"  color={C.blue} />
-          <StatTile icon={<WarningOutlined />}         value={a.exception}       label="Exception"        color={C.amber} />
-          <StatTile icon={<TeamOutlined />}            value={a.beijingItTeam}   label="Beijing IT Team"  color={C.purple} />
-          <StatTile icon={<StopOutlined />}            value={a.eolNoPatches}    label="EOL - No Patches" color={C.rose} />
-
-          <StatTile icon={<ClockCircleOutlined />}     value={a.onboardPending}  label="Onboard Pending"  color={C.blue} />
-          <StatTile icon={<PauseCircleOutlined />}     value={a.onHold}          label="On Hold"          color={C.gray} />
-          <StatTile icon={<CheckCircleOutlined />}     value={a.alive}           label="Alive"            color={C.emerald} />
-          <StatTile icon={<PoweroffOutlined />}        value={a.poweredOff}      label="Powered Off"      color={C.amber} />
-          <StatTile icon={<CloseCircleOutlined />}     value={a.notAlive}        label="Not Alive"        color={C.rose} />
-        </div>
-      </div></Wgt>
-
-      <Wgt tab="exec" k="ext_summary"><div style={{ marginTop: 24 }}>
-        <Space size={10} style={{ marginBottom: 12 }}>
-          <div style={{ background: 'rgba(67,56,202,0.16)', color: '#4338ca',
-            width: 36, height: 36, borderRadius: 8, display: 'flex',
-            alignItems: 'center', justifyContent: 'center' }}>
-            <AppstoreOutlined />
-          </div>
-          <div>
-            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="ext_summary" d="Extended Inventory Summary" /></Typography.Title>
-            <Typography.Text type="secondary">Live counts from extended inventory</Typography.Text>
-          </div>
-        </Space>
-
-        <div className="stat-grid-5">
-          <StatTile icon={<AppstoreOutlined />}      value={e.total}       label="Ext. Total"        color={C.indigo} />
-          <StatTile icon={<CheckCircleOutlined />}   value={e.active}      label="Ext. Active"       color={C.emerald} />
-          <StatTile icon={<PoweroffOutlined />}      value={e.inactive}    label="Ext. Inactive"     color={C.gray} />
-          <StatTile icon={<SafetyOutlined />}        value={e.meInstalled} label="Ext. ME Installed" color={C.emerald} />
-          <StatTile icon={<SafetyCertificateOutlined />} value={e.tenable} label="Ext. Tenable"      color={C.cyan} />
-        </div>
-      </div></Wgt>
 
       <Wgt tab="exec" k="location_overview"><Card style={{ marginTop: 24 }}
         title={
@@ -627,6 +569,7 @@ function StatusBox({ value, label, tone }) {
 
 function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, chartTheme }) {
   const h  = data.headline || {};
+  const a  = data.assetInventory || {};
   const as = data.assetInventoryActiveStatus || {};
   const ps = data.assetInventoryPatchingStatus || {};
   const vmLoc = data.vmCountByLocation || [];
@@ -832,6 +775,40 @@ function AssetInventoryTab({ data, isDark, axisStyle, labelStyle, legendStyle, c
       <style>{DASH_CSS}</style>
 
       <Wgt tab="asset" k="kpi_cards">{kpiCards}</Wgt>
+
+      <Wgt tab="asset" k="asset_summary"><div style={{ marginTop: 24, marginBottom: 24 }}>
+        <Space size={10} style={{ marginBottom: 12 }}>
+          <div style={{ background: 'rgba(22,119,255,0.12)', color: '#1677ff',
+            width: 36, height: 36, borderRadius: 8, display: 'flex',
+            alignItems: 'center', justifyContent: 'center' }}>
+            <BarChartOutlined />
+          </div>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="asset" k="asset_summary" d="Asset Inventory Summary" /></Typography.Title>
+            <Typography.Text type="secondary">Live counts across VM and Physical Server inventory</Typography.Text>
+          </div>
+        </Space>
+
+        <div className="stat-grid-5">
+          <StatTile icon={<DatabaseOutlined />}        value={a.totalAssets}     label="Total Assets"     color={C.slate} />
+          <StatTile icon={<DesktopOutlined />}         value={a.virtualMachines} label="Virtual Machines" color={C.blue} />
+          <StatTile icon={<HddOutlined />}             value={a.physicalServers} label="Physical Servers" color={C.cyan} />
+          <StatTile icon={<AppstoreOutlined />}        value={a.manageEngine}    label="ManageEngine"     color={C.purple} />
+          <StatTile icon={<BugOutlined />}             value={a.tenable}         label="Tenable"          color={C.red} />
+
+          <StatTile icon={<ThunderboltOutlined />}     value={a.autoPatching}    label="Auto Patching"    color={C.green} />
+          <StatTile icon={<ToolOutlined />}            value={a.manualPatching}  label="Manual Patching"  color={C.blue} />
+          <StatTile icon={<WarningOutlined />}         value={a.exception}       label="Exception"        color={C.amber} />
+          <StatTile icon={<TeamOutlined />}            value={a.beijingItTeam}   label="Beijing IT Team"  color={C.purple} />
+          <StatTile icon={<StopOutlined />}            value={a.eolNoPatches}    label="EOL - No Patches" color={C.rose} />
+
+          <StatTile icon={<ClockCircleOutlined />}     value={a.onboardPending}  label="Onboard Pending"  color={C.blue} />
+          <StatTile icon={<PauseCircleOutlined />}     value={a.onHold}          label="On Hold"          color={C.gray} />
+          <StatTile icon={<CheckCircleOutlined />}     value={a.alive}           label="Alive"            color={C.emerald} />
+          <StatTile icon={<PoweroffOutlined />}        value={a.poweredOff}      label="Powered Off"      color={C.amber} />
+          <StatTile icon={<CloseCircleOutlined />}     value={a.notAlive}        label="Not Alive"        color={C.rose} />
+        </div>
+      </div></Wgt>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}><Wgt tab="asset" k="os_chart">

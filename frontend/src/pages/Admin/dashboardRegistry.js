@@ -32,14 +32,13 @@ export const DASHBOARD_TABS = [
 export const DASHBOARD_WIDGETS = {
   exec: [
     { key: 'kpi_cards',      defaultTitle: 'Headline KPI cards', renamable: false },
-    { key: 'asset_summary',  defaultTitle: 'Asset Inventory Summary' },
-    { key: 'ext_summary',    defaultTitle: 'Extended Inventory Summary' },
     { key: 'msl_compliance', defaultTitle: 'Total Inventory MSL Compliance' },
     { key: 'ext_compliance', defaultTitle: 'Ext. Endpoint Compliance' },
     { key: 'location_overview', defaultTitle: 'VM / Physical & ESXi Servers Count by Location' },
   ],
   asset: [
     { key: 'kpi_cards',       defaultTitle: 'Headline KPI cards', renamable: false },
+    { key: 'asset_summary',  defaultTitle: 'Asset Inventory Summary' },
     { key: 'os_chart',        defaultTitle: 'Assets by OS Type' },
     { key: 'status_chart',    defaultTitle: 'Assets by Server Status' },
     { key: 'location_chart',  defaultTitle: 'Assets by Location' },
