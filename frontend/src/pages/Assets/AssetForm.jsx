@@ -109,8 +109,6 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
         });
         setOsType(r.data.os_type);
         setDepartment(r.data.department);
-        setHnTeam(r.data.team || null);
-        setHnTier(r.data.tier || null);
         setOriginalIp(r.data.ip_address || null);
         setMeta({ created_by_name: r.data.created_by_name || '', created_at: r.data.created_at || '' });
       });
@@ -168,7 +166,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       // "Assign this hostname" (Suggested Hostname panel): fold Team/Tier
       // and the computed hostname into the save itself — the live Ansible
       // rename (if any) only happens after this save succeeds, below.
-      const suggestedHostname = hnAssign
+      const suggestedHostname = mode === 'create' && hnAssign
         ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag })
         : null;
       if (suggestedHostname) {
@@ -562,19 +560,26 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
               .map(f => f.is_extra ? renderExtraWidget(f) : renderBuiltinWidget(f.field_key))
               .filter(Boolean);
             if (widgets.length === 0) return null;
+            // Suggested Hostname sits right after whichever section has
+            // Department — that's what drives both the Team guess and the
+            // asset tag it's built from — and only while creating a new
+            // record, never when editing one that's already registered.
+            const hasDepartment = mode === 'create' && sectionFields.some(f => f.field_key === 'department');
             return (
               <div key={sectionName}>
                 <Divider orientation="left">{sectionName}</Divider>
                 <Row gutter={16}>{widgets}</Row>
+                {hasDepartment && (
+                  <HostnameSuggestionPanel
+                    location={watchedLocation} osType={osType} department={department} assetTag={watchedAssetTag}
+                    team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
+                    assign={hnAssign} setAssign={setHnAssign}
+                  />
+                )}
               </div>
             );
           })
         )}
-        <HostnameSuggestionPanel
-          location={watchedLocation} osType={osType} department={department} assetTag={watchedAssetTag}
-          team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
-          assign={hnAssign} setAssign={setHnAssign}
-        />
         <Space>
           <Button type="primary" htmlType="submit" loading={submitting}>{mode === 'create' ? `Create ${effectiveEntityLabel}` : 'Save Changes'}</Button>
           <Button onClick={() => nav(listPath)}>Cancel</Button>

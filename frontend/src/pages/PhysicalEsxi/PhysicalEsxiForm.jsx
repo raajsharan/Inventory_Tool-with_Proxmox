@@ -66,7 +66,6 @@ export default function PhysicalEsxiForm({ mode }) {
   const [hnTeam, setHnTeam] = useState(null);
   const [hnTier, setHnTier] = useState(null);
   const [hnAssign, setHnAssign] = useState(false);
-  const [currentHostname, setCurrentHostname] = useState(null);
   const { isHidden, fieldMeta, labelOf } = useInventoryFieldMeta(PAGE_KEY);
 
   const omeOn = Form.useWatch('omeActive', form);
@@ -140,9 +139,6 @@ export default function PhysicalEsxiForm({ mode }) {
         setOriginalIp(d.ip_address || null);
         setSelectedDept(d.department);
         setOsType(d.os_type);
-        setHnTeam(d.team || null);
-        setHnTier(d.tier || null);
-        setCurrentHostname(d.os_hostname || null);
       });
     }
   }, [id, mode]); // eslint-disable-line
@@ -237,7 +233,7 @@ export default function PhysicalEsxiForm({ mode }) {
       // "Assign this hostname" (Suggested Hostname panel): fold Team/Tier
       // and the computed hostname into the save itself — the live Ansible
       // rename (if any) only happens after this save succeeds, below.
-      const suggestedHostname = hnAssign
+      const suggestedHostname = isCreate && hnAssign
         ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag })
         : null;
       if (suggestedHostname) {
@@ -692,21 +688,26 @@ export default function PhysicalEsxiForm({ mode }) {
                 .map(f => f.is_extra ? renderExtraWidget(f) : renderBuiltinWidget(f.field_key))
                 .filter(Boolean);
               if (widgets.length === 0) return null;
+              // Suggested Hostname sits right after whichever section has
+              // Department — that's what drives both the Team guess and the
+              // asset tag it's built from — and only while registering a new
+              // server, never when editing one that's already registered.
+              const hasDepartment = isCreate && sectionFields.some(f => f.field_key === 'department');
               return (
                 <div key={sectionName}>
                   <Divider orientation="left">{sectionName}</Divider>
                   <Row gutter={16}>{widgets}</Row>
+                  {hasDepartment && (
+                    <HostnameSuggestionPanel
+                      location={watchedLocation} osType={osType} department={selectedDept} assetTag={watchedAssetTag}
+                      team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
+                      assign={hnAssign} setAssign={setHnAssign}
+                    />
+                  )}
                 </div>
               );
             })
           )}
-
-          <HostnameSuggestionPanel
-            location={watchedLocation} osType={osType} department={selectedDept} assetTag={watchedAssetTag}
-            currentHostname={currentHostname}
-            team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
-            assign={hnAssign} setAssign={setHnAssign}
-          />
 
           {/* ── Actions ── */}
           <Row style={{ marginTop: 8 }}>
