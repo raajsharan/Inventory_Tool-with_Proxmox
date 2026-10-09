@@ -1,0 +1,35 @@
+# Renames a server's OS-level hostname to the value already saved in its
+# inventory record (the "Assign this hostname" checkbox on the Assets /
+# Beijing Assets / Ext. Assets / Physical & ESXi Servers forms) — see
+# backend/src/controllers/hostnameRenameController.js, which reads the target
+# hostname back out of the DB rather than trusting a value from the request,
+# and backend/src/utils/ansibleHostnameRename.js, which runs this playbook.
+#
+# new_hostname arrives via --extra-vars; it is never written to disk here.
+#
+# Deliberately does NOT reboot Windows targets even though a hostname change
+# there only fully takes effect after one — win_hostname reports whether a
+# reboot is needed (reboot_required) and that is surfaced back to the admin
+# instead of restarting a server out from under whoever might be using it.
+---
+- name: Rename hostname — Windows targets
+  hosts: windows
+  gather_facts: false
+  tasks:
+    - name: Set the Windows hostname
+      ansible.windows.win_hostname:
+        name: "{{ new_hostname }}"
+      register: win_rename
+
+    - name: Report whether a reboot is required to finish applying the new hostname
+      ansible.builtin.debug:
+        msg: "REBOOT_REQUIRED::{{ win_rename.reboot_required | default(false) }}"
+
+- name: Rename hostname — Linux targets
+  hosts: linux
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Set the Linux hostname
+      ansible.builtin.hostname:
+        name: "{{ new_hostname }}"

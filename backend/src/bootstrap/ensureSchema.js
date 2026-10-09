@@ -14,6 +14,21 @@ const STATEMENTS = [
   `ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(64)`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_passwords BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_agents BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // ── suggested-hostname pattern (team/tier codes feeding the "Suggested
+  // Hostname" panel on the Assets/Beijing Assets/Ext. Assets/Physical & ESXi
+  // Servers forms — see backend/src/utils/hostnamePattern.js). os_hostname
+  // already exists on assets/beijing_assets/ext_assets; physical_esxi_servers
+  // gets it here for the first time so all four tables are consistent.
+  `ALTER TABLE assets ADD COLUMN IF NOT EXISTS team VARCHAR(8)`,
+  `ALTER TABLE assets ADD COLUMN IF NOT EXISTS tier VARCHAR(4)`,
+  `ALTER TABLE beijing_assets ADD COLUMN IF NOT EXISTS team VARCHAR(8)`,
+  `ALTER TABLE beijing_assets ADD COLUMN IF NOT EXISTS tier VARCHAR(4)`,
+  `ALTER TABLE ext_assets ADD COLUMN IF NOT EXISTS team VARCHAR(8)`,
+  `ALTER TABLE ext_assets ADD COLUMN IF NOT EXISTS tier VARCHAR(4)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS team VARCHAR(8)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS tier VARCHAR(4)`,
+  `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS os_hostname VARCHAR(255)`,
   `CREATE TABLE IF NOT EXISTS custom_roles (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(64) UNIQUE NOT NULL,

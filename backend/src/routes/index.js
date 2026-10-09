@@ -34,6 +34,7 @@ router.use('/user-page-control',   authenticate, require('./userPageAccessRoutes
 router.use('/roles',               require('./customRolesRoutes'));
 router.use('/software-status',     require('./softwareStatusRoutes'));
 router.use('/nessus-status',       require('./nessusStatusRoutes'));
+router.use('/hostname-rename',     require('./hostnameRenameRoutes'));
 router.use('/tenable',             require('./tenableRoutes'));
 router.use('/db-import',           authenticate, requirePageAccess('admin/imports'), require('./dbImportRoutes'));
 router.use('/search',              require('./searchRoutes'));

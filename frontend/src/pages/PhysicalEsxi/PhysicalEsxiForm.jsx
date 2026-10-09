@@ -14,6 +14,9 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import AssetTagPicker from '../Assets/AssetTagPicker.jsx';
 import { AutoAssignedTagDisplay } from '../Assets/AssetForm.jsx';
+import HostnameSuggestionPanel from '../../components/HostnameSuggestionPanel.jsx';
+import { buildHostname } from '../../constants/hostnamePattern.js';
+import { runHostnameRename } from '../../utils/hostnameRename.jsx';
 import {
   useInventoryFieldMeta,
   overridableFormItem as sharedOverridableFormItem,
@@ -42,7 +45,7 @@ const FULL_WIDTH_FIELDS = new Set(['asset_tag', 'additional_remarks']);
 export default function PhysicalEsxiForm({ mode }) {
   const { id } = useParams();
   const nav = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { user } = useAuth();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
@@ -58,6 +61,12 @@ export default function PhysicalEsxiForm({ mode }) {
   const [autoTagLoading, setAutoTagLoading] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
   const [osType, setOsType] = useState();
+  const watchedLocation = Form.useWatch('location', form);
+  const watchedAssetTag = Form.useWatch('assetTag', form);
+  const [hnTeam, setHnTeam] = useState(null);
+  const [hnTier, setHnTier] = useState(null);
+  const [hnAssign, setHnAssign] = useState(false);
+  const [currentHostname, setCurrentHostname] = useState(null);
   const { isHidden, fieldMeta, labelOf } = useInventoryFieldMeta(PAGE_KEY);
 
   const omeOn = Form.useWatch('omeActive', form);
@@ -131,6 +140,9 @@ export default function PhysicalEsxiForm({ mode }) {
         setOriginalIp(d.ip_address || null);
         setSelectedDept(d.department);
         setOsType(d.os_type);
+        setHnTeam(d.team || null);
+        setHnTier(d.tier || null);
+        setCurrentHostname(d.os_hostname || null);
       });
     }
   }, [id, mode]); // eslint-disable-line
@@ -222,6 +234,18 @@ export default function PhysicalEsxiForm({ mode }) {
         ...(values.assetTag ? { assetTag: values.assetTag } : {}),
       };
 
+      // "Assign this hostname" (Suggested Hostname panel): fold Team/Tier
+      // and the computed hostname into the save itself — the live Ansible
+      // rename (if any) only happens after this save succeeds, below.
+      const suggestedHostname = hnAssign
+        ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag })
+        : null;
+      if (suggestedHostname) {
+        payload.osHostname = suggestedHostname;
+        payload.team = hnTeam;
+        payload.tier = hnTier;
+      }
+
       if (values.extras && typeof values.extras === 'object' && Object.keys(values.extras).length) {
         payload.extras = Object.fromEntries(
           Object.entries(values.extras).map(([k, v]) => {
@@ -231,13 +255,20 @@ export default function PhysicalEsxiForm({ mode }) {
         );
       }
 
+      let savedId = id;
       if (mode === 'create') {
-        await api.post('/physical-esxi', payload);
+        const { data } = await api.post('/physical-esxi', payload);
+        savedId = data.id;
         message.success('Server registered successfully');
       } else {
         await api.put(`/physical-esxi/${id}`, payload);
         message.success('Server updated');
       }
+
+      if (suggestedHostname && savedId) {
+        await runHostnameRename({ api, modal, message, source: 'physical_esxi_servers', id: savedId });
+      }
+
       nav('/physical-esxi');
     } catch (e) {
       const err = e.response?.data;
@@ -669,6 +700,13 @@ export default function PhysicalEsxiForm({ mode }) {
               );
             })
           )}
+
+          <HostnameSuggestionPanel
+            location={watchedLocation} osType={osType} department={selectedDept} assetTag={watchedAssetTag}
+            currentHostname={currentHostname}
+            team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
+            assign={hnAssign} setAssign={setHnAssign}
+          />
 
           {/* ── Actions ── */}
           <Row style={{ marginTop: 8 }}>

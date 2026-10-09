@@ -8,6 +8,9 @@ import dayjs from 'dayjs';
 import { ThunderboltOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import AssetTagPicker from './AssetTagPicker.jsx';
+import HostnameSuggestionPanel from '../../components/HostnameSuggestionPanel.jsx';
+import { buildHostname } from '../../constants/hostnamePattern.js';
+import { runHostnameRename } from '../../utils/hostnameRename.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import {
   useInventoryFieldMeta,
@@ -29,7 +32,7 @@ function camel(s) { return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase()); }
 export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/assets', entityLabel = 'Asset', pageKey = 'assets' }) {
   const { id } = useParams();
   const nav = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { user, getPageLabel } = useAuth();
   const effectiveEntityLabel = getPageLabel ? getPageLabel(pageKey, entityLabel) : entityLabel;
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
@@ -40,6 +43,11 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const [osType, setOsType] = useState();
   const [department, setDepartment] = useState();
   const idracEnabled = Form.useWatch('idracEnabled', form);
+  const watchedLocation = Form.useWatch('location', form);
+  const watchedAssetTag = Form.useWatch('assetTag', form);
+  const [hnTeam, setHnTeam] = useState(null);
+  const [hnTier, setHnTier] = useState(null);
+  const [hnAssign, setHnAssign] = useState(false);
   const [autoTagInfo, setAutoTagInfo] = useState(null);
   const [autoTagLoading, setAutoTagLoading] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
@@ -101,6 +109,8 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
         });
         setOsType(r.data.os_type);
         setDepartment(r.data.department);
+        setHnTeam(r.data.team || null);
+        setHnTier(r.data.tier || null);
         setOriginalIp(r.data.ip_address || null);
         setMeta({ created_by_name: r.data.created_by_name || '', created_at: r.data.created_at || '' });
       });
@@ -154,13 +164,33 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
           })
         );
       }
+
+      // "Assign this hostname" (Suggested Hostname panel): fold Team/Tier
+      // and the computed hostname into the save itself — the live Ansible
+      // rename (if any) only happens after this save succeeds, below.
+      const suggestedHostname = hnAssign
+        ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag })
+        : null;
+      if (suggestedHostname) {
+        payload.osHostname = suggestedHostname;
+        payload.team = hnTeam;
+        payload.tier = hnTier;
+      }
+
+      let savedId = id;
       if (mode === 'create') {
-        await api.post(apiPrefix, payload);
+        const { data } = await api.post(apiPrefix, payload);
+        savedId = data.id;
         message.success(`${effectiveEntityLabel} created`);
       } else {
         await api.put(`${apiPrefix}/${id}`, payload);
         message.success(`${effectiveEntityLabel} updated`);
       }
+
+      if (suggestedHostname && savedId) {
+        await runHostnameRename({ api, modal, message, source: pageKey, id: savedId });
+      }
+
       nav(listPath);
     } catch (e) {
       const err = e.response?.data;
@@ -540,6 +570,11 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
             );
           })
         )}
+        <HostnameSuggestionPanel
+          location={watchedLocation} osType={osType} department={department} assetTag={watchedAssetTag}
+          team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
+          assign={hnAssign} setAssign={setHnAssign}
+        />
         <Space>
           <Button type="primary" htmlType="submit" loading={submitting}>{mode === 'create' ? `Create ${effectiveEntityLabel}` : 'Save Changes'}</Button>
           <Button onClick={() => nav(listPath)}>Cancel</Button>
