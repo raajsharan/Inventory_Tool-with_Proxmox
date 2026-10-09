@@ -399,7 +399,7 @@ function DiscoveryAlertsCard() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <Card style={{ marginTop: 24 }}
+    <Card style={{ height: '100%' }}
       title={
         <Space>
           <div style={{ background: 'rgba(255,77,79,0.12)', color: '#ff4d4f',
@@ -614,43 +614,48 @@ function ExecutiveOverview({ data, isDark }) {
         </Row>
       </Card></Wgt>
 
-      <Wgt tab="exec" k="discovery_alerts"><DiscoveryAlertsCard /></Wgt>
-
-      <Wgt tab="exec" k="recent_activity"><Card style={{ marginTop: 24 }}
-        title={
-          <Space>
-            <div style={{ background: 'rgba(124,58,237,0.14)', color: '#7c3aed',
-              width: 36, height: 36, borderRadius: 8, display: 'flex',
-              alignItems: 'center', justifyContent: 'center' }}>
-              <ClockCircleOutlined />
-            </div>
-            <div>
-              <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="recent_activity" d="Recent Activity" /></Typography.Title>
-              <Typography.Text type="secondary">Latest actions across the inventory tool</Typography.Text>
-            </div>
-          </Space>
-        }
-        extra={<Link to="/admin/audit"><Button size="small">View All</Button></Link>}
-      >
-        <Table
-          rowKey="id"
-          size="small"
-          dataSource={data.recentActivity || []}
-          pagination={false}
-          rowClassName="dashcard-row"
-          scroll={{ x: 'max-content' }}
-          locale={{ emptyText: 'No recent activity yet' }}
-          columns={[
-            { title: 'User', dataIndex: 'user_email', render: v => v || '—' },
-            { title: 'Action', dataIndex: 'action', width: 160, render: a => <ActivityActionTag action={a} /> },
-            { title: 'Description', render: (_, r) => r.entity_type
-                ? <>{r.entity_type}{r.entity_id ? <Typography.Text type="secondary"> · {r.entity_id}</Typography.Text> : null}</>
-                : '—' },
-            { title: 'When', dataIndex: 'created_at', width: 140, align: 'right',
-              render: v => <Tooltip title={new Date(v).toLocaleString()}>{dayjs(v).fromNow()}</Tooltip> },
-          ]}
-        />
-      </Card></Wgt>
+      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+        <Col xs={24} lg={12}>
+          <Wgt tab="exec" k="discovery_alerts"><DiscoveryAlertsCard /></Wgt>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Wgt tab="exec" k="recent_activity"><Card style={{ height: '100%' }}
+            title={
+              <Space>
+                <div style={{ background: 'rgba(124,58,237,0.14)', color: '#7c3aed',
+                  width: 36, height: 36, borderRadius: 8, display: 'flex',
+                  alignItems: 'center', justifyContent: 'center' }}>
+                  <ClockCircleOutlined />
+                </div>
+                <div>
+                  <Typography.Title level={5} style={{ margin: 0 }}><WTitle tab="exec" k="recent_activity" d="Recent Activity" /></Typography.Title>
+                  <Typography.Text type="secondary">Latest actions across the inventory tool</Typography.Text>
+                </div>
+              </Space>
+            }
+            extra={<Link to="/admin/audit"><Button size="small">View All</Button></Link>}
+          >
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={data.recentActivity || []}
+              pagination={false}
+              rowClassName="dashcard-row"
+              scroll={{ x: 'max-content' }}
+              locale={{ emptyText: 'No recent activity yet' }}
+              columns={[
+                { title: 'User', dataIndex: 'user_email', render: v => v || '—' },
+                { title: 'Action', dataIndex: 'action', width: 160, render: a => <ActivityActionTag action={a} /> },
+                { title: 'Description', render: (_, r) => r.entity_type
+                    ? <>{r.entity_type}{r.entity_id ? <Typography.Text type="secondary"> · {r.entity_id}</Typography.Text> : null}</>
+                    : '—' },
+                { title: 'When', dataIndex: 'created_at', width: 140, align: 'right',
+                  render: v => <Tooltip title={new Date(v).toLocaleString()}>{dayjs(v).fromNow()}</Tooltip> },
+              ]}
+            />
+          </Card></Wgt>
+        </Col>
+      </Row>
     </div>
   );
 }
