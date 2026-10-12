@@ -2,6 +2,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const { body, param } = require('express-validator');
 const { authenticate, authorize, requirePasswordAccess } = require('../middleware/auth');
+const { importLimiter } = require('../middleware/rateLimiters');
 const validate = require('../middleware/validate');
 const c = require('../controllers/extAssetController');
 const smartCtrl = require('../controllers/smartImportController');
@@ -20,13 +21,14 @@ router.post(
   '/import',
   authenticate,
   authorize(...writeRoles),
+  importLimiter,
   upload.single('file'),
   c.importAssets
 );
 
-router.post('/smart-import/preview', authenticate, authorize(...writeRoles),
+router.post('/smart-import/preview', authenticate, authorize(...writeRoles), importLimiter,
   upload.single('file'), smartCtrl.makePreview('ext_assets'));
-router.post('/smart-import',         authenticate, authorize(...writeRoles),
+router.post('/smart-import',         authenticate, authorize(...writeRoles), importLimiter,
   upload.single('file'), smartCtrl.makeApply('ext_assets'));
 
 const bulk = require('../controllers/bulkActionsController')(require('../services/extAssetService'), 'ext_asset');

@@ -72,8 +72,10 @@ function dbName() {
   return 'infrastructure_inventory';
 }
 
+// 0700: these directories end up holding plaintext-credential CSVs and full
+// database dumps — no reason for any other OS account to even list them.
 async function ensureDir(dir) {
-  await fsp.mkdir(dir, { recursive: true });
+  await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
 }
 
 async function getSettings(kind) {
@@ -140,7 +142,7 @@ function runPgDumpGzip(destGzPath) {
     const streamDone = pipeline(
       proc.stdout,
       zlib.createGzip({ level: zlib.constants.Z_BEST_COMPRESSION }),
-      fs.createWriteStream(destGzPath)
+      fs.createWriteStream(destGzPath, { mode: 0o600 })
     );
 
     Promise.all([closeCode, streamDone])
@@ -267,8 +269,10 @@ async function fetchTableRows(table) {
 async function dumpTableToCsv(table, dir) {
   const rows = await fetchTableRows(table);
   const file = path.join(dir, `${table}_${nowStamp()}.csv`);
+  // mode 0600 — this file carries decrypted plaintext credentials (see
+  // PASSWORD_COLUMNS/decryptPasswordColumns above).
   if (!rows.length) {
-    await fsp.writeFile(file, '');
+    await fsp.writeFile(file, '', { mode: 0o600 });
     return { file, count: 0 };
   }
   const headers = Object.keys(rows[0]);
@@ -276,7 +280,7 @@ async function dumpTableToCsv(table, dir) {
   for (const r of rows) {
     lines.push(headers.map(h => csvEscape(r[h])).join(','));
   }
-  await fsp.writeFile(file, lines.join('\n'), 'utf8');
+  await fsp.writeFile(file, lines.join('\n'), { encoding: 'utf8', mode: 0o600 });
   return { file, count: rows.length };
 }
 

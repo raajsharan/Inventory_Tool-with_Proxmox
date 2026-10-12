@@ -9,8 +9,8 @@ import {
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, DatabaseOutlined, ClusterOutlined, StopOutlined,
   NotificationOutlined, SendOutlined, SettingOutlined,
 } from '@ant-design/icons';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';

@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const customRolesSvc = require('../services/customRolesService');
+const { isValidPassword, PASSWORD_MESSAGE } = require('../utils/passwordPolicy');
 
 const SYSTEM_VISIBLE = ['admin', 'asset_manager', 'viewer'];
 
@@ -26,6 +27,7 @@ async function create(req, res, next) {
   try {
     const { email, fullName, password, role } = req.body;
     if (!email || !password || !fullName || !role) throw new ApiError(400, 'Missing fields');
+    if (!isValidPassword(password)) throw new ApiError(400, PASSWORD_MESSAGE);
     const allowed = await getAllowedRoles(); // superadmin is never a createable role
     if (!allowed.includes(role)) throw new ApiError(400, 'Invalid role');
     const hash = await bcrypt.hash(password, 12);
@@ -62,6 +64,7 @@ async function update(req, res, next) {
     if (role !== undefined)     { params.push(role);     sets.push(`role = $${params.length}`); }
     if (isActive !== undefined) { params.push(isActive); sets.push(`is_active = $${params.length}`); }
     if (password) {
+      if (!isValidPassword(password)) throw new ApiError(400, PASSWORD_MESSAGE);
       const hash = await bcrypt.hash(password, 12);
       params.push(hash); sets.push(`password_hash = $${params.length}`);
     }

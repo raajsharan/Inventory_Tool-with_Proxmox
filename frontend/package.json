@@ -9,23 +9,23 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ant-design/icons": "^5.5.1",
+    "@ant-design/icons": "^6.3.4",
     "@ant-design/plots": "^2.3.2",
     "@xyflow/react": "^12.11.6",
-    "antd": "^5.21.0",
-    "axios": "^1.7.7",
+    "antd": "^6.6.5",
+    "axios": "^1.20.0",
     "dayjs": "^1.11.13",
     "dompurify": "^3.4.15",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-quill": "^2.0.0",
-    "react-router-dom": "^6.26.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-quill-new": "^3.8.3",
+    "react-router-dom": "^7.18.4",
     "react-simple-maps": "^5.0.5",
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.7"
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
   },
   "allowScripts": {
     "esbuild@0.21.5": true

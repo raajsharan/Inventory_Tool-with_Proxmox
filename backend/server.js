@@ -1,5 +1,26 @@
 require('dotenv').config();
 
+// Fail loudly and immediately if either secret is still the literal
+// .env.example placeholder — both are plausible-looking enough (a real
+// word-ish string; a validly-formatted 64-hex-char key) that they have been
+// copy-pasted into a real .env unchanged before. A silent boot on these
+// values would forge-able JWTs and a predictable credential-encryption key
+// repo-wide; refusing to start is much cheaper than that.
+const EXAMPLE_JWT_SECRET = 'replace-with-a-long-random-secret';
+const EXAMPLE_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+if (process.env.JWT_SECRET === EXAMPLE_JWT_SECRET || process.env.ENCRYPTION_KEY === EXAMPLE_ENCRYPTION_KEY) {
+  // eslint-disable-next-line no-console
+  console.error(
+    '[fatal] JWT_SECRET and/or ENCRYPTION_KEY in .env are still the .env.example placeholder values.\n' +
+    '  Generate real ones and update .env before starting this server:\n' +
+    '    JWT_SECRET:     node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"\n' +
+    '    ENCRYPTION_KEY: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"\n' +
+    '  If ENCRYPTION_KEY is changing on a database that already has encrypted data,\n' +
+    '  that data must be re-encrypted under the new key first — do not rotate it blind.'
+  );
+  process.exit(1);
+}
+
 // Without these, an unhandled rejection/exception can crash the process
 // silently (journalctl shows only the systemd restart, not why) — log the
 // cause before exiting so a real crash is diagnosable, then let systemd's
@@ -25,6 +46,7 @@ const swaggerUi = require('swagger-ui-express');
 
 const swaggerSpec = require('./src/config/swagger');
 const errorHandler = require('./src/middleware/errorHandler');
+const { apiLimiter } = require('./src/middleware/rateLimiters');
 const routes = require('./src/routes');
 const wsHub = require('./src/services/wsHub');
 
@@ -42,23 +64,41 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet());
+// Helmet (even v8) doesn't ship a Permissions-Policy middleware — this is an
+// internal IT tool, so deny every browser feature it never uses rather than
+// leave the header absent.
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
+  next();
+});
 // Large JSON payloads (asset lists, discovery/dashboard aggregations) and the
 // static frontend bundle all benefit from gzip — cheap win, no correctness risk.
 app.use(compression());
+const isProd = process.env.NODE_ENV === 'production';
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4000').split(',').map(s => s.trim());
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
-    // Allow any localhost port in development (Vite may start on a different port)
-    if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
+    // The broad "any localhost port" carve-out is a dev convenience (Vite may
+    // start on a different port) — never extend it to a production deploy.
+    if (!isProd && /^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
     cb(new Error('Not allowed by CORS'));
   },
-  credentials: true,
+  // No cookie-based session exists anywhere in this app (auth is a Bearer
+  // token the client attaches itself), so there's no ambient credential for
+  // `credentials: true` to protect — omitting it keeps the origin allowlist
+  // meaningful instead of pairing it with a flag it doesn't need.
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+// Baseline ceiling for the whole API — see src/middleware/rateLimiters.js for
+// the stricter per-endpoint limits layered on top of this for the small set
+// of routes that need one (login, password change, remote-action triggers,
+// bulk import, dashboard summary).
+app.use('/api', apiLimiter);
 
 app.get('/health', (_req, res) => {
   const { getVersion } = require('./src/utils/version');

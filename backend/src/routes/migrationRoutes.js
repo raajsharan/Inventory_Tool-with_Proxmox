@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { authorize } = require('../middleware/auth');
+const { authorize, requirePasswordAccess } = require('../middleware/auth');
 const ctrl = require('../controllers/migrationController');
 
 // ── Projects list (for tracker project selector) ─────────────────────────────
@@ -22,7 +22,7 @@ router.get('/overview', ctrl.overview);
 // Note: static paths must come before /:id routes to avoid param capture
 router.get('/hosts',                     ctrl.listHosts);
 router.get('/hosts/summary',             ctrl.hostsSummary);
-router.get('/hosts/:id/credentials',     ctrl.getHostCredentials);
+router.get('/hosts/:id/credentials',     requirePasswordAccess, ctrl.getHostCredentials);
 router.patch('/hosts/:id',               authorize('admin', 'asset_manager'), ctrl.patchHost);
 router.delete('/hosts/:id',              authorize('admin', 'asset_manager'), ctrl.deleteHost);
 

@@ -16,21 +16,44 @@ const jwt = require('jsonwebtoken');
 const { parse } = require('url');
 
 const clients = new Set();
+// Caps how many of this broadcast-only socket a single account can hold open
+// at once (multiple tabs/devices are normal; hundreds are not) — keyed by
+// JWT subject rather than IP, since this hub sits behind the same reverse
+// proxy as the REST API and isn't wired into Express's trust-proxy config.
+const MAX_SOCKETS_PER_USER = 5;
+const socketsByUser = new Map();
 
 function init(server) {
   const wss = new WebSocketServer({ server, path: '/ws/alerts' });
 
   wss.on('connection', (ws, req) => {
     const { query } = parse(req.url, true);
+    let userId;
     try {
-      jwt.verify(query.token, process.env.JWT_SECRET);
+      ({ id: userId } = jwt.verify(query.token, process.env.JWT_SECRET, { algorithms: ['HS256'] }));
     } catch {
       ws.close(4001, 'Unauthorized');
       return;
     }
+    const existing = socketsByUser.get(userId) || new Set();
+    if (existing.size >= MAX_SOCKETS_PER_USER) {
+      ws.close(4008, 'Too many connections');
+      return;
+    }
+    existing.add(ws);
+    socketsByUser.set(userId, existing);
+
     clients.add(ws);
-    ws.on('close', () => clients.delete(ws));
-    ws.on('error', () => clients.delete(ws));
+    const cleanup = () => {
+      clients.delete(ws);
+      const set = socketsByUser.get(userId);
+      if (set) {
+        set.delete(ws);
+        if (set.size === 0) socketsByUser.delete(userId);
+      }
+    };
+    ws.on('close', cleanup);
+    ws.on('error', cleanup);
   });
 
   return wss;

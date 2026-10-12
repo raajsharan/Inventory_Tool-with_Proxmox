@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const audit = require('../services/auditService');
+const { isValidPassword, PASSWORD_MESSAGE } = require('../utils/passwordPolicy');
 
 // Precomputed bcrypt hash of a fixed dummy password, used to keep bcrypt.compare
 // timing constant on the "no such user" / "inactive user" path so login responses
@@ -118,9 +119,8 @@ async function updateProfile(req, res, next) {
 async function changePassword(req, res, next) {
   try {
     const { currentPassword, newPassword } = req.body || {};
-    const pwdRe = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!newPassword || !pwdRe.test(newPassword)) {
-      throw new ApiError(400, 'Password must be at least 8 characters and include uppercase, lowercase, and a number');
+    if (!isValidPassword(newPassword)) {
+      throw new ApiError(400, PASSWORD_MESSAGE);
     }
     const { rows } = await db.query(`SELECT password_hash FROM users WHERE id = $1`, [req.user.id]);
     if (!rows.length) throw new ApiError(404, 'User not found');

@@ -15,6 +15,16 @@ coverage/
 .npm
 uploads/
 backend/data/
+Thumbs.db
+
+# Keys/certs/backups — none exist in this repo today, kept out preemptively
+*.pem
+*.key
+*.p12
+*.pfx
+*.bak
+*.sql.gz
+backups/
 
 # Sensitive migration data file (contains production credentials)
 Migration-Tracker-Template12.xlsx

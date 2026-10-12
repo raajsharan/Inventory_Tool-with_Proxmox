@@ -1,13 +1,16 @@
 const router = require('express').Router();
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { body } = require('express-validator');
 const validate = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const c = require('../controllers/authController');
 
 const loginLimiter          = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+// ipKeyGenerator() normalizes IPv6 addresses to their /64 subnet before use —
+// required since v8, otherwise an attacker can rotate addresses within their
+// own subnet to dodge the per-IP fallback entirely.
 const changePasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5,
-  keyGenerator: req => req.user?.id || req.ip });
+  keyGenerator: req => req.user?.id || ipKeyGenerator(req.ip) });
 
 /**
  * @openapi

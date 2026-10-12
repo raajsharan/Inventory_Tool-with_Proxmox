@@ -2,6 +2,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const { body, param } = require('express-validator');
 const { authenticate, authorize, requirePasswordAccess } = require('../middleware/auth');
+const { importLimiter } = require('../middleware/rateLimiters');
 const validate = require('../middleware/validate');
 const c = require('../controllers/physicalEsxiController');
 const smartCtrl = require('../controllers/smartImportController');
@@ -20,15 +21,16 @@ router.post(
   '/import',
   authenticate,
   authorize(...writeRoles),
+  importLimiter,
   upload.single('file'),
   c.importAssets
 );
 
-router.post('/sync-from-discovery', authenticate, authorize(...writeRoles), c.syncFromDiscovery);
+router.post('/sync-from-discovery', authenticate, authorize(...writeRoles), importLimiter, c.syncFromDiscovery);
 
-router.post('/smart-import/preview', authenticate, authorize(...writeRoles),
+router.post('/smart-import/preview', authenticate, authorize(...writeRoles), importLimiter,
   upload.single('file'), smartCtrl.makePreview('physical_esxi_servers'));
-router.post('/smart-import',         authenticate, authorize(...writeRoles),
+router.post('/smart-import',         authenticate, authorize(...writeRoles), importLimiter,
   upload.single('file'), smartCtrl.makeApply('physical_esxi_servers'));
 
 const bulk = require('../controllers/bulkActionsController')(require('../services/physicalEsxiService'), 'physical_esxi_server');

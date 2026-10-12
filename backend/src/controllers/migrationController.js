@@ -77,7 +77,6 @@ async function hostsSummary(req, res, next) {
 
 async function getHostCredentials(req, res, next) {
   try {
-    if (!req.user?.can_view_passwords) return res.status(403).json({ error: 'Credential access not permitted for your account.' });
     const creds = await svc.getHostCredentials(req.params.id);
     if (!creds) return res.status(404).json({ error: 'Host not found' });
     res.json(creds);
