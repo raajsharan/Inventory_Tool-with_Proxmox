@@ -10,6 +10,7 @@ router.use('/ext-assets',       authenticate, requirePageAccess('ext_assets'),  
 router.use('/physical-esxi',    authenticate, requirePageAccess('physical_esxi_servers'),  require('./physicalEsxiRoutes'));
 
 router.use('/dropdowns',        authenticate, requirePageAccess('admin/dropdowns'),        require('./dropdownRoutes'));
+router.use('/hostname-pattern-config', authenticate, require('./hostnamePatternConfigRoutes'));
 router.use('/departments',      authenticate, requirePageAccess('admin/tag-ranges'),       require('./departmentRoutes'));
 router.use('/users',            authenticate, requirePageAccess('admin/users'),            require('./userRoutes'));
 router.use('/custom-pages',     require('./customPageRoutes'));

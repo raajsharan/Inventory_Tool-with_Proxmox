@@ -16,6 +16,7 @@ import AssetTagPicker from '../Assets/AssetTagPicker.jsx';
 import { AutoAssignedTagDisplay } from '../Assets/AssetForm.jsx';
 import HostnameSuggestionPanel from '../../components/HostnameSuggestionPanel.jsx';
 import { buildHostname } from '../../constants/hostnamePattern.js';
+import useHostnamePatternConfig from '../../hooks/useHostnamePatternConfig.js';
 import { runHostnameRename } from '../../utils/hostnameRename.jsx';
 import {
   useInventoryFieldMeta,
@@ -63,6 +64,8 @@ export default function PhysicalEsxiForm({ mode }) {
   const [osType, setOsType] = useState();
   const watchedLocation = Form.useWatch('location', form);
   const watchedAssetTag = Form.useWatch('assetTag', form);
+  const watchedAssetType = Form.useWatch('assetType', form);
+  const { config: hnConfig } = useHostnamePatternConfig();
   const [hnTeam, setHnTeam] = useState(null);
   const [hnTier, setHnTier] = useState(null);
   const [hnAssign, setHnAssign] = useState(false);
@@ -234,7 +237,7 @@ export default function PhysicalEsxiForm({ mode }) {
       // and the computed hostname into the save itself — the live Ansible
       // rename (if any) only happens after this save succeeds, below.
       const suggestedHostname = isCreate && hnAssign
-        ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag })
+        ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag, siteCodes: hnConfig.site_codes })
         : null;
       if (suggestedHostname) {
         payload.osHostname = suggestedHostname;
@@ -690,9 +693,13 @@ export default function PhysicalEsxiForm({ mode }) {
               if (widgets.length === 0) return null;
               // Suggested Hostname sits right after whichever section has
               // Department — that's what drives both the Team guess and the
-              // asset tag it's built from — and only while registering a new
-              // server, never when editing one that's already registered.
-              const hasDepartment = isCreate && sectionFields.some(f => f.field_key === 'department');
+              // asset tag it's built from — only while registering a new
+              // server (never when editing one already registered), and only
+              // for Asset Types the admin has marked applicable in Dropdown
+              // Master > Hostname Naming Pattern.
+              const hasDepartment = isCreate
+                && sectionFields.some(f => f.field_key === 'department')
+                && (hnConfig.applicable_asset_types || []).includes(watchedAssetType);
               return (
                 <div key={sectionName}>
                   <Divider orientation="left">{sectionName}</Divider>
@@ -702,6 +709,7 @@ export default function PhysicalEsxiForm({ mode }) {
                       location={watchedLocation} osType={osType} department={selectedDept} assetTag={watchedAssetTag}
                       team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
                       assign={hnAssign} setAssign={setHnAssign}
+                      siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                     />
                   )}
                 </div>

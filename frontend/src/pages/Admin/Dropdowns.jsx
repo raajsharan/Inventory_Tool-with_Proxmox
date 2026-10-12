@@ -6,9 +6,10 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined,
   TagsOutlined, EnvironmentOutlined, AppstoreOutlined, ClockCircleOutlined,
   ThunderboltOutlined, DesktopOutlined, FileTextOutlined, SafetyOutlined,
-  HddOutlined,
+  HddOutlined, FieldStringOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import HostnamePatternConfigPanel from './HostnamePatternConfigPanel.jsx';
 
 // Each entry below describes one dropdown category and (optionally)
 // which parent category it links to (used by OS Versions -> OS Types).
@@ -371,6 +372,32 @@ export default function Dropdowns() {
     };
   });
 
+  // Not a flat value list like the categories above, so it gets its own
+  // panel instead of CategoryPanel — appended after the dynamic/custom
+  // categories rather than in ALL_CATEGORIES, since it isn't dropdown_master
+  // data at all (it's hostname_pattern_config).
+  items.push({
+    key: 'hostname_pattern',
+    label: (
+      <Space size={8}>
+        <span style={{
+          width: 28, height: 28, borderRadius: 6,
+          background: 'rgba(22,119,255,0.10)', color: '#1677ff',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <FieldStringOutlined />
+        </span>
+        <strong>Hostname Naming Pattern</strong>
+      </Space>
+    ),
+    children: (
+      <HostnamePatternConfigPanel
+        assetTypeValues={(byCategory.asset_type || []).map(r => r.value)}
+        locationValues={(byCategory.location || []).map(r => r.value)}
+      />
+    ),
+  });
+
   return (
     <Card
       loading={loading && !all.length}
@@ -382,7 +409,7 @@ export default function Dropdowns() {
       }
       extra={
         <Space>
-          <Button size="small" onClick={() => setActiveKeys(ALL_CATEGORIES.map(c => c.key))}>Expand all</Button>
+          <Button size="small" onClick={() => setActiveKeys(items.map(c => c.key))}>Expand all</Button>
           <Button size="small" onClick={() => setActiveKeys([])}>Collapse all</Button>
         </Space>
       }

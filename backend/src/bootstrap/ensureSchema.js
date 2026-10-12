@@ -28,6 +28,30 @@ const STATEMENTS = [
   `ALTER TABLE ext_assets ADD COLUMN IF NOT EXISTS tier VARCHAR(4)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS team VARCHAR(8)`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS tier VARCHAR(4)`,
+
+  // ── hostname naming pattern config — Site/Team/Tier codes and which Asset
+  // Types the Suggested Hostname panel applies to, now admin-editable from
+  // Dropdown Master instead of hardcoded (see hostnamePatternConfigController.js
+  // for the default shape these seed values mirror).
+  `CREATE TABLE IF NOT EXISTS hostname_pattern_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO hostname_pattern_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+  // The panel previously applied to every Asset Type; ESXi/Desktop/Bare Metal
+  // Server didn't exist as selectable values at all. Seeded WHERE NOT EXISTS
+  // rather than ON CONFLICT, since dropdown_master's UNIQUE (category, value,
+  // parent_value) treats every NULL parent_value as distinct — ON CONFLICT
+  // would silently insert duplicates on every restart for a NULL-parent row.
+  `INSERT INTO dropdown_master (category, value, sort_order)
+     SELECT 'asset_type', v.value, v.sort_order FROM (VALUES
+       ('ESXi', 4), ('Desktop', 5), ('Bare Metal Server', 6)
+     ) AS v(value, sort_order)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM dropdown_master WHERE category = 'asset_type' AND value = v.value
+     )`,
   `ALTER TABLE physical_esxi_servers ADD COLUMN IF NOT EXISTS os_hostname VARCHAR(255)`,
   `CREATE TABLE IF NOT EXISTS custom_roles (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

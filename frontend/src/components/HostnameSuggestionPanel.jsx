@@ -1,8 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Select, Checkbox, Typography, Space, Alert } from 'antd';
-import {
-  TEAM_OPTIONS, TIER_OPTIONS, guessTeamFromDepartment, buildHostname,
-} from '../constants/hostnamePattern.js';
+import { guessTeamFromDepartment, buildHostname } from '../constants/hostnamePattern.js';
+
+// Chrome/Edge forces its own background+text color on an input it thinks is
+// fillable (via the :-webkit-autofill pseudo-class), which cannot be
+// overridden with a plain background-color rule — only this inset
+// box-shadow trick actually beats it. Without this, the Team/Tier selects
+// (and any plain input here) render with the browser's autofill tint
+// instead of the app's own colors, most visibly in dark mode. Scoped to
+// this panel via .hn-panel rather than applied globally, since that's the
+// only place this was reported.
+const AUTOFILL_FIX_CSS = `
+.hn-panel input:-webkit-autofill,
+.hn-panel input:-webkit-autofill:hover,
+.hn-panel input:-webkit-autofill:focus,
+.hn-panel input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--hn-fg) !important;
+  box-shadow: 0 0 0 1000px var(--hn-bg) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+`;
 
 // Lets the asset manager confirm/adjust a hostname suggested from the
 // server naming pattern (Site + OS + Team + Tier + Asset Tag) and, if they
@@ -14,6 +31,7 @@ import {
 export default function HostnameSuggestionPanel({
   location, osType, department, assetTag, currentHostname,
   team, setTeam, tier, setTier, assign, setAssign,
+  siteCodes = {}, teamCodes = [], tierCodes = [],
 }) {
   // Re-guess the Team suggestion whenever Department changes, but only while
   // the admin hasn't picked one themselves yet — so toggling Department back
@@ -21,11 +39,11 @@ export default function HostnameSuggestionPanel({
   const [teamTouched, setTeamTouched] = useState(false);
   useEffect(() => {
     if (teamTouched) return;
-    const guess = guessTeamFromDepartment(department);
+    const guess = guessTeamFromDepartment(department, teamCodes);
     if (guess) setTeam(guess);
-  }, [department]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [department, teamCodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hostname = buildHostname({ location, osType, team, tier, assetTag });
+  const hostname = buildHostname({ location, osType, team, tier, assetTag, siteCodes });
   const missing = [];
   if (!location) missing.push('Location');
   if (!osType) missing.push('OS Type');
@@ -34,10 +52,13 @@ export default function HostnameSuggestionPanel({
   if (!assetTag) missing.push('Department (for the asset tag)');
 
   return (
-    <div style={{
+    <div className="hn-panel" style={{
       padding: 16, borderRadius: 8, border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
       marginBottom: 16, background: 'var(--ant-color-fill-alter, #fafafa)',
+      '--hn-bg': 'var(--ant-color-bg-container, #ffffff)',
+      '--hn-fg': 'var(--ant-color-text, rgba(0,0,0,0.88))',
     }}>
+      <style>{AUTOFILL_FIX_CSS}</style>
       <Typography.Text strong style={{ display: 'block', marginBottom: 10 }}>
         Suggested Hostname
       </Typography.Text>
@@ -54,14 +75,14 @@ export default function HostnameSuggestionPanel({
           placeholder="Team"
           value={team || undefined}
           onChange={(v) => { setTeamTouched(true); setTeam(v); }}
-          options={TEAM_OPTIONS.map(t => ({ value: t.code, label: `${t.code} — ${t.label}` }))}
+          options={teamCodes.map(t => ({ value: t.code, label: `${t.code} — ${t.label}` }))}
         />
         <Select
           style={{ width: 220 }}
           placeholder="Tier"
           value={tier || undefined}
           onChange={setTier}
-          options={TIER_OPTIONS.map(t => ({ value: t.code, label: `${t.code} — ${t.label}` }))}
+          options={tierCodes.map(t => ({ value: t.code, label: `${t.code} — ${t.label}` }))}
         />
       </Space>
 
