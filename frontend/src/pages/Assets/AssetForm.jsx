@@ -170,7 +170,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       // and the computed hostname into the save itself — the live Ansible
       // rename (if any) only happens after this save succeeds, below.
       const suggestedHostname = mode === 'create' && hnAssign
-        ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag, siteCodes: hnConfig.site_codes })
+        ? buildHostname({ location: values.location, osType: values.osType, team: hnTeam, tier: hnTier, assetTag: values.assetTag, siteCodes: hnConfig.site_codes, segmentOrder: hnConfig.segment_order })
         : null;
       if (suggestedHostname) {
         payload.osHostname = suggestedHostname;
@@ -582,6 +582,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
                     team={hnTeam} setTeam={setHnTeam} tier={hnTier} setTier={setHnTier}
                     assign={hnAssign} setAssign={setHnAssign}
                     siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
+                    segmentOrder={hnConfig.segment_order}
                   />
                 )}
               </div>

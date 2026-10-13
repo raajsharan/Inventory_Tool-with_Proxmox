@@ -394,6 +394,12 @@ export default function Dropdowns() {
       <HostnamePatternConfigPanel
         assetTypeValues={(byCategory.asset_type || []).map(r => r.value)}
         locationValues={(byCategory.location || []).map(r => r.value)}
+        onAddLocation={(value) => onAdd({
+          category: 'location',
+          value,
+          parent_value: null,
+          sort_order: (byCategory.location || []).length + 1,
+        })}
       />
     ),
   });

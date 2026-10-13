@@ -37,9 +37,13 @@ const DEFAULT_CONFIG = {
   // an LXC Container doesn't get renamed the same way a VM/server does, so
   // it's deliberately left out of the default set.
   applicable_asset_types: ['VM', 'ESXi', 'Desktop', 'Physical Server', 'Bare Metal Server'],
+  // Order the 5 segments are concatenated in. Original behavior was this
+  // fixed order baked into code — now just the default.
+  segment_order: ['site', 'os', 'team', 'tier', 'asset_tag'],
 };
 
 const CODE_RE = /^[A-Z0-9]{1,4}$/;
+const SEGMENT_KEYS = ['site', 'os', 'team', 'tier', 'asset_tag'];
 
 function validate(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
@@ -78,14 +82,27 @@ function validate(config) {
       throw new ApiError(400, 'applicable_asset_types must be an array of strings');
     }
   }
+
+  const { segment_order } = config;
+  if (segment_order !== undefined) {
+    const isPermutation = Array.isArray(segment_order)
+      && segment_order.length === SEGMENT_KEYS.length
+      && SEGMENT_KEYS.every(k => segment_order.includes(k));
+    if (!isPermutation) {
+      throw new ApiError(400, `segment_order must list each of ${SEGMENT_KEYS.join(', ')} exactly once`);
+    }
+  }
 }
 
 async function getConfig(_req, res, next) {
   try {
     const { rows } = await db.query('SELECT config, updated_at FROM hostname_pattern_config WHERE id = 1');
     const stored = rows[0]?.config;
+    // Merge over defaults (rather than replace) so a config saved before a
+    // new field existed (e.g. segment_order) still gets that field's
+    // default instead of silently missing it.
     res.json({
-      config: (stored && Object.keys(stored).length) ? stored : DEFAULT_CONFIG,
+      config: (stored && Object.keys(stored).length) ? { ...DEFAULT_CONFIG, ...stored } : DEFAULT_CONFIG,
       updated_at: rows[0]?.updated_at || null,
     });
   } catch (e) { next(e); }

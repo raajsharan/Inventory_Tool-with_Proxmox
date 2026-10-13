@@ -15,6 +15,21 @@ export function osLetter(osType) {
   return OS_LETTER[osType] || null;
 }
 
+// The 5 segments a hostname is composed of. Order is admin-editable
+// (Dropdown Master > Hostname Naming Pattern) — SEGMENT_ORDER_DEFAULT is the
+// original fixed order, kept as the fallback whenever a stored segment_order
+// is missing or invalid (not all 5 keys present exactly once).
+export const SEGMENT_KEYS = ['site', 'os', 'team', 'tier', 'asset_tag'];
+export const SEGMENT_LABELS = {
+  site: 'Site', os: 'OS', team: 'Team', tier: 'Tier', asset_tag: 'Asset Tag',
+};
+export const SEGMENT_ORDER_DEFAULT = SEGMENT_KEYS;
+
+export function isValidSegmentOrder(order) {
+  return Array.isArray(order) && order.length === SEGMENT_KEYS.length
+    && SEGMENT_KEYS.every(k => order.includes(k));
+}
+
 // Best-effort guess at a department's Team code, purely to pre-fill the
 // (still user-editable) Team select — asset managers confirm or correct it,
 // nothing here is authoritative. Matched by keyword rather than exact name
@@ -40,11 +55,13 @@ export function guessTeamFromDepartment(departmentName, teamCodes = []) {
 // Returns the composed hostname string, or null if any input (including the
 // admin-configured code maps themselves) is missing — callers treat null as
 // "can't suggest one yet".
-export function buildHostname({ location, osType, team, tier, assetTag, siteCodes = {} }) {
+export function buildHostname({ location, osType, team, tier, assetTag, siteCodes = {}, segmentOrder }) {
   const site = siteCodes[location];
   const os = osLetter(osType);
   const digits = String(assetTag || '').replace(/\D/g, '');
   if (!site || !os || !team || !tier || digits.length === 0) return null;
   const tag = digits.padStart(4, '0').slice(-4);
-  return `${site}${os}${team}${tier}${tag}`;
+  const order = isValidSegmentOrder(segmentOrder) ? segmentOrder : SEGMENT_ORDER_DEFAULT;
+  const parts = { site, os, team, tier, asset_tag: tag };
+  return order.map(k => parts[k]).join('');
 }

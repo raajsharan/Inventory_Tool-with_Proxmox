@@ -2,10 +2,61 @@ import { useEffect, useState } from 'react';
 import {
   Typography, Select, Input, Button, Space, Divider, App,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, DeleteOutlined, SaveOutlined, UpOutlined, DownOutlined,
+} from '@ant-design/icons';
 import api from '../../api/client';
+import { SEGMENT_LABELS, SEGMENT_ORDER_DEFAULT, isValidSegmentOrder } from '../../constants/hostnamePattern.js';
 
 const CODE_RE = /^[A-Z0-9]{1,4}$/;
+
+// Example code used per segment to render a live "e.g. ..." preview of the
+// current order, purely illustrative — not tied to any real site/team/tier.
+const SEGMENT_EXAMPLE = { site: 'BUR', os: 'W', team: 'ITO', tier: 'P', asset_tag: '0001' };
+
+function SegmentOrderEditor({ order, onChange }) {
+  function move(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= order.length) return;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  }
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <Typography.Text strong style={{ display: 'block', marginBottom: 2 }}>Hostname Pattern</Typography.Text>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 10, fontSize: 12.5 }}>
+        The order the segments below are joined into a hostname. Use the arrows to reorder.
+      </Typography.Text>
+      <div className="dd-list" style={{ marginBottom: 10 }}>
+        {order.map((key, i) => (
+          <div key={key} className="dd-row">
+            <div className="dd-row-main">
+              <Space size={10}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 22, height: 22, borderRadius: '50%', fontSize: 12,
+                  background: 'var(--ant-color-fill-secondary, #f0f0f0)',
+                }}>
+                  {i + 1}
+                </span>
+                <span style={{ minWidth: 90 }}>{SEGMENT_LABELS[key]}</span>
+              </Space>
+            </div>
+            <Space size={2}>
+              <Button size="small" type="text" icon={<UpOutlined />} disabled={i === 0} onClick={() => move(i, -1)} />
+              <Button size="small" type="text" icon={<DownOutlined />} disabled={i === order.length - 1} onClick={() => move(i, 1)} />
+            </Space>
+          </div>
+        ))}
+      </div>
+      <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
+        Format: {order.map(k => SEGMENT_LABELS[k]).join(' + ')} — e.g.{' '}
+        <Typography.Text code>{order.map(k => SEGMENT_EXAMPLE[k]).join('')}</Typography.Text>
+      </Typography.Text>
+    </div>
+  );
+}
 
 // Add/edit/remove rows of { code, label } — shared shape for Team Codes and
 // Tier Codes, which only differ in copy and which config key they write to.
@@ -69,7 +120,7 @@ function CodeListEditor({ title, hint, rows, onChange }) {
 // this config is a handful of fixed settings saved together — so it gets its
 // own form instead of being force-fit into CategoryPanel's add/edit-one-row
 // shape.
-export default function HostnamePatternConfigPanel({ assetTypeValues, locationValues }) {
+export default function HostnamePatternConfigPanel({ assetTypeValues, locationValues, onAddLocation }) {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +128,10 @@ export default function HostnamePatternConfigPanel({ assetTypeValues, locationVa
   const [siteCodes, setSiteCodes] = useState({});
   const [teamCodes, setTeamCodes] = useState([]);
   const [tierCodes, setTierCodes] = useState([]);
+  const [segmentOrder, setSegmentOrder] = useState(SEGMENT_ORDER_DEFAULT);
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [newLocation, setNewLocation] = useState('');
+  const [addingLocation, setAddingLocation] = useState(false);
 
   function load() {
     setLoading(true);
@@ -88,6 +142,7 @@ export default function HostnamePatternConfigPanel({ assetTypeValues, locationVa
         setSiteCodes(c.site_codes || {});
         setTeamCodes(c.team_codes || []);
         setTierCodes(c.tier_codes || []);
+        setSegmentOrder(isValidSegmentOrder(c.segment_order) ? c.segment_order : SEGMENT_ORDER_DEFAULT);
         setUpdatedAt(data.updated_at || null);
       })
       .catch(() => message.error('Failed to load hostname naming pattern config'))
@@ -104,6 +159,7 @@ export default function HostnamePatternConfigPanel({ assetTypeValues, locationVa
           site_codes: siteCodes,
           team_codes: teamCodes,
           tier_codes: tierCodes,
+          segment_order: segmentOrder,
         },
       });
       message.success('Hostname naming pattern saved');
@@ -115,17 +171,36 @@ export default function HostnamePatternConfigPanel({ assetTypeValues, locationVa
     }
   }
 
+  async function addLocation() {
+    const value = newLocation.trim();
+    if (!value) { message.warning('Enter a location name'); return; }
+    if (locationValues.some(v => v.toLowerCase() === value.toLowerCase())) {
+      message.warning(`"${value}" already exists`);
+      return;
+    }
+    setAddingLocation(true);
+    try {
+      await onAddLocation(value);
+      setNewLocation('');
+    } catch (e) { /* parent (Dropdowns.jsx onAdd) already shows a message */ } finally {
+      setAddingLocation(false);
+    }
+  }
+
   if (loading) return <Typography.Text type="secondary">Loading…</Typography.Text>;
 
   return (
     <div>
       <Typography.Paragraph type="secondary" style={{ marginTop: -4 }}>
         Controls the "Suggested Hostname" panel on the Assets, Beijing Assets, Ext. Assets, and
-        Physical &amp; ESXi Servers forms: which Asset Types get the panel at all, and the Site /
-        Team / Tier codes it composes into <code>Site + OS + Team + Tier + 4-digit Asset Tag</code>
-        {' '}(e.g. <code>BURWITOP0001</code>). The OS letter (Windows=W, Linux/Proxmox=L, VMware=E)
-        isn't configurable here — it's fixed by the asset's own OS Type.
+        Physical &amp; ESXi Servers forms: which Asset Types get the panel at all, the order its
+        segments are joined in, and the Site / Team / Tier codes they're built from. The OS letter
+        (Windows=W, Linux/Proxmox=L, VMware=E) isn't configurable — it's fixed by the asset's own OS Type.
       </Typography.Paragraph>
+
+      <SegmentOrderEditor order={segmentOrder} onChange={setSegmentOrder} />
+
+      <Divider style={{ margin: '0 0 20px' }} />
 
       <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>Applicable Asset Types</Typography.Text>
       <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12.5 }}>
@@ -146,10 +221,8 @@ export default function HostnamePatternConfigPanel({ assetTypeValues, locationVa
       <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 10, fontSize: 12.5 }}>
         One short code per Location (managed above, under Locations). A Location left blank here can't suggest a hostname yet.
       </Typography.Text>
-      <div className="dd-list" style={{ marginBottom: 20 }}>
-        {locationValues.length === 0 ? (
-          <Typography.Text type="secondary">Add Locations above first.</Typography.Text>
-        ) : locationValues.map(loc => (
+      <div className="dd-list" style={{ marginBottom: locationValues.length === 0 ? 0 : 10 }}>
+        {locationValues.map(loc => (
           <div key={loc} className="dd-row">
             <div className="dd-row-main">
               <Space size={10}>
@@ -165,6 +238,16 @@ export default function HostnamePatternConfigPanel({ assetTypeValues, locationVa
             </div>
           </div>
         ))}
+      </div>
+      <div className="dd-add-row" style={{ marginBottom: 20 }}>
+        <Input
+          value={newLocation}
+          onChange={(e) => setNewLocation(e.target.value)}
+          onPressEnter={addLocation}
+          placeholder="Add new location..."
+          style={{ flex: 1, maxWidth: 260 }}
+        />
+        <Button type="primary" icon={<PlusOutlined />} onClick={addLocation} loading={addingLocation}>Add Location</Button>
       </div>
 
       <Divider style={{ margin: '0 0 20px' }} />

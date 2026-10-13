@@ -31,7 +31,7 @@ const AUTOFILL_FIX_CSS = `
 export default function HostnameSuggestionPanel({
   location, osType, department, assetTag, currentHostname,
   team, setTeam, tier, setTier, assign, setAssign,
-  siteCodes = {}, teamCodes = [], tierCodes = [],
+  siteCodes = {}, teamCodes = [], tierCodes = [], segmentOrder,
 }) {
   // Re-guess the Team suggestion whenever Department changes, but only while
   // the admin hasn't picked one themselves yet — so toggling Department back
@@ -43,7 +43,7 @@ export default function HostnameSuggestionPanel({
     if (guess) setTeam(guess);
   }, [department, teamCodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hostname = buildHostname({ location, osType, team, tier, assetTag, siteCodes });
+  const hostname = buildHostname({ location, osType, team, tier, assetTag, siteCodes, segmentOrder });
   const missing = [];
   if (!location) missing.push('Location');
   if (!osType) missing.push('OS Type');
