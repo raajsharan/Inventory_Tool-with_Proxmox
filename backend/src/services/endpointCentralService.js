@@ -1090,7 +1090,7 @@ async function testDcapi(config, path, entry) {
 // Public API
 // ---------------------------------------------------------------------------
 
-async function fetchAgents() {
+async function fetchAgentsUntagged() {
   const config = await getConfig();
   const useCredentials = config.auth_mode === 'credentials';
 
@@ -1146,6 +1146,60 @@ async function fetchAgents() {
   );
   err.status = 502;
   throw err;
+}
+
+// ---------------------------------------------------------------------------
+// Custom group membership
+// No documented API returns "which custom groups is this computer in", so we
+// list the server's custom group names (serverproperties) and ask the computer
+// list for each one via the customgroupfilter parameter. Best-effort: a group
+// whose result is empty, errors, or is the whole fleet (filter not honoured)
+// is skipped, and failures never block the agent list. Cached to limit calls.
+// ---------------------------------------------------------------------------
+
+const GROUP_CACHE_MS = 10 * 60 * 1000;
+let groupCache = { at: 0, key: '', byResource: new Map(), byName: new Map() };
+
+async function loadGroupMembership(config, total) {
+  const key = `${config.server_url}|${total}`;
+  if (groupCache.key === key && Date.now() - groupCache.at < GROUP_CACHE_MS) return groupCache;
+
+  const byResource = new Map();
+  const byName     = new Map();
+  const add = (map, k, g) => { if (k == null) return; (map.get(k) || map.set(k, []).get(k)).push(g); };
+
+  const props  = await dcapiGet(config, '/api/1.4/desktop/serverproperties', { accept: J });
+  const groups = props.json?.message_response?.serverproperties?.custom_groups || [];
+
+  for (const g of groups) {
+    try {
+      const { json } = await dcapiGet(config, '/api/1.4/inventory/scancomputers', {
+        accept: J, query: { customgroupfilter: g, customerid: config.customer_id || '1', pagelimit: 850 },
+      });
+      const rows = extractComputers(json);
+      if (!rows || !rows.length) continue;
+      if (rows.length >= total && groups.length > 1) continue; // filter ignored / all-computers group
+      for (const c of rows.map(normalizeComputer)) {
+        add(byResource, c.resource_id != null ? String(c.resource_id) : null, g);
+        add(byName, String(c.computer_name).toLowerCase(), g);
+      }
+    } catch { /* skip this group */ }
+  }
+  groupCache = { at: Date.now(), key, byResource, byName };
+  return groupCache;
+}
+
+async function fetchAgents() {
+  const agents = await fetchAgentsUntagged();
+  try {
+    const config = await getConfig();
+    const m = await loadGroupMembership(config, agents.length);
+    for (const a of agents) {
+      a.custom_groups = (a.resource_id != null && m.byResource.get(String(a.resource_id)))
+        || m.byName.get(String(a.computer_name).toLowerCase()) || [];
+    }
+  } catch { /* groups are optional */ }
+  return agents;
 }
 
 // ---------------------------------------------------------------------------

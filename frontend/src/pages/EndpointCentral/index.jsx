@@ -916,20 +916,12 @@ export default function EndpointCentral() {
       render: v => <AgentStatusBadge status={v} />,
     },
     {
-      title: 'Managed', dataIndex: 'managed_status', key: 'managed_status', width: 120,
-      render: v => <ManagedTag status={v} />,
-    },
-    {
       title: 'Scan Status', dataIndex: 'scan_status', key: 'scan_status', width: 120,
       render: v => <ScanStatusTag status={v} />,
     },
     {
       title: 'IP Address', dataIndex: 'ip_address', key: 'ip_address', width: 140,
       render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
-    },
-    {
-      title: 'Logged On Users', dataIndex: 'logged_on_users', key: 'logged_on_users', width: 160, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
     },
     { title: 'Domain',    dataIndex: 'domain',   key: 'domain',   width: 160, ellipsis: true },
     {
@@ -974,37 +966,10 @@ export default function EndpointCentral() {
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
     },
     {
-      title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 160, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
-    },
-    // Populated only by the newer /dcapi endpoints (patch report / per-computer enrichment)
-    {
-      title: 'Patch Health', dataIndex: 'patch_health', key: 'patch_health', width: 130,
-      render: v => {
-        const m = { 0: ['Unknown', 'default'], 1: ['Healthy', 'success'], 2: ['Vulnerable', 'warning'], 3: ['Highly Vulnerable', 'error'] }[v];
-        return m ? <Tag color={m[1]}>{m[0]}</Tag> : <Text type="secondary">—</Text>;
-      },
-    },
-    {
-      title: 'Missing Patches', dataIndex: 'missing_patches', key: 'missing_patches', width: 130, align: 'right',
-      render: (v, r) => v == null || Number.isNaN(v) ? <Text type="secondary">—</Text>
-        : <Tooltip title={r.critical_patches ? `${r.critical_patches} critical` : undefined}><span>{v}</span></Tooltip>,
-    },
-    {
-      title: 'Model', dataIndex: 'computer_model', key: 'computer_model', width: 180, ellipsis: true,
-      render: (v, r) => v ? [r.computer_manufacturer, v].filter(Boolean).join(' ') : <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'RAM', dataIndex: 'ram_memory', key: 'ram_memory', width: 100,
-      render: v => v ?? <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Disk Used', dataIndex: 'disk_used_percent', key: 'disk_used_percent', width: 100, align: 'right',
-      render: v => v == null ? <Text type="secondary">—</Text> : `${v}%`,
-    },
-    {
-      title: 'Software', dataIndex: 'total_software_count', key: 'total_software_count', width: 100, align: 'right',
-      render: v => v ?? <Text type="secondary">—</Text>,
+      title: 'Custom Group Name', dataIndex: 'custom_groups', key: 'custom_groups', width: 220, ellipsis: true,
+      render: v => Array.isArray(v) && v.length
+        ? <Tooltip title={v.join(', ')}><span>{v.join(', ')}</span></Tooltip>
+        : <Text type="secondary">—</Text>,
     },
   ];
 
