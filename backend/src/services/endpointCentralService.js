@@ -1171,12 +1171,24 @@ async function loadGroupMembership(config, total) {
   const props  = await dcapiGet(config, '/api/1.4/desktop/serverproperties', { accept: J });
   const groups = props.json?.message_response?.serverproperties?.custom_groups || [];
 
+  const queryGroup = async (g) => {
+    const { json } = await dcapiGet(config, '/api/1.4/inventory/scancomputers', {
+      accept: J, query: { customgroupfilter: g, customerid: config.customer_id || '1', pagelimit: 850 },
+    });
+    return extractComputers(json);
+  };
+
+  // Sentinel: a group that cannot exist must return nothing. If it returns
+  // computers, this server ignores customgroupfilter and every group would
+  // wrongly list every computer — show no groups rather than wrong ones.
+  try {
+    const ghost = await queryGroup('__no_such_custom_group__');
+    if (ghost && ghost.length) groups.length = 0;
+  } catch { groups.length = 0; }
+
   for (const g of groups) {
     try {
-      const { json } = await dcapiGet(config, '/api/1.4/inventory/scancomputers', {
-        accept: J, query: { customgroupfilter: g, customerid: config.customer_id || '1', pagelimit: 850 },
-      });
-      const rows = extractComputers(json);
+      const rows = await queryGroup(g);
       if (!rows || !rows.length) continue;
       if (rows.length >= total && groups.length > 1) continue; // filter ignored / all-computers group
       for (const c of rows.map(normalizeComputer)) {
