@@ -134,4 +134,13 @@ async function listSoftware(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };
+// GET /endpoint-central/explore?path=/dcapi/...&resourceID=301
+// Read-only passthrough to any supported endpoint (see svc.DCAPI).
+async function explore(req, res, next) {
+  try {
+    const { path, ...params } = req.query;
+    res.json(await svc.exploreDcapi(path, params));
+  } catch (e) { next(e); }
+}
+
+module.exports = { explore, getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };

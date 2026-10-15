@@ -7,6 +7,7 @@ const adminGuard = [authenticate, requirePageAccess('endpoint_central'), authori
 
 router.get('/',             ...guard,      ctrl.listAgents);
 router.get('/software',     ...guard,      ctrl.listSoftware);
+router.get('/explore',      ...adminGuard, ctrl.explore);
 router.get('/config',       ...guard,      ctrl.getConfig);
 router.put('/config',       ...adminGuard, ctrl.saveConfig);
 router.post('/check-url',   ...adminGuard, ctrl.checkUrl);

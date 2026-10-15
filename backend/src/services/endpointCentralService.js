@@ -485,14 +485,24 @@ function rawScanStatus(c) {
   return Number.isFinite(n) ? n : null;
 }
 
+// /dcapi endpoints return timestamps as epoch milliseconds (as strings);
+// older endpoints return display strings, which pass through untouched.
+function toIso(v) {
+  if (v == null) return v;
+  if (/^\d{12,}$/.test(String(v))) return new Date(Number(v)).toISOString();
+  return v;
+}
+
 function normalizeComputer(c) {
   const installStatusRaw = rawInstallStatus(c);
   const installStatusNum = Number(installStatusRaw);
   return {
     resource_id:    c.resource_id    ?? c.RESOURCE_ID    ?? c.resourceid    ?? c.computer_id   ?? c.COMPUTER_ID   ?? null,
     computer_name:  c.computername   ?? c.COMPUTERNAME   ?? c.computer_name ?? c.COMPUTER_NAME
-                 ?? c.netbiosname    ?? c.NETBIOSNAME    ?? c.netbios_name  ?? c.NETBIOS_NAME  ?? '—',
-    domain:         c.domain         ?? c.DOMAIN         ?? c.domain_name   ?? c.DOMAIN_NAME   ?? '—',
+                 ?? c.netbiosname    ?? c.NETBIOSNAME    ?? c.netbios_name  ?? c.NETBIOS_NAME
+                 ?? c.resource_name  ?? '—',   // resource_name: /dcapi scanComputers
+    domain:         c.domain         ?? c.DOMAIN         ?? c.domain_name   ?? c.DOMAIN_NAME
+                 ?? c.domain_netbios_name ?? '—',
     ip_address:     c.ipaddress      ?? c.IP_ADDRESS     ?? c.ip_address    ?? c.IPADDRESS
                  ?? c.client_ip      ?? c.CLIENT_IP      ?? '—',
     os_name:        c.osname         ?? c.OS_NAME        ?? c.osName        ?? c.os_name
@@ -515,14 +525,15 @@ function normalizeComputer(c) {
     // the same fact as every endpoint being confirmed offline, and defaulting
     // to Offline was masking that distinction (every row showed Offline with
     // 0 Online even though ME EC's own console shows agents as live).
-    agent_status:   mapLiveStatus(c.live_status ?? c.LIVE_STATUS ?? c.livestatus)
+    agent_status:   mapLiveStatus(c.live_status ?? c.LIVE_STATUS ?? c.livestatus ?? c.computer_live_status)
                   ?? c.agent_status ?? c.AGENT_STATUS ?? c.agentstatus ?? 2,
     // scan_status: -1 = Not done, 0 = failed, 1 = In progress, 2 = success.
     scan_status:    rawScanStatus(c),
-    last_sync:      c.lastsync       ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
+    last_sync:      toIso(c.agent_last_contact_time ?? c.lastsync ?? c.LAST_SYNC      ?? c.last_sync     ?? c.LASTSYNC
                  ?? c.last_contact   ?? c.LAST_CONTACT   ?? c.last_scan_time ?? c.LAST_SCAN_TIME
-                 ?? c.lastscantime   ?? c.last_successful_scan ?? null,
+                 ?? c.lastscantime   ?? c.last_successful_scan ?? null),
     office:         c.resourceoffice ?? c.RESOURCE_OFFICE ?? c.office       ?? c.site ?? c.SITE
+                 ?? c.branch_office_name
                  ?? c.location       ?? c.LOCATION        ?? '—',
     resource_type:  c.resourcetype   ?? c.RESOURCE_TYPE  ?? 0,
     // Fields below are best-effort — ME EC field names vary by endpoint/version
@@ -790,6 +801,292 @@ async function fetchSoftware(filters = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// /dcapi + other newer endpoints (shared by the Customer Support team)
+// Docs: https://www.manageengine.com/products/desktop-central/help/api/onpremise/api-index.html
+//
+// Selecting one of these as the API Path switches collection to it:
+//   list     — paged computer list; rows are normalised into agents directly
+//   resource — per-computer ({resourceID}); the computer list comes from
+//              scanComputers and each row is enriched with this endpoint
+//   raw      — not computer rows (summaries, reports, groups…); agent
+//              collection falls back to auto-detect, data is readable via
+//              GET /endpoint-central/explore?path=…
+//   action   — state-changing (POST); never called by this tool
+// ---------------------------------------------------------------------------
+
+const SCAN_PATH = '/dcapi/inventory/viewData/scanComputers';
+const DCAPI_PAGE_LIMIT = 500;
+const DCAPI_MAX_PAGES  = 200;
+const ENRICH_MAX       = 100; // endpoints are limited to 120 calls/min
+const ENRICH_CONCURRENCY = 4;
+
+// '--' is how ME EC renders "empty"
+const clean = v => (v == null || v === '--' || v === '') ? undefined : v;
+const pick  = obj => Object.fromEntries(Object.entries(obj).filter(([, v]) => clean(v) !== undefined));
+
+function normalizeScanRow(r) {
+  return normalizeComputer({ ...r, user_name: clean(r.name) });
+}
+
+function normalizePatchSystem(r) {
+  return {
+    ...normalizeComputer({
+      computername:   r.ComputerName,
+      domain:         r.Domain,
+      ip_address:     r.IpAddress,
+      os_name:        r.OperatingSystem,
+      os_platform:    r.OsPlatform,
+      live_status:    r.ComputerLiveStatus,
+      scan_status:    r.ScanStatus,
+      last_sync:      r.LastContactTime,
+      resourceoffice: r.RemoteOffice,
+      user_name:      clean(r.LoggedOnUsers),
+      service_pack:   r.ServicePack,
+      location:       clean(r.Location),
+    }),
+    // Patch posture — Health: 0 Unknown, 1 Healthy, 2 Vulnerable, 3 Highly Vulnerable
+    patch_health:      Number(r.Health),
+    missing_patches:   Number(r.MissingPatches),
+    critical_patches:  Number(r.CriticalPatchCount),
+    installed_patches: Number(r.InstalledPatches),
+    failed_patches:    Number(r.FailedPatches),
+    last_boot_time:    clean(r.LastBootTime) ?? null,
+    last_patched_time: clean(r.LastPatchedTime) ?? null,
+  };
+}
+
+const mergeGeneral = g => pick({
+  logged_on_users: g.currentLoggedUser, os_license_status: g.licenseStatus,
+  domain: g.domainName, last_sync: g.lastSyncTime, last_boot_time: g.lastBootTime,
+  mac_address: g.macAddress,
+});
+const mergeOs = o => pick({
+  os_name: o.operatingSystem, os_version: o.osBuildNumber ?? o.osVersion,
+  service_pack: o.osServicePack, os_license_type: o.licenseType,
+});
+const mergeUser = u => pick({ assigned_to: u.userFullName ?? u.userName });
+const mergeAsset = a => pick({
+  total_software_count: a.totalSoftwaresCount, total_hardware_count: a.totalHardwaresCount,
+  prohibited_software_count: a.prohibitedSoftwaresCount, missing_patches: a.missingPatchesCount,
+});
+const mergeHardware = h => pick({
+  computer_model: h.computerModel, computer_manufacturer: h.computerManufacturer,
+  ram_memory: h.ramMemory, processor: h.processorNames, service_tag: h.serviceTag,
+  warranty_expiry: h.warrantyExpiryDate,
+});
+const mergeDisk = d => pick({ disk_size: d.diskSize, disk_used_percent: d.diskUsedPercentage });
+const mergeSummary = s => ({
+  ...mergeGeneral(s.generalSummary || {}), ...mergeOs(s.osSummary || {}),
+  ...mergeAsset(s.assetSummary || {}),     ...mergeHardware(s.hardwareSummary || {}),
+  ...mergeDisk(s.diskUsageSummary || {}),
+});
+
+const J = 'application/json';
+const raw = (accept = J, params = []) => ({ kind: 'raw', accept, params });
+const res = (accept, merge) => ({ kind: 'resource', accept, merge, params: ['resourceID'] });
+
+const DCAPI = {
+  // computer lists
+  [SCAN_PATH]:                    { kind: 'list', accept: 'application/InventoryMobileAPI.v1+json', normalize: normalizeScanRow },
+  '/dcapi/patch/reports/systems': { kind: 'list', accept: J, normalize: normalizePatchSystem },
+  // per-computer detail
+  '/dcapi/inventory/computers/{resourceID}/summary':        res('application/computerSummary.v1+json', mergeSummary),
+  '/dcapi/inventory/computers/{resourceID}/generalSummary': res('application/computerInfo.v1+json',    mergeGeneral),
+  '/dcapi/inventory/computers/{resourceID}/assetSummary':   res('application/assetSummary.v1+json',    mergeAsset),
+  '/dcapi/inventory/computers/{resourceID}/osInformation':  res('application/osInformation.v1+json',   mergeOs),
+  '/dcapi/inventory/computers/{resourceID}/user':           res('application/userInfo.v1+json',        mergeUser),
+  // aggregate / reference data
+  '/dcapi/inventory/allsummary':             raw('application/allsummary.v1+json'),
+  '/dcapi/inventory/computers/services':     raw('application/services.v1+json'),
+  '/dcapi/inventory/computers/groups':       raw('application/groups.v1+json'),
+  '/api/1.4/desktop/serverproperties':       raw(J),
+  '/sse/api/applications':                   raw(J),
+  '/dcapi/patch/reports/systemHealth':       raw(J),
+  '/dcapi/som/computers/agentInstallStatus': raw('application/somComputerAgentInstallationStatus.v1+json'),
+  '/dcapi/scap/compliance/map/customGroups': raw(J),
+  '/dcapi/scap/compliance/map/CGMapDetails': raw(J),
+  // custom reports
+  '/dcapi/reports/customReports':                          raw('application/allCustomReports.v1+json'),
+  '/dcapi/reports/customReports/v2/columns':               raw(J),
+  '/dcapi/reports/customReports/availableCharts':          raw(J),
+  '/dcapi/reports/customReports/v2/{reportId}':            raw(J, ['reportId']),
+  '/dcapi/reports/customReports/formulaColumn/{columnID}': raw(J, ['columnID']),
+  // state-changing — registered only so they are recognised and refused
+  '/dcapi/som/computers/installAgent': { kind: 'action' },
+  '/{CRVIEW_VIEWNAME}.ec':             { kind: 'action' },
+};
+
+const ACTION_MSG = 'This endpoint changes state on Endpoint Central (POST) and is not used for data collection — pick a read-only endpoint.';
+
+// ME EC auth header formats differ by version/token type; try each in turn.
+async function dcapiGet(config, urlPath, { accept = J, query = {} } = {}) {
+  const useCredentials = config.auth_mode === 'credentials';
+  const token = useCredentials ? config.session_token : config.api_key;
+  const base  = config.server_url.replace(/\/$/, '');
+  const qs    = new URLSearchParams(
+    Object.entries(query).filter(([, v]) => v != null && v !== '')
+  ).toString();
+  const url = `${base}${urlPath}${qs ? '?' + qs : ''}`;
+
+  const variants = [['raw', token], ['authtoken', `Authtoken ${token}`], ['bearer', `Bearer ${token}`]];
+  let last;
+  for (const [label, auth] of variants) {
+    let r;
+    try {
+      r = await httpRequest(url, {
+        verifySsl: config.verify_ssl, timeout: 30000,
+        headers: { Accept: accept, Authorization: auth },
+      });
+    } catch (e) {
+      const err = new Error(`Could not reach Endpoint Central: ${e.message}`);
+      err.status = 502;
+      throw err;
+    }
+    last = { ...r, auth: label };
+    if (r.status !== 401 && r.status !== 403) break;
+  }
+
+  let json = null;
+  try { json = JSON.parse(last.body); } catch { /* non-JSON */ }
+  if (last.status < 200 || last.status >= 300) {
+    const msg  = json?.error_description || json?.errorMessage || json?.message || last.body.slice(0, 160);
+    const code = json?.error_code || json?.errorCode;
+    const err  = new Error(`${urlPath} → HTTP ${last.status}${code ? ` (${code})` : ''}: ${msg}`);
+    err.status = last.status === 401 || last.status === 403 ? last.status : 502;
+    throw err;
+  }
+  if (json === null) {
+    const err = new Error(`${urlPath} returned a non-JSON response`);
+    err.status = 502;
+    throw err;
+  }
+  return { json, auth: last.auth };
+}
+
+const rowsOf = j => j.messageResponse ?? j.message_response ?? [];
+
+async function fetchPaged(config, path, entry) {
+  const rows = [];
+  let totalPages = 1;
+  for (let page = 1; page <= totalPages && page <= DCAPI_MAX_PAGES; page++) {
+    const { json } = await dcapiGet(config, path, {
+      accept: entry.accept, query: { page, pageLimit: DCAPI_PAGE_LIMIT },
+    });
+    const batch = rowsOf(json);
+    if (!Array.isArray(batch) || !batch.length) break;
+    rows.push(...batch);
+    totalPages = Number(json.totalPages) || 1;
+  }
+  return rows;
+}
+
+async function mapLimit(items, limit, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) await fn(items[i++]);
+  }));
+}
+
+async function fetchDcapiAgents(config, path, entry) {
+  if (entry.kind === 'list') {
+    const agents = (await fetchPaged(config, path, entry)).map(entry.normalize);
+    if (path === SCAN_PATH) return agents;
+    // Other lists (e.g. the patch report) carry no agent install status, which
+    // the Managed / Staged / Pending category depends on — fill it in from
+    // scanComputers, matching on computer name. Best-effort.
+    try {
+      const scan = (await fetchPaged(config, SCAN_PATH, DCAPI[SCAN_PATH])).map(normalizeScanRow);
+      const byName = new Map(scan.map(s => [String(s.computer_name).toLowerCase(), s]));
+      for (const a of agents) {
+        const s = byName.get(String(a.computer_name).toLowerCase());
+        if (!s) continue;
+        a.resource_id           ??= s.resource_id;
+        a.agent_install_status  = s.agent_install_status;
+        a.managed_status        = s.managed_status;
+        if (a.agent_version === '—') a.agent_version = s.agent_version;
+        if (!a.last_sync) a.last_sync = s.last_sync;
+      }
+    } catch { /* keep the list as-is */ }
+    return agents;
+  }
+  // resource: base list from scanComputers, enrich each row
+  const agents  = (await fetchPaged(config, SCAN_PATH, DCAPI[SCAN_PATH])).map(normalizeScanRow);
+  const targets = agents.filter(a => a.resource_id != null).slice(0, ENRICH_MAX);
+  await mapLimit(targets, ENRICH_CONCURRENCY, async (a) => {
+    try {
+      const { json } = await dcapiGet(
+        config, path.replace('{resourceID}', encodeURIComponent(a.resource_id)), { accept: entry.accept });
+      Object.assign(a, entry.merge(json), { enriched: true });
+    } catch { a.enriched = false; }
+  });
+  return agents;
+}
+
+// Read-only passthrough for any supported GET endpoint. `params` fills the
+// {templates}; everything else is forwarded as a query string.
+async function exploreDcapi(path, params = {}) {
+  const entry = DCAPI[path];
+  if (!entry) { const e = new Error('Unknown endpoint — not in the supported list'); e.status = 400; throw e; }
+  if (entry.kind === 'action') { const e = new Error(ACTION_MSG); e.status = 400; throw e; }
+
+  const config = await getConfig();
+  if (!config.server_url) { const e = new Error('Endpoint Central is not configured — set Server URL first'); e.status = 400; throw e; }
+
+  const used = new Set(['path']);
+  let urlPath = path;
+  for (const p of entry.params || []) {
+    if (!params[p]) { const e = new Error(`Query parameter "${p}" is required for this endpoint`); e.status = 400; throw e; }
+    urlPath = urlPath.replace(`{${p}}`, encodeURIComponent(params[p]));
+    used.add(p);
+  }
+  const query = Object.fromEntries(Object.entries(params).filter(([k]) => !used.has(k)));
+  return (await dcapiGet(config, urlPath, { accept: entry.accept, query })).json;
+}
+
+async function testDcapi(config, path, entry) {
+  if (entry.kind === 'action') return { success: false, error: ACTION_MSG };
+  const needed = (entry.params || []).filter(p => p !== 'resourceID');
+  if (needed.length) {
+    return {
+      success: false,
+      error: `This endpoint needs a ${needed.map(p => `{${p}}`).join(', ')} value, so it can't be auto-tested. Use the explore API with ?path=…&${needed[0]}=…`,
+    };
+  }
+  try {
+    let json, auth, count = null, sample;
+    if (entry.kind === 'list') {
+      ({ json, auth } = await dcapiGet(config, path, { accept: entry.accept, query: { page: 1, pageLimit: 1 } }));
+      const rows = rowsOf(json);
+      count  = Number(json.totalRecords) || rows.length;
+      sample = rows[0];
+    } else if (entry.kind === 'resource') {
+      const scan  = await dcapiGet(config, SCAN_PATH, { accept: DCAPI[SCAN_PATH].accept, query: { page: 1, pageLimit: 1 } });
+      const first = rowsOf(scan.json)[0];
+      if (!first) return { success: false, error: 'Connected, but no computers are registered to test this per-computer endpoint with' };
+      ({ json, auth } = await dcapiGet(
+        config, path.replace('{resourceID}', encodeURIComponent(first.resource_id)), { accept: entry.accept }));
+      sample = json;
+    } else {
+      ({ json, auth } = await dcapiGet(config, path, { accept: entry.accept }));
+      sample = Array.isArray(json) ? json[0] : json;
+    }
+    return {
+      success: true,
+      message: entry.kind === 'list'
+        ? `Connected — ${count} endpoint(s) found`
+        : entry.kind === 'resource'
+          ? 'Connected — per-computer endpoint responded (rows are enriched from it on sync)'
+          : 'Connected — endpoint responded. It does not return computer rows, so the agent list falls back to auto-detect. Use the explore API to read it.',
+      working_path: path,
+      auth_method:  auth,
+      sample_fields: sample && typeof sample === 'object' ? Object.keys(sample).sort() : [],
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -813,8 +1110,14 @@ async function fetchAgents() {
     throw err;
   }
 
+  const dcapiEntry = DCAPI[config.api_path];
+  if (dcapiEntry && (dcapiEntry.kind === 'list' || dcapiEntry.kind === 'resource')) {
+    return fetchDcapiAgents(config, config.api_path, dcapiEntry);
+  }
+
   const base  = config.server_url.replace(/\/$/, '');
-  const paths = config.api_path ? [config.api_path] : KNOWN_PATHS;
+  // raw/action /dcapi selections aren't computer lists — fall back to auto-detect
+  const paths = config.api_path && !dcapiEntry ? [config.api_path] : KNOWN_PATHS;
 
   const strategies = useCredentials ? sessionTokenStrategies : authStrategies;
   const stratKey   = useCredentials ? config.session_token   : config.api_key;
@@ -882,6 +1185,8 @@ async function testConnection() {
   if (useCredentials && !config.session_token) {
     return { success: false, error: 'Not logged in — use the Login button in settings to authenticate first' };
   }
+
+  if (DCAPI[config.api_path]) return testDcapi(config, config.api_path, DCAPI[config.api_path]);
 
   const base = config.server_url.replace(/\/$/, '');
 
@@ -997,6 +1302,8 @@ module.exports = {
   validateOtpCode,
   fetchAgents,
   fetchSoftware,
+  exploreDcapi,
+  DCAPI,
   checkReachability,
   testConnection,
   KNOWN_PATHS,

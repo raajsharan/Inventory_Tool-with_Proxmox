@@ -7,7 +7,7 @@ import {
   AppstoreOutlined, CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, DesktopOutlined,
   ExclamationCircleFilled, KeyOutlined, LockOutlined, LoginOutlined,
   MobileOutlined, QuestionCircleOutlined, ReloadOutlined,
-  SafetyCertificateOutlined, SettingOutlined, UserOutlined, WifiOutlined,
+  DownloadOutlined, SafetyCertificateOutlined, SettingOutlined, UserOutlined, WifiOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -17,8 +17,8 @@ const { Title, Text } = Typography;
 // ── Endpoint status helpers ────────────────────────────────────────────────
 
 const AGENT_STATUS = {
-  0: { label: 'Online',  color: 'success', icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
-  1: { label: 'Offline', color: 'default', icon: <CloseCircleFilled style={{ color: '#d9d9d9' }} /> },
+  0: { label: 'Live',  color: 'success', icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
+  1: { label: 'Down', color: 'default', icon: <CloseCircleFilled style={{ color: '#d9d9d9' }} /> },
   2: { label: 'Unknown', color: 'warning', icon: <QuestionCircleOutlined style={{ color: '#faad14' }} /> },
 };
 
@@ -54,6 +54,43 @@ function isStaged(agent) {
   if (isNaN(d)) return false;
   const diffDays = (Date.now() - d.getTime()) / 86400000;
   return diffDays > STALE_DAYS;
+}
+
+// Lifecycle category for the Managed / Staged / Pending report.
+//   Pending — agent not installed yet (install status 21 Yet to install,
+//             24 Yet to uninstall)
+//   Staged  — agent installed but no sync in over STALE_DAYS
+//   Managed — agent installed and checking in
+// Anything else (23 Uninstalled, 29 Install failure) is 'Other'.
+function computerCategory(a) {
+  const st = a.agent_install_status;
+  if (st === 21 || st === 24) return 'Pending';
+  if (st != null && st !== 22) return 'Other';
+  if (st == null && a.managed_status !== 1) return 'Other';
+  return isStaged(a) ? 'Staged' : 'Managed';
+}
+
+const CATEGORY_COLOR = { Managed: 'success', Staged: 'error', Pending: 'processing', Other: 'default' };
+
+// Exports the six fields requested for the report, from the filtered rows.
+function exportCategoryCsv(rows) {
+  const status = v => ({ 0: 'Live', 1: 'Down' }[v] ?? 'Unknown');
+  const cols = [
+    ['Computer Name',   a => a.computer_name],
+    ['IP Address',      a => a.ip_address],
+    ['Operating System', a => a.os_name],
+    ['Agent Status',    a => status(a.agent_status)],
+    ['Managed Status',  a => computerCategory(a)],
+    ['Remote Office',   a => a.office],
+  ];
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [cols.map(c => q(c[0])).join(','), ...rows.map(a => cols.map(c => q(c[1](a))).join(','))].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const el  = document.createElement('a');
+  el.href = url;
+  el.download = `endpoint-central-${new Date().toISOString().slice(0, 10)}.csv`;
+  el.click();
+  URL.revokeObjectURL(url);
 }
 
 function ManagedTag({ status }) {
@@ -502,6 +539,30 @@ function ConfigModal({ open, onClose, onSaved }) {
                 { value: '/api/1.4/patch/systems/allsystems',     label: '/api/1.4/patch/systems/allsystems' },
                 { value: '/api/1.4/computers',                    label: '/api/1.4/computers (legacy)' },
                 { value: '/dcapi/rd/computers',                   label: '/dcapi/rd/computers (legacy)' },
+                // Newer /dcapi endpoints — computer lists
+                { value: '/dcapi/inventory/viewData/scanComputers', label: '/dcapi/inventory/viewData/scanComputers (computer list)' },
+                { value: '/dcapi/patch/reports/systems',            label: '/dcapi/patch/reports/systems (computer list + patch health)' },
+                // Per-computer detail — list from scanComputers, each row enriched
+                { value: '/dcapi/inventory/computers/{resourceID}/summary',        label: '/dcapi/inventory/computers/{resourceID}/summary (enrich each computer, first 100)' },
+                { value: '/dcapi/inventory/computers/{resourceID}/generalSummary', label: '/dcapi/inventory/computers/{resourceID}/generalSummary (enrich each computer, first 100)' },
+                { value: '/dcapi/inventory/computers/{resourceID}/assetSummary',   label: '/dcapi/inventory/computers/{resourceID}/assetSummary (enrich each computer, first 100)' },
+                { value: '/dcapi/inventory/computers/{resourceID}/osInformation',  label: '/dcapi/inventory/computers/{resourceID}/osInformation (enrich each computer, first 100)' },
+                { value: '/dcapi/inventory/computers/{resourceID}/user',           label: '/dcapi/inventory/computers/{resourceID}/user (enrich each computer, first 100)' },
+                // Aggregate / reference — not computer rows; test connection + explore API only
+                { value: '/dcapi/inventory/allsummary',             label: '/dcapi/inventory/allsummary (summary only)' },
+                { value: '/dcapi/inventory/computers/services',     label: '/dcapi/inventory/computers/services (summary only)' },
+                { value: '/dcapi/inventory/computers/groups',       label: '/dcapi/inventory/computers/groups (summary only)' },
+                { value: '/api/1.4/desktop/serverproperties',       label: '/api/1.4/desktop/serverproperties (summary only)' },
+                { value: '/sse/api/applications',                   label: '/sse/api/applications (summary only)' },
+                { value: '/dcapi/patch/reports/systemHealth',       label: '/dcapi/patch/reports/systemHealth (summary only)' },
+                { value: '/dcapi/som/computers/agentInstallStatus', label: '/dcapi/som/computers/agentInstallStatus (summary only)' },
+                { value: '/dcapi/scap/compliance/map/customGroups', label: '/dcapi/scap/compliance/map/customGroups (summary only)' },
+                { value: '/dcapi/scap/compliance/map/CGMapDetails', label: '/dcapi/scap/compliance/map/CGMapDetails (summary only)' },
+                { value: '/dcapi/reports/customReports',            label: '/dcapi/reports/customReports (summary only)' },
+                { value: '/dcapi/reports/customReports/v2/columns', label: '/dcapi/reports/customReports/v2/columns (summary only)' },
+                { value: '/dcapi/reports/customReports/availableCharts',          label: '/dcapi/reports/customReports/availableCharts (summary only)' },
+                { value: '/dcapi/reports/customReports/v2/{reportId}',            label: '/dcapi/reports/customReports/v2/{reportId} (explore API only)' },
+                { value: '/dcapi/reports/customReports/formulaColumn/{columnID}', label: '/dcapi/reports/customReports/formulaColumn/{columnID} (explore API only)' },
               ]}
               filterOption={(inputValue, option) =>
                 option?.value?.toLowerCase().includes(inputValue.toLowerCase())
@@ -569,8 +630,8 @@ function SummaryCards({ agents }) {
 
   const cards = [
     { label: 'Total Endpoints', value: total,      color: undefined,  icon: <DesktopOutlined /> },
-    { label: 'Online',          value: online,     color: '#52c41a',  icon: <WifiOutlined /> },
-    { label: 'Offline',         value: offline,    color: '#8c8c8c',  icon: <CloseCircleFilled /> },
+    { label: 'Live',          value: online,     color: '#52c41a',  icon: <WifiOutlined /> },
+    { label: 'Down',         value: offline,    color: '#8c8c8c',  icon: <CloseCircleFilled /> },
     { label: 'Unknown',         value: unknown,     color: '#faad14',  icon: <QuestionCircleOutlined /> },
     { label: 'Not Managed',     value: notManaged, color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
     { label: `Staged (${STALE_DAYS}+ days)`, value: staged, color: '#d4380d', icon: <ClockCircleOutlined /> },
@@ -706,6 +767,7 @@ export default function EndpointCentral() {
   const [managedFilt,  setManagedFilt]  = useState(null);
   const [scanFilter,   setScanFilter]   = useState(null);
   const [stagedFilt,   setStagedFilt]   = useState(null); // null | 'staged' | 'active'
+  const [categoryFilt, setCategoryFilt] = useState(null); // null | 'Managed' | 'Staged' | 'Pending'
 
   // Software filters
   const [swSearch,      setSwSearch]      = useState('');
@@ -799,6 +861,7 @@ export default function EndpointCentral() {
     if (managedFilt  !== null && a.managed_status !== managedFilt) return false;
     if (scanFilter   !== null && a.scan_status !== scanFilter) return false;
     if (osFilter && osFamily(a.os_name) !== osFilter) return false;
+    if (categoryFilt !== null && computerCategory(a) !== categoryFilt) return false;
     if (stagedFilt === 'staged' && !isStaged(a)) return false;
     if (stagedFilt === 'active' && isStaged(a)) return false;
     if (search) {
@@ -843,6 +906,10 @@ export default function EndpointCentral() {
       title: 'Computer Name', dataIndex: 'computer_name', key: 'computer_name',
       fixed: 'left', width: 200, ellipsis: true,
       render: v => <Text strong style={{ fontSize: 13 }}>{v}</Text>,
+    },
+    {
+      title: 'Category', key: 'category', width: 110,
+      render: (_, r) => { const c = computerCategory(r); return <Tag color={CATEGORY_COLOR[c]}>{c}</Tag>; },
     },
     {
       title: 'Agent Status', dataIndex: 'agent_status', key: 'agent_status', width: 120,
@@ -903,12 +970,41 @@ export default function EndpointCentral() {
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
     },
     {
-      title: 'Office / Location', dataIndex: 'office', key: 'office', width: 160, ellipsis: true,
+      title: 'Remote Office', dataIndex: 'office', key: 'office', width: 160, ellipsis: true,
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
     },
     {
       title: 'Assigned To', dataIndex: 'assigned_to', key: 'assigned_to', width: 160, ellipsis: true,
       render: v => v === '—' ? <Text type="secondary">—</Text> : v,
+    },
+    // Populated only by the newer /dcapi endpoints (patch report / per-computer enrichment)
+    {
+      title: 'Patch Health', dataIndex: 'patch_health', key: 'patch_health', width: 130,
+      render: v => {
+        const m = { 0: ['Unknown', 'default'], 1: ['Healthy', 'success'], 2: ['Vulnerable', 'warning'], 3: ['Highly Vulnerable', 'error'] }[v];
+        return m ? <Tag color={m[1]}>{m[0]}</Tag> : <Text type="secondary">—</Text>;
+      },
+    },
+    {
+      title: 'Missing Patches', dataIndex: 'missing_patches', key: 'missing_patches', width: 130, align: 'right',
+      render: (v, r) => v == null || Number.isNaN(v) ? <Text type="secondary">—</Text>
+        : <Tooltip title={r.critical_patches ? `${r.critical_patches} critical` : undefined}><span>{v}</span></Tooltip>,
+    },
+    {
+      title: 'Model', dataIndex: 'computer_model', key: 'computer_model', width: 180, ellipsis: true,
+      render: (v, r) => v ? [r.computer_manufacturer, v].filter(Boolean).join(' ') : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'RAM', dataIndex: 'ram_memory', key: 'ram_memory', width: 100,
+      render: v => v ?? <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Disk Used', dataIndex: 'disk_used_percent', key: 'disk_used_percent', width: 100, align: 'right',
+      render: v => v == null ? <Text type="secondary">—</Text> : `${v}%`,
+    },
+    {
+      title: 'Software', dataIndex: 'total_software_count', key: 'total_software_count', width: 100, align: 'right',
+      render: v => v ?? <Text type="secondary">—</Text>,
     },
   ];
 
@@ -1044,8 +1140,8 @@ export default function EndpointCentral() {
                     value={statusFilter}
                     onChange={v => setStatusFilter(v ?? null)}
                     options={[
-                      { value: 0, label: 'Online'  },
-                      { value: 1, label: 'Offline' },
+                      { value: 0, label: 'Live'  },
+                      { value: 1, label: 'Down' },
                       { value: 2, label: 'Unknown' },
                     ]}
                   />
@@ -1082,6 +1178,21 @@ export default function EndpointCentral() {
                       { value: 'Other',   label: 'Other'   },
                     ]}
                   />
+                  <Select
+                    allowClear placeholder="Category"
+                    style={{ width: 150 }}
+                    value={categoryFilt}
+                    onChange={v => setCategoryFilt(v ?? null)}
+                    options={[
+                      { value: 'Managed', label: 'Managed' },
+                      { value: 'Staged',  label: `Staged (${STALE_DAYS}+ days)` },
+                      { value: 'Pending', label: 'Pending (agent not installed)' },
+                    ]}
+                  />
+                  <Button icon={<DownloadOutlined />} disabled={!filteredAgents.length}
+                          onClick={() => exportCategoryCsv(filteredAgents)}>
+                    Export CSV
+                  </Button>
                   <Select
                     allowClear placeholder="Staged"
                     style={{ width: 150 }}
