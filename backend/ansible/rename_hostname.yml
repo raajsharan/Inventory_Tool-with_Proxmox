@@ -7,10 +7,14 @@
 #
 # new_hostname arrives via --extra-vars; it is never written to disk here.
 #
-# Deliberately does NOT reboot Windows targets even though a hostname change
-# there only fully takes effect after one — win_hostname reports whether a
-# reboot is needed (reboot_required) and that is surfaced back to the admin
-# instead of restarting a server out from under whoever might be using it.
+# Windows only fully applies a hostname change after a reboot, so win_reboot
+# reboots it automatically here (admin-requested behavior — the alternative
+# of leaving it pending was considered and deliberately rejected in favor of
+# the rename completing in one step). Gated on win_rename.changed so a rename
+# that's a no-op (already had this hostname) never reboots the server.
+# win_reboot blocks until the host is back and reachable, so this playbook —
+# and the /hostname-rename request awaiting it — can take several minutes for
+# Windows targets.
 ---
 - name: Rename hostname — Windows targets
   hosts: windows
@@ -21,9 +25,14 @@
         name: "{{ new_hostname }}"
       register: win_rename
 
-    - name: Report whether a reboot is required to finish applying the new hostname
+    - name: Reboot to finish applying the new hostname
+      ansible.windows.win_reboot:
+        reboot_timeout: 600
+      when: win_rename.changed
+
+    - name: Report whether the server was rebooted
       ansible.builtin.debug:
-        msg: "REBOOT_REQUIRED::{{ win_rename.reboot_required | default(false) }}"
+        msg: "REBOOTED::{{ win_rename.changed | default(false) }}"
 
 - name: Rename hostname — Linux targets
   hosts: linux
@@ -33,3 +42,13 @@
     - name: Set the Linux hostname
       ansible.builtin.hostname:
         name: "{{ new_hostname }}"
+      register: linux_rename
+
+    # The hostname itself is already live at this point (the module applies
+    # it immediately) — this only restarts the daemon that reports/watches it,
+    # per explicit request.
+    - name: Restart systemd-hostnamed to pick up the new hostname
+      ansible.builtin.systemd:
+        name: systemd-hostnamed
+        state: restarted
+      when: linux_rename.changed

@@ -12,6 +12,7 @@ import HostnameSuggestionPanel from '../../components/HostnameSuggestionPanel.js
 import { buildHostname } from '../../constants/hostnamePattern.js';
 import useHostnamePatternConfig from '../../hooks/useHostnamePatternConfig.js';
 import { runHostnameRename } from '../../utils/hostnameRename.jsx';
+import { runAgentInstalls } from '../../utils/agentInstall.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import {
   useInventoryFieldMeta,
@@ -34,7 +35,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const { id } = useParams();
   const nav = useNavigate();
   const { message, modal } = App.useApp();
-  const { user, getPageLabel } = useAuth();
+  const { user, getPageLabel, canManageAgents } = useAuth();
   const effectiveEntityLabel = getPageLabel ? getPageLabel(pageKey, entityLabel) : entityLabel;
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
   const [form] = Form.useForm();
@@ -51,6 +52,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const [hnTeam, setHnTeam] = useState(null);
   const [hnTier, setHnTier] = useState(null);
   const [hnAssign, setHnAssign] = useState(false);
+  const [hnInstallAgents, setHnInstallAgents] = useState(true); // auto-deploy on create unless unticked
   const [autoTagInfo, setAutoTagInfo] = useState(null);
   const [autoTagLoading, setAutoTagLoading] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
@@ -190,6 +192,21 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
 
       if (suggestedHostname && savedId) {
         await runHostnameRename({ api, modal, message, source: pageKey, id: savedId });
+      }
+      // Auto-deploy ManageEngine + Nessus on every save for users allowed to
+      // install agents: create → both (unless unticked in the hostname
+      // panel); edit → only the agent whose "installed" flag is still No,
+      // quietly (no popup when it's skipped for lack of credentials).
+      if (savedId && values.ipAddress && (isAdmin || canManageAgents)) {
+        const isCreate  = mode === 'create';
+        const installMe     = isCreate ? hnInstallAgents : !values.manageEngineInstalled;
+        const installNessus = isCreate ? hnInstallAgents : !values.tenableInstalled;
+        if (installMe || installNessus) {
+          await runAgentInstalls({
+            api, modal, message, source: pageKey, ipAddress: values.ipAddress,
+            installMe, installNessus, quiet: !isCreate,
+          });
+        }
       }
 
       nav(listPath);
@@ -583,6 +600,8 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
                     assign={hnAssign} setAssign={setHnAssign}
                     siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                     segmentOrder={hnConfig.segment_order}
+                    canInstallAgents={isAdmin || canManageAgents}
+                    installAgents={hnInstallAgents} setInstallAgents={setHnInstallAgents}
                   />
                 )}
               </div>

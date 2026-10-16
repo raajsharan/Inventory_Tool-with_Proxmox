@@ -12,6 +12,10 @@ const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'rename_hostna
  * against Linux targets rather than raw SSH (see that playbook's header
  * comment for why).
  *
+ * Windows targets are rebooted automatically by the playbook once renamed —
+ * this call doesn't resolve until that reboot completes and the host is back,
+ * so it can take several minutes for Windows.
+ *
  * @param {{ ip_address, username, password, isWindows, newHostname }} opts
  */
 async function renameHostnameViaAnsible({ ip_address, username, password, isWindows, newHostname }) {
@@ -29,17 +33,20 @@ async function renameHostnameViaAnsible({ ip_address, username, password, isWind
     const recap = output.match(/^\S+\s*:\s*ok=\d+\s+changed=\d+\s+unreachable=(\d+)\s+failed=(\d+)/m);
     const connected = !!recap && recap[1] === '0';
     const succeeded = connected && exitCode === 0;
-    const rebootRequired = /REBOOT_REQUIRED::\s*True/i.test(output);
+    // Windows only — the playbook reboots automatically once renamed, so this
+    // reflects whether that reboot actually happened (false for a no-op
+    // rename, and always false for Linux, which never reboots).
+    const rebooted = /REBOOTED::\s*True/i.test(output);
     const error = succeeded ? null
       : !recap ? 'ansible-playbook did not run to completion — see the output.'
         : !connected ? `Could not reach the host over ${isWindows ? 'WinRM' : 'SSH'}.`
           : 'A playbook task failed — see the output.';
 
-    return { connected, succeeded, exitCode, output, error, rebootRequired };
+    return { connected, succeeded, exitCode, output, error, rebooted };
   } catch (e) {
     return {
       connected: false, succeeded: false, error: e.message, output: '',
-      exitCode: null, rebootRequired: false,
+      exitCode: null, rebooted: false,
     };
   } finally {
     if (inventoryPath) fs.promises.unlink(inventoryPath).catch(() => {});

@@ -482,6 +482,26 @@ async function installNessusWindowsViaAnsible({ ip_address, username, password, 
 // ── POST /nessus-status/install ───────────────────────────────────────────────
 async function install(req, res, next) {
   try {
+
+    // A successful install (or an "already installed" skip) is authoritative
+    // enough to flip the inventory flag now, instead of waiting for the next
+    // Live Check to self-heal it.
+    const reply = async (r) => {
+      try {
+        const ok = r && !r.hostname_rejected && !r.unsupported_os
+          && ((r.skipped && /already installed/i.test(r.reason || '')) || (r.connected && r.exitCode === 0));
+        if (ok && vm.hasTenableCol && !vm.tenableInstalled) {
+          await db.query(`UPDATE ${vm.table} SET tenable_installed = true, updated_at = NOW() WHERE id = $1`, [vm.id]);
+          await audit.log({
+            user: req.user, action: 'UPDATE', entityType: vm.table, entityId: vm.id,
+            details: { reason: 'nessus_agent_install_success', field: 'tenable_installed', ip_address, from: false, to: true },
+            ipAddress: req.ip,
+          });
+          r.corrected = { field: 'tenable_installed', from: false, to: true };
+        }
+      } catch { /* never fail the install response over the flag sync */ }
+      return res.json(r);
+    };
     const {
       ip_address, source, port = 22,
       windows_method_override,
@@ -489,7 +509,8 @@ async function install(req, res, next) {
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
     // Credentials always come from the asset record — no manual overrides.
-    const { username, password, osType } = await resolveVm(ip_address, source);
+    const vm = await resolveVm(ip_address, source);
+    const { username, password, osType } = vm;
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
 
@@ -514,7 +535,7 @@ async function install(req, res, next) {
         });
         if (vr.connected && vr.installed) {
           appendLog(logFile, ip_address, 'INFO', 'Nessus Agent already installed. Skipping deployment.');
-          return res.json({ skipped: true, reason: 'Nessus Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
+          return reply({ skipped: true, reason: 'Nessus Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
         }
       } catch {}
     }
@@ -529,8 +550,8 @@ async function install(req, res, next) {
       const selectedMethod = windows_method_override || cfgRow.windows_method || 'auto';
       if (selectedMethod === 'ansible' || selectedMethod === 'auto') {
         const r = await installNessusWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
-        if (selectedMethod === 'ansible') return res.json(r);
-        if (r.connected && r.exitCode === 0) return res.json({ ...r, succeeded_method: 'ansible' });
+        if (selectedMethod === 'ansible') return reply(r);
+        if (r.connected && r.exitCode === 0) return reply({ ...r, succeeded_method: 'ansible' });
         appendLog(logFile, ip_address, 'INFO',
           `Auto mode: Ansible did not succeed (${r.error || `exit ${r.exitCode}`}) — falling back to WinRM → WMI → PsExec → SSH`);
       }
@@ -539,7 +560,7 @@ async function install(req, res, next) {
         ip_address, port, username, password, cfgRow, remoteDir, osType,
         windows_method_override, appendLog, logFile, agentLabel: 'Nessus Agent',
       });
-      return res.json(result);
+      return reply(result);
     }
 
     // Linux
@@ -561,7 +582,7 @@ async function install(req, res, next) {
     });
     if (osCheck.connected && /centos/i.test(osCheck.output || '')) {
       appendLog(logFile, ip_address, 'ERROR', 'CentOS detected — Nessus Agent is not supported on CentOS. Install skipped.');
-      return res.json({
+      return reply({
         connected: true, error: null, output: osCheck.output, exitCode: 1,
         skipped: true, unsupported_os: true,
         reason: 'CentOS is not a supported OS for Nessus Agent — install skipped',
@@ -658,7 +679,7 @@ async function install(req, res, next) {
     result.platform = 'linux';
     result.os_type  = osType;
     result.command  = cmd;
-    res.json(result);
+    reply(result);
   } catch (e) { next(e); }
 }
 

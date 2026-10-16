@@ -36,10 +36,15 @@ const dashboardLimiter = rateLimit({
 // Hostname rename and agent install/reinstall each trigger a live
 // Ansible/SSH/WinRM run against a real managed host — spamming these is a
 // DoS against that host (and its own auth/lockout policies), not just this
-// app. These are manual, occasional admin actions, never a tight loop.
+// app. Mostly manual, occasional admin actions — but the Assets / Physical &
+// ESXi Servers forms can now also fire up to 3 of these in one go per saved
+// record (hostname rename + ManageEngine install + Nessus install), so a
+// short run of onboarding several new servers back to back is normal, not
+// abuse — raised from 10 to account for that without opening this up to a
+// real tight loop.
 const remoteActionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: byUserOrIp,

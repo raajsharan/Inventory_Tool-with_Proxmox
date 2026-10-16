@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Select, Checkbox, Typography, Space, Alert } from 'antd';
+import { Select, Checkbox, Typography, Space, Alert, Divider } from 'antd';
 import { guessTeamFromDepartment, buildHostname } from '../constants/hostnamePattern.js';
 
 // Chrome/Edge forces its own background+text color on an input it thinks is
@@ -32,6 +32,7 @@ export default function HostnameSuggestionPanel({
   location, osType, department, assetTag, currentHostname,
   team, setTeam, tier, setTier, assign, setAssign,
   siteCodes = {}, teamCodes = [], tierCodes = [], segmentOrder,
+  canInstallAgents, installAgents, setInstallAgents,
 }) {
   // Re-guess the Team suggestion whenever Department changes, but only while
   // the admin hasn't picked one themselves yet — so toggling Department back
@@ -98,14 +99,31 @@ export default function HostnameSuggestionPanel({
 
       <Checkbox checked={assign} disabled={!hostname} onChange={(e) => setAssign(e.target.checked)}>
         Assign this hostname — on Save, the OS Hostname field is set to the value above
-        {osType === 'Windows' || osType === 'Linux' || osType === 'Proxmox'
-          ? ' and the server itself is renamed live via Ansible, using its saved username & password.'
-          : '.'}
+        {osType === 'Windows'
+          ? ' and the server itself is renamed live via Ansible, using its saved username & password — it will also reboot automatically to finish applying the new name.'
+          : osType === 'Linux' || osType === 'Proxmox'
+            ? ' and the server itself is renamed live via Ansible, using its saved username & password.'
+            : '.'}
       </Checkbox>
+
+      {assign && osType === 'Windows' && (
+        <Alert style={{ marginTop: 10 }} type="warning" showIcon
+          message="This will reboot the server automatically, disconnecting anyone currently using it." />
+      )}
 
       {assign && osType === 'VMware' && (
         <Alert style={{ marginTop: 10 }} type="warning" showIcon
           message="Live rename isn't supported for VMware/ESXi hosts yet — only the OS Hostname field will be updated. Rename the host's hostname manually (esxcli system hostname set)." />
+      )}
+
+      {canInstallAgents && (osType === 'Windows' || osType === 'Linux') && (
+        <>
+          <Divider style={{ margin: '12px 0' }} />
+          <Checkbox checked={installAgents} onChange={(e) => setInstallAgents(e.target.checked)}>
+            Also install the ManageEngine Agent and Nessus Agent on Save, via Ansible — using the
+            install configuration already set up under Software Status / Nessus Status.
+          </Checkbox>
+        </>
       )}
     </div>
   );

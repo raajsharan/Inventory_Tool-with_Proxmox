@@ -558,6 +558,26 @@ async function performLinuxUninstall({ ip_address, port, username, password, cfg
 // ── POST /software-status/install ─────────────────────────────────────────────
 async function install(req, res, next) {
   try {
+
+    // A successful install (or an "already installed" skip) is authoritative
+    // enough to flip the inventory flag now, instead of waiting for the next
+    // Live Check to self-heal it.
+    const reply = async (r) => {
+      try {
+        const ok = r && !r.hostname_rejected && !r.unsupported_os
+          && ((r.skipped && /already installed/i.test(r.reason || '')) || (r.connected && r.exitCode === 0));
+        if (ok && vm.hasMeCol && !vm.meInstalled) {
+          await db.query(`UPDATE ${vm.table} SET manage_engine_installed = true, updated_at = NOW() WHERE id = $1`, [vm.id]);
+          await audit.log({
+            user: req.user, action: 'UPDATE', entityType: vm.table, entityId: vm.id,
+            details: { reason: 'me_agent_install_success', field: 'manage_engine_installed', ip_address, from: false, to: true },
+            ipAddress: req.ip,
+          });
+          r.corrected = { field: 'manage_engine_installed', from: false, to: true };
+        }
+      } catch { /* never fail the install response over the flag sync */ }
+      return res.json(r);
+    };
     const {
       ip_address, source, port = 22,
       windows_method_override,          // 'ssh' | 'ssh_bash' | 'winrm' | 'psexec' | 'auto' | undefined
@@ -565,7 +585,8 @@ async function install(req, res, next) {
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
 
     // Credentials always come from the asset record — no manual overrides.
-    const { username, password, osType, location } = await resolveVm(ip_address, source);
+    const vm = await resolveVm(ip_address, source);
+    const { username, password, osType, location } = vm;
 
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
@@ -597,7 +618,7 @@ async function install(req, res, next) {
           : await sshVerify({ host: ip_address, port, username, password, osType, timeout: 14000 });
         if (vResult.connected && vResult.installed) {
           appendLog(logFile, ip_address, 'INFO', 'Agent already installed. Skipping deployment.');
-          return res.json({ skipped: true, reason: 'Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
+          return reply({ skipped: true, reason: 'Agent already installed', platform: win ? 'windows' : 'linux', os_type: osType });
         }
       } catch {}
     }
@@ -615,8 +636,8 @@ async function install(req, res, next) {
       const selectedMethod = windows_method_override || cfgRow.windows_method || 'auto';
       if (selectedMethod === 'ansible' || selectedMethod === 'auto') {
         const r = await installMeWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
-        if (selectedMethod === 'ansible') return res.json(r);
-        if (r.connected && r.exitCode === 0) return res.json({ ...r, succeeded_method: 'ansible' });
+        if (selectedMethod === 'ansible') return reply(r);
+        if (r.connected && r.exitCode === 0) return reply({ ...r, succeeded_method: 'ansible' });
         appendLog(logFile, ip_address, 'INFO',
           `Auto mode: Ansible did not succeed (${r.error || `exit ${r.exitCode}`}) — falling back to WinRM → WMI → PsExec → SSH`);
       }
@@ -625,12 +646,12 @@ async function install(req, res, next) {
         ip_address, port, username, password, cfgRow, remoteDir, osType,
         windows_method_override, appendLog, logFile, agentLabel: 'ManageEngine Agent',
       });
-      return res.json(result);
+      return reply(result);
     }
 
     // ── Linux ──────────────────────────────────────────────────────────────────
     const result = await performLinuxInstall({ ip_address, port, username, password, osType, cfgRow, logFile });
-    res.json(result);
+    await reply(result);
   } catch (e) { next(e); }
 }
 

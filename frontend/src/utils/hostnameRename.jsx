@@ -6,16 +6,20 @@ import { Typography } from 'antd';
 // renamed, not just that the inventory record was. Never throws: a failed
 // rename is reported via the modal, not as a rejected promise, since the
 // record itself was already saved successfully by the time this runs.
+//
+// For Windows this can take several minutes — the backend call doesn't
+// resolve until the server has rebooted and come back up, since that's what
+// fully applies the new name there.
 export async function runHostnameRename({ api, modal, message, source, id }) {
-  message.loading({ content: 'Renaming the server’s hostname…', key: 'hostname-rename', duration: 0 });
+  message.loading({ content: 'Renaming the server’s hostname — this may take a few minutes if it needs to reboot…', key: 'hostname-rename', duration: 0 });
   try {
     const { data } = await api.post('/hostname-rename', { source, id });
     message.destroy('hostname-rename');
     if (data.succeeded) {
       modal.success({
         title: 'Hostname renamed',
-        content: data.rebootRequired
-          ? 'The server was renamed. A reboot is needed on the Windows side before the new name fully takes effect.'
+        content: data.rebooted
+          ? 'The server was renamed and has rebooted to finish applying the new name.'
           : 'The server was renamed successfully.',
       });
     } else {
