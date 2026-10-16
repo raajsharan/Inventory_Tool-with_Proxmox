@@ -30,6 +30,18 @@ const NESSUS_WINDOWS_CONFIG = {
 
 const SEP = '---SEP---';
 
+// Many hosts (PAM-based sshd with PasswordAuthentication off, hardened
+// images) only accept the password via keyboard-interactive, which ssh2 does
+// not attempt unless tryKeyboard is set — surfacing as "All configured
+// authentication methods failed" even though `ssh user@host` works by hand.
+function connectWithPassword(conn, opts) {
+  conn.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+    finish(prompts.map(() => opts.password));
+  });
+  conn.connect({ ...opts, tryKeyboard: true });
+}
+
+
 function isWindows(osType) {
   return /windows/i.test(osType || '');
 }
@@ -201,7 +213,7 @@ function sshVerify({ host, port = 22, username, password, osType = '', timeout =
     });
 
     try {
-      conn.connect({ host, port: Number(port), username, password, readyTimeout: timeout });
+      connectWithPassword(conn, { host, port: Number(port), username, password, readyTimeout: timeout });
     } catch (e) {
       clearTimeout(timer);
       done({ connected: false, error: e.message, service: null, file: null });
@@ -253,7 +265,7 @@ function sshRunCommand({ host, port = 22, username, password, command, timeout =
     });
 
     try {
-      conn.connect({ host, port: Number(port), username, password, readyTimeout: 15000 });
+      connectWithPassword(conn, { host, port: Number(port), username, password, readyTimeout: 15000 });
     } catch (e) {
       clearTimeout(timer);
       done({ connected: false, error: e.message, output: '', exitCode: null });
@@ -361,7 +373,7 @@ function sshUploadAndRun({ host, port = 22, username, password, files, remoteDir
     });
 
     try {
-      conn.connect({ host, port: Number(port), username, password, readyTimeout: 15000 });
+      connectWithPassword(conn, { host, port: Number(port), username, password, readyTimeout: 15000 });
     } catch (e) {
       clearTimeout(timer);
       done({ connected: false, error: e.message, output, exitCode: null });
