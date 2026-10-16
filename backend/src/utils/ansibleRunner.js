@@ -26,11 +26,21 @@ const LOCAL_TMP = path.join(os.tmpdir(), 'ansible-tmp');
 // the INI format's quoting/escaping pitfalls (host vars here include
 // decrypted passwords straight from JSON.stringify's own escaping).
 function connectionVars(t) {
+  // Windows targets default to WinRM; t.windowsTransport === 'ssh' runs the
+  // same win_* modules over the host's OpenSSH server instead (PowerShell
+  // shell), for networks where 5985 isn't reachable.
+  const winSsh = t.isWindows && t.windowsTransport === 'ssh';
   return {
     ansible_user: t.username,
     ansible_password: t.password,
-    ansible_connection: t.isWindows ? 'winrm' : 'ssh',
-    ...(t.isWindows
+    ansible_connection: t.isWindows && !winSsh ? 'winrm' : 'ssh',
+    ...(winSsh
+      ? {
+        ansible_port: 22,
+        ansible_shell_type: 'powershell',
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no',
+      }
+      : t.isWindows
       ? {
         ansible_port: 5985,
         ansible_winrm_transport: 'ntlm',

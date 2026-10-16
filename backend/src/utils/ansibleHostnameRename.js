@@ -5,8 +5,8 @@ const ansible = require('./ansibleRunner');
 const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'rename_hostname.yml');
 
 /**
- * Renames one host's OS-level hostname via Ansible (WinRM for Windows, SSH
- * for Linux/Proxmox) — see ansible/rename_hostname.yml. Modeled on
+ * Renames one host's OS-level hostname via Ansible (SSH for both Windows —
+ * OpenSSH + PowerShell — and Linux/Proxmox) — see ansible/rename_hostname.yml. Modeled on
  * installWindowsViaAnsible (ansibleWindowsInstall.js), extended to also cover
  * the Linux play since this is the one place in the app that runs Ansible
  * against Linux targets rather than raw SSH (see that playbook's header
@@ -19,7 +19,9 @@ const PLAYBOOK_PATH = path.join(__dirname, '..', '..', 'ansible', 'rename_hostna
  * @param {{ ip_address, username, password, isWindows, newHostname }} opts
  */
 async function renameHostnameViaAnsible({ ip_address, username, password, isWindows, newHostname }) {
-  const target = { ip_address, isWindows, username, password, vars: {} };
+  // Windows is renamed over SSH (OpenSSH + PowerShell) rather than WinRM —
+  // 5985 is often blocked or not enabled on freshly built servers.
+  const target = { ip_address, isWindows, username, password, vars: {}, windowsTransport: 'ssh' };
 
   let inventoryPath;
   try {
@@ -39,7 +41,7 @@ async function renameHostnameViaAnsible({ ip_address, username, password, isWind
     const rebooted = /REBOOTED::\s*True/i.test(output);
     const error = succeeded ? null
       : !recap ? 'ansible-playbook did not run to completion — see the output.'
-        : !connected ? `Could not reach the host over ${isWindows ? 'WinRM' : 'SSH'}.`
+        : !connected ? 'Could not reach the host over SSH.'
           : 'A playbook task failed — see the output.';
 
     return { connected, succeeded, exitCode, output, error, rebooted };
