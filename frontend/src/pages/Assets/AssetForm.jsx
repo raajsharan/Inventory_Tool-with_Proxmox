@@ -31,6 +31,14 @@ function extractTagNumber(tag) {
 // Map snake_case server field keys to camelCase Form.Item names.
 function camel(s) { return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase()); }
 
+const NO_AGENT_ASSET_TYPES = ['physical server', 'bare metal server'];
+const NO_AGENT_OS_TYPES = ['proxmox', 'vmware'];
+function skipAgentInstall(assetType, osType) {
+  const t = String(assetType || '').trim().toLowerCase();
+  const o = String(osType || '').trim().toLowerCase();
+  return NO_AGENT_ASSET_TYPES.includes(t) || NO_AGENT_OS_TYPES.some(x => o.includes(x));
+}
+
 export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/assets', entityLabel = 'Asset', pageKey = 'assets' }) {
   const { id } = useParams();
   const nav = useNavigate();
@@ -197,7 +205,9 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       // install agents: create → both (unless unticked in the hostname
       // panel); edit → only the agent whose "installed" flag is still No,
       // quietly (no popup when it's skipped for lack of credentials).
-      if (savedId && values.ipAddress && (isAdmin || canManageAgents)) {
+      // Never deploy agents to hypervisor hosts: Physical / Bare Metal servers,
+      // or anything whose OS Type is Proxmox or VMware.
+      if (savedId && values.ipAddress && (isAdmin || canManageAgents) && !skipAgentInstall(values.assetType, values.osType)) {
         const isCreate  = mode === 'create';
         const installMe     = isCreate ? hnInstallAgents : !values.manageEngineInstalled;
         const installNessus = isCreate ? hnInstallAgents : !values.tenableInstalled;
@@ -600,7 +610,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
                     assign={hnAssign} setAssign={setHnAssign}
                     siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                     segmentOrder={hnConfig.segment_order}
-                    canInstallAgents={isAdmin || canManageAgents}
+                    canInstallAgents={(isAdmin || canManageAgents) && !skipAgentInstall(watchedAssetType, osType)}
                     installAgents={hnInstallAgents} setInstallAgents={setHnInstallAgents}
                   />
                 )}
