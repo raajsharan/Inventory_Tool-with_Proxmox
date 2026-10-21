@@ -3,15 +3,18 @@ const ApiError = require('../utils/ApiError');
 const assetService = require('./assetService');
 const beijingAssetService = require('./beijingAssetService');
 const extAssetService = require('./extAssetService');
+const physicalEsxiService = require('./physicalEsxiService');
 
-// The three inventories share the exact same ASSET_COLUMNS whitelist and
-// create()/remove() shape, which is what makes a generic transfer possible
+// The inventories share the same create()/remove() shape (Physical & ESXi has
+// a different column set; fields the target doesn't know are ignored by its
+// mapBody, and fields the source lacks are simply left unset), which is what makes a generic transfer possible
 // without duplicating per-table logic (auto tag assignment, dup checks,
 // decommission bookkeeping all still run via each service's own create()).
 const INVENTORIES = {
   assets:         { table: 'assets',         label: 'Asset Inventory',      svc: assetService },
   beijing_assets: { table: 'beijing_assets', label: 'Beijing Asset List',   svc: beijingAssetService },
   ext_assets:     { table: 'ext_assets',      label: 'Ext. Asset Inventory', svc: extAssetService },
+  physical_esxi_servers: { table: 'physical_esxi_servers', label: 'Physical & ESXi Servers', svc: physicalEsxiService },
 };
 
 function assertInventory(key) {
@@ -56,7 +59,7 @@ async function transfer({ source, target, ids }, userId) {
       if (!row) throw new ApiError(404, 'Record not found or already moved');
 
       const body = {};
-      for (const c of assetService.ASSET_COLUMNS) body[c] = row[c];
+      for (const c of src.svc.ASSET_COLUMNS) body[c] = row[c];
 
       await src.svc.remove(id, userId);
       removedFromSource = true;
@@ -67,6 +70,13 @@ async function transfer({ source, target, ids }, userId) {
         await db.query(
           `UPDATE ${tgt.table} SET asset_password_encrypted = $1 WHERE id = $2`,
           [row.asset_password_encrypted, created.id]
+        );
+      }
+
+      if (row.idrac_password_encrypted && tgt.table === 'physical_esxi_servers') {
+        await db.query(
+          `UPDATE ${tgt.table} SET idrac_password_encrypted = $1 WHERE id = $2`,
+          [row.idrac_password_encrypted, created.id]
         );
       }
 

@@ -12,6 +12,7 @@ const INVENTORIES = {
   assets:         { label: 'Asset Inventory',      apiPath: '/assets' },
   beijing_assets: { label: 'Beijing Asset List',   apiPath: '/beijing-assets' },
   ext_assets:     { label: 'Ext. Asset Inventory', apiPath: '/ext-assets' },
+  physical_esxi_servers: { label: 'Physical & ESXi Servers', apiPath: '/physical-esxi' },
 };
 const INVENTORY_OPTS = Object.entries(INVENTORIES).map(([value, m]) => ({ value, label: m.label }));
 
