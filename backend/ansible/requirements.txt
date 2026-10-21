@@ -1,1 +1,2 @@
 pywinrm>=0.4.3
+impacket>=0.11.0

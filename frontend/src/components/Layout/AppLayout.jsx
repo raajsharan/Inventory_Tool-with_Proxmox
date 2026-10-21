@@ -226,6 +226,7 @@ export default function AppLayout() {
       can('admin/custom-topology')      && { key: '/admin/custom-topology',    icon: <NodeIndexOutlined />,         label: <Link to="/admin/custom-topology">Custom Topology Builder</Link> },
       isAdmin                           && { key: '/admin/install-config',        icon: <CloudDownloadOutlined />,      label: <Link to="/admin/install-config">ME Install Config</Link> },
       isAdmin                           && { key: '/admin/nessus-install-config', icon: <CloudDownloadOutlined />,      label: <Link to="/admin/nessus-install-config">Nessus Install Config</Link> },
+      isAdmin                           && { key: '/admin/hyperv-collect-test',   icon: <CloudServerOutlined />,        label: <Link to="/admin/hyperv-collect-test">Hyper-V Collect Test</Link> },
     ].filter(Boolean),
   };
 

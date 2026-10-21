@@ -31,6 +31,7 @@ router.use('/custom-topology',     authenticate, requirePageAccess('admin/custom
 router.use('/vmware',              require('./vmwareRoutes'));
 router.use('/proxmox',             require('./proxmoxRoutes'));
 router.use('/hyperv',              require('./hypervRoutes'));
+router.use('/hyperv-collect-test', require('./hypervCollectTestRoutes'));
 router.use('/user-page-control',   authenticate, require('./userPageAccessRoutes'));
 router.use('/roles',               require('./customRolesRoutes'));
 router.use('/software-status',     require('./softwareStatusRoutes'));

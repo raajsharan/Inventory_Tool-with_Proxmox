@@ -62,6 +62,7 @@ const HyperVDiscovery        = lazy(() => import('./pages/HyperVDiscovery/index.
 const TopologySites          = lazy(() => import('./pages/TopologySites/index.jsx'));
 const ConnectivityAlerts     = lazy(() => import('./pages/ConnectivityAlerts/index.jsx'));
 const SoftwareStatus         = lazy(() => import('./pages/SoftwareStatus/index.jsx'));
+const HypervCollectTest      = lazy(() => import('./pages/Admin/HypervCollectTest.jsx'));
 const NessusStatus           = lazy(() => import('./pages/NessusStatus/index.jsx'));
 const NessusInstallConfig    = lazy(() => import('./pages/Admin/NessusInstallConfig.jsx'));
 const TenableReport          = lazy(() => import('./pages/TenableReport/index.jsx'));
@@ -176,6 +177,7 @@ export default function App() {
         <Route path="/admin/custom-topology" element={<CustomTopologyAdmin />} />
         <Route path="/admin/install-config"        element={<InstallConfig />} />
         <Route path="/admin/nessus-install-config" element={<NessusInstallConfig />} />
+        <Route path="/admin/hyperv-collect-test"   element={<HypervCollectTest />} />
         <Route path="/admin/server-models"         element={<ServerModels />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
