@@ -18,7 +18,6 @@ import HostnameSuggestionPanel from '../../components/HostnameSuggestionPanel.js
 import { buildHostname } from '../../constants/hostnamePattern.js';
 import useHostnamePatternConfig from '../../hooks/useHostnamePatternConfig.js';
 import { runHostnameRename } from '../../utils/hostnameRename.jsx';
-import { runAgentInstalls } from '../../utils/agentInstall.jsx';
 import {
   useInventoryFieldMeta,
   overridableFormItem as sharedOverridableFormItem,
@@ -48,7 +47,7 @@ export default function PhysicalEsxiForm({ mode }) {
   const { id } = useParams();
   const nav = useNavigate();
   const { message, modal } = App.useApp();
-  const { user, canManageAgents } = useAuth();
+  const { user } = useAuth();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
   const [form] = Form.useForm();
@@ -70,7 +69,6 @@ export default function PhysicalEsxiForm({ mode }) {
   const [hnTeam, setHnTeam] = useState(null);
   const [hnTier, setHnTier] = useState(null);
   const [hnAssign, setHnAssign] = useState(false);
-  const [hnInstallAgents, setHnInstallAgents] = useState(true); // auto-deploy on create unless unticked
   const { isHidden, fieldMeta, labelOf } = useInventoryFieldMeta(PAGE_KEY);
 
   const omeOn = Form.useWatch('omeActive', form);
@@ -268,12 +266,6 @@ export default function PhysicalEsxiForm({ mode }) {
 
       if (suggestedHostname && savedId) {
         await runHostnameRename({ api, modal, message, source: 'physical_esxi_servers', id: savedId });
-      }
-      if (isCreate && hnInstallAgents && savedId) {
-        await runAgentInstalls({
-          api, modal, message, source: 'physical_esxi_servers', ipAddress: values.ipAddress,
-          installMe: true, installNessus: true,
-        });
       }
 
       nav('/physical-esxi');
@@ -719,8 +711,6 @@ export default function PhysicalEsxiForm({ mode }) {
                       assign={hnAssign} setAssign={setHnAssign}
                       siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                       segmentOrder={hnConfig.segment_order}
-                      canInstallAgents={isAdmin || canManageAgents}
-                      installAgents={hnInstallAgents} setInstallAgents={setHnInstallAgents}
                     />
                   )}
                 </div>
