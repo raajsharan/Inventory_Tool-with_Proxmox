@@ -50,8 +50,19 @@ router.post(
   '/',
   authenticate,
   authorize(...writeRoles),
-  body('vm_name').exists().withMessage('vm_name required').bail().isString(),
-  body('ip_address').exists().withMessage('ip_address required').bail().matches(IP_RE).withMessage('Invalid IP address'),
+  // The Add form posts camelCase (vmName/ipAddress); discovery "Add to
+  // Inventory" and CSV import post snake_case. Accept either.
+  body().custom(b => {
+    const v = b.vmName ?? b.vm_name;
+    if (typeof v !== 'string' || !v.trim()) throw new Error('vmName required');
+    return true;
+  }),
+  body().custom(b => {
+    const ip = b.ipAddress ?? b.ip_address;
+    if (!ip) throw new Error('ipAddress required');
+    if (!IP_RE.test(String(ip))) throw new Error('Invalid IP address');
+    return true;
+  }),
   validate,
   c.create
 );
