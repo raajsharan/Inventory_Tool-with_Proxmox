@@ -431,6 +431,31 @@ const STATEMENTS = [
   `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS auth_password TEXT    NOT NULL DEFAULT ''`,
   `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS session_token TEXT    NOT NULL DEFAULT ''`,
 
+  // ── Endpoint Central custom groups (copied by ecGroupsService; read-only mirror of EC)
+  `CREATE TABLE IF NOT EXISTS ec_custom_groups (
+      group_id                BIGINT PRIMARY KEY,
+      name                    TEXT NOT NULL,
+      group_type              TEXT,
+      category                TEXT,
+      domain                  TEXT,
+      created_on              BIGINT,
+      modified_on             BIGINT,
+      members_synced_modified BIGINT,
+      member_count            INTEGER,
+      members_synced_at       TIMESTAMPTZ,
+      criteria                JSONB
+   )`,
+  `CREATE TABLE IF NOT EXISTS ec_group_members (
+      group_id    BIGINT NOT NULL REFERENCES ec_custom_groups(group_id) ON DELETE CASCADE,
+      resource_id TEXT   NOT NULL,
+      name        TEXT,
+      domain      TEXT,
+      os_platform TEXT,
+      PRIMARY KEY (group_id, resource_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_ec_group_members_resource ON ec_group_members(resource_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_ec_group_members_name     ON ec_group_members(lower(name))`,
+
   // ── vm_name uniqueness removal (drop_vm_name_unique.sql)
   `ALTER TABLE assets                DROP CONSTRAINT IF EXISTS assets_vm_name_key`,
   `ALTER TABLE beijing_assets        DROP CONSTRAINT IF EXISTS beijing_assets_vm_name_key`,

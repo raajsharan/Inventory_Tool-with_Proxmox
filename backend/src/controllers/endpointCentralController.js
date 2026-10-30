@@ -1,4 +1,7 @@
-const svc = require('../services/endpointCentralService');
+const svc    = require('../services/endpointCentralService');
+const groups = require('../services/ecGroupsService');
+const audit  = require('../services/auditService');
+const ApiError = require('../utils/ApiError');
 
 async function getConfig(req, res, next) {
   try {
@@ -30,6 +33,7 @@ async function getConfig(req, res, next) {
 async function saveConfig(req, res, next) {
   try {
     const { server_url, customer_id, api_key, api_path, verify_ssl, auth_mode, auth_username, auth_password } = req.body;
+    agentCache.at = 0;
     await svc.saveConfig(
       { server_url, customer_id, api_key, api_path, verify_ssl, auth_mode, auth_username, auth_password },
       req.user?.id
@@ -60,6 +64,7 @@ async function loginWithCredentials(req, res, next) {
     if (!result.otp_required) {
       // No 2FA — store token immediately
       await svc.saveSessionToken(result.auth_token);
+      agentCache.at = 0;
       res.json({ ok: true, otp_required: false });
     } else {
       // Return the unique_user_id to the frontend so it can complete OTP step
@@ -86,6 +91,7 @@ async function validateOtp(req, res, next) {
     });
 
     await svc.saveSessionToken(result.auth_token);
+    agentCache.at = 0;
     res.json({ ok: true });
   } catch (e) { next(e); }
 }
@@ -113,10 +119,57 @@ async function checkUrl(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// Computers are cached for 60 s so refreshes and tab switches don't re-hit EC
+const AGENT_TTL = 60 * 1000;
+let agentCache = { at: 0, agents: null };
+
 async function listAgents(req, res, next) {
   try {
-    const agents = await svc.fetchAgents();
+    const fresh = agentCache.agents && Date.now() - agentCache.at < AGENT_TTL;
+    if (!fresh || req.query.refresh === '1') {
+      agentCache = { at: Date.now(), agents: await svc.fetchAgents() };
+    }
+    const agents = agentCache.agents;
     res.json({ agents, total: agents.length });
+  } catch (e) { next(e); }
+}
+
+async function listGroups(_req, res, next) {
+  try {
+    res.json({ groups: await groups.listGroups(), sync: groups.getSyncState() });
+  } catch (e) {
+    // schema not applied yet — behave like "never synced"
+    if (e.code === '42P01') return res.json({ groups: [], sync: groups.getSyncState() });
+    next(e);
+  }
+}
+
+async function groupMembers(req, res, next) {
+  try {
+    if (!/^\d{1,18}$/.test(req.params.id)) throw new ApiError(400, 'Group id must be numeric');
+    res.json({ members: await groups.groupMembers(req.params.id) });
+  } catch (e) { next(e); }
+}
+
+async function startGroupSync(req, res, next) {
+  try {
+    const state = await groups.startSync({ force: req.body?.force === true });
+    await audit.log({
+      user: req.user, action: 'SYNC', entityType: 'endpoint_central_groups',
+      details: { force: req.body?.force === true }, ipAddress: req.ip,
+    });
+    res.status(202).json(state);
+  } catch (e) { next(e); }
+}
+
+function syncStatus(_req, res) { res.json(groups.getSyncState()); }
+
+async function listStaged(req, res, next) {
+  try {
+    const status = Number(req.query.status ?? 3);
+    if (![1, 2, 3].includes(status)) throw new ApiError(400, 'status must be 1 (approved), 2 (denied) or 3 (pending)');
+    const staged = await groups.fetchStaged(status, { refresh: req.query.refresh === '1' });
+    res.json({ staged, total: staged.length });
   } catch (e) { next(e); }
 }
 
@@ -143,4 +196,4 @@ async function explore(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { explore, getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };
+module.exports = { listGroups, groupMembers, startGroupSync, syncStatus, listStaged, explore, getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };

@@ -919,7 +919,7 @@ const DCAPI = {
 const ACTION_MSG = 'This endpoint changes state on Endpoint Central (POST) and is not used for data collection — pick a read-only endpoint.';
 
 // ME EC auth header formats differ by version/token type; try each in turn.
-async function dcapiGet(config, urlPath, { accept = J, query = {} } = {}) {
+async function dcapiGet(config, urlPath, { accept = J, query = {}, beforeRequest, allowEmpty = false } = {}) {
   const useCredentials = config.auth_mode === 'credentials';
   const token = useCredentials ? config.session_token : config.api_key;
   const base  = config.server_url.replace(/\/$/, '');
@@ -932,6 +932,7 @@ async function dcapiGet(config, urlPath, { accept = J, query = {} } = {}) {
   let last;
   for (const [label, auth] of variants) {
     let r;
+    if (beforeRequest) await beforeRequest();
     try {
       r = await httpRequest(url, {
         verifySsl: config.verify_ssl, timeout: 30000,
@@ -946,13 +947,16 @@ async function dcapiGet(config, urlPath, { accept = J, query = {} } = {}) {
     if (r.status !== 401 && r.status !== 403) break;
   }
 
+  // 204 = EC's "nothing to return" (e.g. no custom groups) — not an error
+  if (allowEmpty && last.status === 204) return { json: null, auth: last.auth, empty: true };
+
   let json = null;
   try { json = JSON.parse(last.body); } catch { /* non-JSON */ }
   if (last.status < 200 || last.status >= 300) {
     const msg  = json?.error_description || json?.errorMessage || json?.message || last.body.slice(0, 160);
     const code = json?.error_code || json?.errorCode;
     const err  = new Error(`${urlPath} → HTTP ${last.status}${code ? ` (${code})` : ''}: ${msg}`);
-    err.status = last.status === 401 || last.status === 403 ? last.status : 502;
+    err.status = [401, 403, 429].includes(last.status) ? last.status : 502;
     throw err;
   }
   if (json === null) {
@@ -1204,6 +1208,9 @@ async function loadGroupMembership(config, total) {
 async function fetchAgents() {
   const agents = await fetchAgentsUntagged();
   try {
+    // Prefer the synced custom groups (ecGroupsService) — they cost no extra
+    // EC calls. Fall back to the per-group scan below only if never synced.
+    if (await require('./ecGroupsService').attachGroups(agents)) return agents;
     const config = await getConfig();
     const m = await loadGroupMembership(config, agents.length);
     for (const a of agents) {
@@ -1369,6 +1376,9 @@ module.exports = {
   fetchAgents,
   fetchSoftware,
   exploreDcapi,
+  dcapiGet,
+  extractComputers,
+  normalizeComputer,
   DCAPI,
   checkReachability,
   testConnection,

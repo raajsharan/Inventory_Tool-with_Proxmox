@@ -7,9 +7,11 @@ import {
   AppstoreOutlined, CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, DesktopOutlined,
   ExclamationCircleFilled, KeyOutlined, LockOutlined, LoginOutlined,
   MobileOutlined, QuestionCircleOutlined, ReloadOutlined,
-  DownloadOutlined, SafetyCertificateOutlined, SettingOutlined, UserOutlined, WifiOutlined,
+  DownloadOutlined, SafetyCertificateOutlined, SettingOutlined, TeamOutlined, UserOutlined, WifiOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import GroupsTab from './GroupsTab.jsx';
+import StagedTab from './StagedTab.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 const { Title, Text } = Typography;
@@ -768,6 +770,8 @@ export default function EndpointCentral() {
   const [scanFilter,   setScanFilter]   = useState(null);
   const [stagedFilt,   setStagedFilt]   = useState(null); // null | 'staged' | 'active'
   const [categoryFilt, setCategoryFilt] = useState(null); // null | 'Managed' | 'Staged' | 'Pending'
+  const [groupFilt,    setGroupFilt]    = useState(null); // null | '(none)' | group name
+  const canSync = ['admin', 'asset_manager', 'superadmin'].includes(user?.role);
 
   // Software filters
   const [swSearch,      setSwSearch]      = useState('');
@@ -779,11 +783,11 @@ export default function EndpointCentral() {
   const [instSearch, setInstSearch] = useState('');
   const [instFilter,  setInstFilter]  = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refresh = false) => {
     setLoading(true);
     setConnectionError(null);
     try {
-      const r = await api.get('/endpoint-central');
+      const r = await api.get('/endpoint-central', { params: refresh === true ? { refresh: 1 } : {} });
       setAgents(r.data.agents || []);
       setConfigured(true);
     } catch (e) {
@@ -862,6 +866,8 @@ export default function EndpointCentral() {
     if (scanFilter   !== null && a.scan_status !== scanFilter) return false;
     if (osFilter && osFamily(a.os_name) !== osFilter) return false;
     if (categoryFilt !== null && computerCategory(a) !== categoryFilt) return false;
+    if (groupFilt === '(none)' && a.custom_groups?.length) return false;
+    if (groupFilt && groupFilt !== '(none)' && !a.custom_groups?.includes(groupFilt)) return false;
     if (stagedFilt === 'staged' && !isStaged(a)) return false;
     if (stagedFilt === 'active' && isStaged(a)) return false;
     if (search) {
@@ -1111,6 +1117,16 @@ export default function EndpointCentral() {
                     ]}
                   />
                   <Select
+                    allowClear showSearch placeholder="Custom group"
+                    style={{ width: 200 }}
+                    value={groupFilt}
+                    onChange={v => setGroupFilt(v ?? null)}
+                    options={[
+                      { value: '(none)', label: '(none)' },
+                      ...[...new Set(agents.flatMap(a => a.custom_groups || []))].sort().map(g => ({ value: g, label: g })),
+                    ]}
+                  />
+                  <Select
                     allowClear placeholder="Managed Status"
                     style={{ width: 160 }}
                     value={managedFilt}
@@ -1269,6 +1285,18 @@ export default function EndpointCentral() {
       ),
     },
     {
+      key: 'groups',
+      label: <span><TeamOutlined /> Custom groups</span>,
+      children: configured && !connectionError
+        ? <GroupsTab canSync={canSync} onSynced={() => load(true)} />
+        : null,
+    },
+    {
+      key: 'staged',
+      label: <span><ClockCircleOutlined /> Staged</span>,
+      children: configured && !connectionError ? <StagedTab /> : null,
+    },
+    {
       key: 'software',
       label: <span><AppstoreOutlined /> Software Inventory</span>,
       children: (
@@ -1392,8 +1420,8 @@ export default function EndpointCentral() {
           )}
           <Button
             icon={<ReloadOutlined />}
-            loading={activeTab === 'endpoints' ? loading : swLoading}
-            onClick={activeTab === 'endpoints' ? load : loadSoftware}
+            loading={activeTab === 'software' ? swLoading : loading}
+            onClick={activeTab === 'software' ? loadSoftware : () => load(true)}
           >
             Refresh
           </Button>
