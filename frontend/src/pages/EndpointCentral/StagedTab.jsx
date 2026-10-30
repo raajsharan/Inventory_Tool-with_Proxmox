@@ -1,76 +1,50 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, App, Button, Card, Input, Segmented, Space, Table, Typography } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, ReloadOutlined } from '@ant-design/icons';
+import { Alert, Select, Table } from 'antd';
 import api from '../../api/client';
+import { found, orDash, when } from './common';
 
-const { Text } = Typography;
-
-const dash = v => (v == null || v === '' ? <Text type="secondary">-</Text> : v);
-
-export default function StagedTab({ onCount }) {
-  const { message } = App.useApp();
-  const [status, setStatus]   = useState(3);
-  const [rows, setRows]       = useState([]);
+/** Computers waiting in Endpoint Central for approval, with whether we know them. */
+export default function StagedTab({ reload, onTotal }) {
+  const [status, setStatus] = useState(3);
+  const [rows, setRows]     = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [search, setSearch]   = useState('');
+  const [err, setErr]       = useState('');
 
-  const load = useCallback(async (refresh = false) => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (refresh) => {
+    setLoading(true); setErr('');
     try {
-      const r = await api.get('/endpoint-central/staged', { params: { status, ...(refresh ? { refresh: 1 } : {}) } });
-      setRows(r.data.staged || []);
-      if (status === 3) onCount?.(r.data.total);
+      const { data } = await api.get('/endpoint-central/staged', { params: { status, ...(refresh ? { refresh: 1 } : {}) } });
+      setRows(data.staged);
+      if (status === 3) onTotal?.(data.total);
     } catch (e) {
-      const msg = e?.response?.data?.error;
+      setErr(e?.response?.data?.error || 'Failed to load staged computers');
       setRows([]);
-      if (e?.response?.status === 400) setError(msg);
-      else if (msg) setError(msg);
-      else message.error('Failed to load staged computers');
     } finally { setLoading(false); }
-  }, [status, message, onCount]);
+  }, [status, onTotal]);
 
-  useEffect(() => { load(); }, [load]);
-
-  const q = search.toLowerCase();
-  const filtered = rows.filter(r => !q
-    || [r.name, r.ip_address, r.mac_address, r.domain].some(v => v && String(v).toLowerCase().includes(q)));
+  useEffect(() => { load(false); }, [load]);
+  useEffect(() => { if (reload) load(true); }, [reload]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <>
-      <Card size="small" style={{ marginBottom: 12 }}>
-        <Space wrap>
-          <Segmented value={status} onChange={setStatus}
-            options={[{ value: 3, label: 'Pending' }, { value: 1, label: 'Approved' }, { value: 2, label: 'Denied' }]} />
-          <Input.Search placeholder="Search name / IP / MAC / domain…" allowClear style={{ width: 280 }}
-            value={search} onChange={e => setSearch(e.target.value)} />
-          <Button icon={<ReloadOutlined />} onClick={() => load(true)} loading={loading}>Refresh</Button>
-        </Space>
-      </Card>
-      {error && <Alert type="error" showIcon style={{ marginBottom: 12 }} message={error} />}
-      <Table
-        size="small" rowKey={(r, i) => r.resource_id ?? `${r.name}-${i}`} loading={loading} dataSource={filtered}
-        scroll={{ x: 'max-content' }}
-        pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} computers` }}
+    <div>
+      {err && <Alert type="error" showIcon message={err} style={{ marginBottom: 12 }} />}
+      <div className="nx-toolbar">
+        <Select value={status} onChange={setStatus} style={{ width: 160 }} aria-label="Approval status"
+          options={[{ value: 3, label: 'Pending' }, { value: 1, label: 'Approved' }, { value: 2, label: 'Denied' }]} />
+      </div>
+      <Table rowKey={(r) => r.resource_id ?? `${r.name}-${r.mac_address}`} size="small" loading={loading} dataSource={rows}
+        scroll={{ x: 'max-content' }} locale={{ emptyText: 'Nothing here' }}
+        pagination={{ defaultPageSize: 25, showSizeChanger: true, pageSizeOptions: [25, 50, 100, 200], hideOnSinglePage: rows.length <= 25 }}
         columns={[
-          { title: 'Computer', dataIndex: 'name', render: v => v ? <Text strong>{v}</Text> : dash(v) },
-          { title: 'IP', dataIndex: 'ip_address', render: dash },
-          { title: 'MAC', dataIndex: 'mac_address', render: dash },
-          { title: 'Domain', dataIndex: 'domain', render: dash },
-          { title: 'OS', dataIndex: 'os_name', render: (v, r) => dash(v ?? r.os_platform) },
-          { title: 'Remote office', dataIndex: 'remote_office', render: dash },
-          { title: 'Status', dataIndex: 'approval_status', render: dash },
-          { title: 'Discovered', dataIndex: 'discovered_on',
-            render: v => dash(v && !isNaN(new Date(v)) ? new Date(v).toLocaleString() : v) },
-          { title: 'In your records', dataIndex: 'in_inventory',
-            filters: [{ text: 'Found', value: true }, { text: 'Not found', value: false }],
-            onFilter: (v, r) => r.in_inventory === v,
-            render: v => v
-              ? <span><CheckCircleFilled style={{ color: '#52c41a' }} /> Found</span>
-              : <span><CloseCircleFilled style={{ color: '#faad14' }} /> Not found</span> },
-        ]}
-      />
-    </>
+          { title: 'Computer', dataIndex: 'name', render: (v) => (v ? <b>{v}</b> : orDash(v)) },
+          { title: 'IP', dataIndex: 'ip_address', render: orDash },
+          { title: 'MAC', dataIndex: 'mac_address', render: orDash },
+          { title: 'OS', dataIndex: 'os_name', render: (v, r) => orDash(v ?? r.os_platform) },
+          { title: 'Domain', dataIndex: 'domain', render: orDash },
+          { title: 'Office', dataIndex: 'remote_office', render: orDash },
+          { title: 'Discovered', dataIndex: 'discovered_on', render: when },
+          { title: 'In your records', render: (_, r) => found(r.in_inventory) },
+        ]} />
+    </div>
   );
 }

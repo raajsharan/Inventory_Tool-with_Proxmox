@@ -11,6 +11,7 @@ router.get('/software',     ...guard,      ctrl.listSoftware);
 
 // Custom groups + staged computers (read-only mirror of EC; see ecGroupsService)
 router.get('/groups',              ...guard,      ctrl.listGroups);
+router.put('/groups/auto-sync',     ...writeGuard, ctrl.saveAutoSync);
 router.get('/groups/sync',         ...guard,      ctrl.syncStatus);
 router.post('/groups/sync',        ...writeGuard, ctrl.startGroupSync);
 router.get('/groups/:id/members',  ...guard,      ctrl.groupMembers);

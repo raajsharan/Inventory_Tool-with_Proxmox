@@ -143,6 +143,11 @@ const PORT = process.env.PORT || 4000;
     console.error('[vmware-scheduler] failed to start:', e);
   }
   try {
+    await require('./src/services/ecGroupsService').initAutoSync();
+  } catch (e) {
+    console.error('[ec-groups-auto-sync] failed to start:', e);
+  }
+  try {
     await require('./src/services/proxmoxSchedulerService').initFromDb();
   } catch (e) {
     // eslint-disable-next-line no-console

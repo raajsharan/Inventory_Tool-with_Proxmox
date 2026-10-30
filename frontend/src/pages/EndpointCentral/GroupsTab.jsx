@@ -1,172 +1,153 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Card, Input, Popconfirm, Progress, Space, Table, Tag, Typography } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, SyncOutlined } from '@ant-design/icons';
+import { Alert, App, Button, InputNumber, Popconfirm, Progress, Switch, Table, Tag } from 'antd';
+import dayjs from 'dayjs';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { Dash, found, orDash } from './common';
 
-const { Text } = Typography;
+const errText = (e, fallback) => e?.response?.data?.error || fallback;
 
-const dash = v => (v == null || v === '' ? <Text type="secondary">-</Text> : v);
-const fmt  = v => (v ? new Date(v).toLocaleString() : null);
-
-function InInventory({ found }) {
-  return found
-    ? <span><CheckCircleFilled style={{ color: '#52c41a' }} /> Found</span>
-    : <span><CloseCircleFilled style={{ color: '#faad14' }} /> Not found</span>;
-}
+const ruleChips = (c) => {
+  if (!c) return [];
+  const list = Array.isArray(c.criteriaList) ? c.criteriaList : [];
+  const parts = list.map((x) => (x && typeof x === 'object'
+    ? Object.values(x).filter((v) => v !== null && v !== '' && typeof v !== 'object').join(' ')
+    : String(x)));
+  return [...(c.criteriaPattern ? [`Rule: ${c.criteriaPattern}`] : []), ...parts];
+};
 
 function Members({ group }) {
-  const [rows, setRows]       = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState(null);
+  const [err, setErr]   = useState('');
+  const users = /user/i.test(group.group_type || '');
 
   useEffect(() => {
-    if (group.dynamic) return;
-    setLoading(true);
+    if (group.dynamic || users) return;
     api.get(`/endpoint-central/groups/${group.group_id}/members`)
-      .then(r => setRows(r.data.members || []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, [group.group_id, group.dynamic]);
+      .then((r) => setRows(r.data.members)).catch((e) => setErr(errText(e, 'Could not load members')));
+  }, [group.group_id, group.dynamic, users]);
 
+  if (users) return <span className="nx-dim">Members of user groups are not copied.</span>;
   if (group.dynamic) {
-    const c = group.criteria || {};
-    const list = Array.isArray(c.criteriaList) ? c.criteriaList : [];
+    const chips = ruleChips(group.criteria);
     return (
       <div>
-        <Text>Members are computed by Endpoint Central for dynamic groups.</Text>
-        <div style={{ marginTop: 8 }}>
-          {c.criteriaPattern && <Tag>Pattern: {String(c.criteriaPattern)}</Tag>}
-          {list.map((x, i) => <Tag key={i}>{typeof x === 'object' ? JSON.stringify(x) : String(x)}</Tag>)}
-          {!c.criteriaPattern && !list.length && <Text type="secondary">Rule not available.</Text>}
-        </div>
+        <div>Members are computed by Endpoint Central.</div>
+        {chips.length > 0
+          ? <div style={{ marginTop: 6 }}>{chips.map((c, i) => <Tag key={i}>{c}</Tag>)}</div>
+          : <div className="nx-dim">No rule was returned.</div>}
       </div>
     );
   }
+  if (err) return <Alert type="error" showIcon message={err} />;
   return (
-    <Table
-      size="small" rowKey="resource_id" loading={loading} dataSource={rows || []}
-      pagination={rows && rows.length > 20 ? { pageSize: 20 } : false}
-      scroll={{ x: 'max-content' }}
+    <Table size="small" rowKey="resource_id" loading={rows === null} dataSource={rows || []} locale={{ emptyText: 'No members' }}
+      pagination={rows && rows.length > 20 ? { defaultPageSize: 20 } : false}
       columns={[
-        { title: 'Computer', dataIndex: 'name', render: dash },
-        { title: 'Domain', dataIndex: 'domain', render: dash },
-        { title: 'OS', dataIndex: 'os_platform', render: dash },
-        { title: 'In your records', dataIndex: 'in_inventory', render: v => <InInventory found={v} /> },
-      ]}
-    />
+        { title: 'Computer', dataIndex: 'name', render: orDash },
+        { title: 'Domain', dataIndex: 'domain', render: orDash },
+        { title: 'OS', dataIndex: 'os_platform', render: orDash },
+        { title: 'In your records', render: (_, r) => found(r.in_inventory) },
+      ]} />
   );
 }
 
-export default function GroupsTab({ canSync, onSynced }) {
+/** Group list, background sync with progress, and the members of each static group. */
+export default function GroupsTab({ reload, onCount, onSynced }) {
   const { message } = App.useApp();
-  const [groups, setGroups]   = useState([]);
-  const [sync, setSync]       = useState({ progress: { running: false }, last_result: null });
+  const { user } = useAuth();
+  const canWrite = ['admin', 'asset_manager', 'superadmin'].includes(user?.role);
+
+  const [groups, setGroups] = useState([]);
+  const [sync, setSync]     = useState({ progress: { running: false }, last_result: null });
+  const [auto, setAuto]     = useState({ enabled: false, interval_minutes: 360 });
   const [loading, setLoading] = useState(false);
-  const [search, setSearch]   = useState('');
-  const wasRunning = useRef(false);
+  const [err, setErr]       = useState('');
+  const was = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoading(true); setErr('');
     try {
-      const r = await api.get('/endpoint-central/groups');
-      setGroups(r.data.groups || []);
-      setSync(r.data.sync);
-    } catch (e) {
-      message.error(e?.response?.data?.error || 'Failed to load custom groups');
-    } finally { setLoading(false); }
-  }, [message]);
-
-  useEffect(() => { load(); }, [load]);
+      const { data } = await api.get('/endpoint-central/groups');
+      setGroups(data.groups); setSync(data.sync); setAuto(data.auto);
+      onCount?.(data.groups.length);
+    } catch (e) { setErr(errText(e, 'Failed to load custom groups')); } finally { setLoading(false); }
+  }, [onCount]);
+  useEffect(() => { load(); }, [load, reload]);
 
   const running = !!sync.progress?.running;
+  const p = sync.progress || {};
 
-  // Poll progress every 2 s while a sync runs; refresh groups + computers when it ends
+  // While a sync runs, poll its progress every 2 s; when it ends, refresh the groups and the computers.
   useEffect(() => {
     if (!running) {
-      if (wasRunning.current) { wasRunning.current = false; load(); onSynced?.(); }
+      if (was.current) { was.current = false; load(); onSynced?.(); }
       return undefined;
     }
-    wasRunning.current = true;
-    const t = setInterval(async () => {
-      try { setSync((await api.get('/endpoint-central/groups/sync')).data); } catch { /* keep polling */ }
-    }, 2000);
+    was.current = true;
+    const t = setInterval(() => api.get('/endpoint-central/groups/sync').then((r) => setSync(r.data)).catch(() => {}), 2000);
     return () => clearInterval(t);
-  }, [running, load, onSynced]);
+  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = async (force) => {
-    try {
-      const r = await api.post('/endpoint-central/groups/sync', { force });
-      setSync(r.data);
-    } catch (e) {
-      message.error(e?.response?.data?.error || 'Could not start the sync');
-    }
+    try { setSync((await api.post('/endpoint-central/groups/sync', { force })).data); }
+    catch (e) { message.error(errText(e, 'Could not start the sync')); load(); }
+  };
+  const saveAuto = async (next) => {
+    try { setAuto((await api.put('/endpoint-central/groups/auto-sync', next)).data); message.success('Saved'); }
+    catch (e) { message.error(errText(e, 'Could not save auto-sync')); }
   };
 
-  const p = sync.progress || {};
   const last = sync.last_result;
-  const filtered = groups.filter(g => !search || g.name.toLowerCase().includes(search.toLowerCase()));
+  const status = running
+    ? <span>Syncing ({p.phase === 'members' ? `${p.done} of ${p.total} groups` : 'reading the group list'})</span>
+    : last?.finished_at
+      ? <span>Last sync {dayjs(last.finished_at).format('D MMM HH:mm')}: {last.fetched ?? 0} of {last.groups ?? 0} groups updated, {last.calls ?? 0} calls{last.errors?.length ? `, ${last.errors.length} failed` : ''}.</span>
+      : <span className="nx-dim">Never synced.</span>;
+  const groupErrors = (last?.errors || []).filter((e) => e.group);
 
   return (
-    <>
-      <Card size="small" style={{ marginBottom: 12 }}>
-        <Space wrap>
-          <Button type="primary" icon={<SyncOutlined spin={running} />} disabled={running || !canSync} onClick={() => start(false)}>
-            Sync now
-          </Button>
-          <Popconfirm
-            title="Re-fetch every group from Endpoint Central?"
-            description="Uses one call per group (EC allows 30 a minute), so this can take a while."
-            onConfirm={() => start(true)} disabled={running || !canSync}
-          >
-            <Button disabled={running || !canSync}>Full re-sync</Button>
+    <div>
+      {err && <Alert type="error" showIcon message={err} style={{ marginBottom: 12 }} />}
+      {last && last.ok === false && !running && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="The last sync stopped early" description={last.message} />}
+      {groupErrors.length > 0 && !running && (
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={`${groupErrors.length} group(s) could not be read`}
+          description={groupErrors.slice(0, 5).map((e) => `${e.group}: ${e.error}`).join(' | ')} />
+      )}
+      <div className="nx-toolbar" style={{ gap: 12 }}>
+        {canWrite && <>
+          <Button type="primary" disabled={running} onClick={() => start(false)}>Sync now</Button>
+          <Popconfirm title="Full re-sync reads every group again" okText="Full re-sync" onConfirm={() => start(true)} disabled={running}
+            description="This uses many of Endpoint Central's 30 calls a minute and can take a while.">
+            <Button disabled={running}>Full re-sync</Button>
           </Popconfirm>
-          <Input.Search placeholder="Search groups…" allowClear style={{ width: 240 }}
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </Space>
-        <div style={{ marginTop: 8 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Groups are copied in the background (EC allows 30 group calls a minute).
-          </Text>
-        </div>
-        {running && (
-          <div style={{ marginTop: 8, maxWidth: 420 }}>
-            <Text>{p.phase === 'listing' ? 'Reading group list…' : `Fetching members: ${p.done} of ${p.total}`}</Text>
-            <Progress percent={p.total ? Math.round((p.done / p.total) * 100) : 0} size="small" />
-          </div>
-        )}
-      </Card>
-
-      {!running && last && (
-        <Alert
-          type={last.ok === false ? 'error' : last.errors?.length ? 'warning' : 'success'} showIcon
-          style={{ marginBottom: 12 }}
-          message={last.message}
-          description={last.errors?.length
-            ? last.errors.filter(e => e.group).map(e => `${e.group}: ${e.error}`).join('; ') || undefined
-            : undefined}
-        />
-      )}
-      {!groups.length && !running && !loading && (
-        <Alert type="info" showIcon style={{ marginBottom: 12 }}
-          message="No custom groups synced yet"
-          description={canSync ? 'Press "Sync now" to copy the groups from Endpoint Central.' : 'Ask an administrator to run a sync.'} />
-      )}
-
-      <Table
-        size="small" rowKey="group_id" loading={loading} dataSource={filtered}
-        scroll={{ x: 'max-content' }}
-        pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} groups` }}
-        expandable={{ expandedRowRender: g => <Members group={g} /> }}
+        </>}
+        <span>{status}</span>
+        {running && p.total > 0 && <Progress style={{ width: 160 }} size="small" percent={Math.round((p.done * 100) / p.total)} />}
+        <span style={{ flex: 1 }} />
+        <span>Auto-sync every{' '}
+          <InputNumber size="small" min={15} max={10080} value={auto.interval_minutes} disabled={!canWrite} style={{ width: 80 }}
+            onChange={(v) => setAuto((a) => ({ ...a, interval_minutes: v }))}
+            onBlur={() => canWrite && saveAuto({ enabled: auto.enabled, interval_minutes: auto.interval_minutes })} />{' '}
+          min <Switch size="small" checked={auto.enabled} disabled={!canWrite} aria-label="Auto-sync"
+            onChange={(v) => saveAuto({ enabled: v, interval_minutes: auto.interval_minutes })} />
+        </span>
+      </div>
+      <div className="nx-dim nx-small" style={{ marginBottom: 8 }}>
+        Groups are copied in the background (Endpoint Central allows 30 group calls a minute).
+      </div>
+      <Table rowKey="group_id" size="small" loading={loading} dataSource={groups} scroll={{ x: 'max-content' }}
+        pagination={{ defaultPageSize: 25, showSizeChanger: true, pageSizeOptions: [25, 50, 100, 200], hideOnSinglePage: groups.length <= 25 }}
+        expandable={{ expandedRowRender: (g) => <Members group={g} />, rowExpandable: () => true }}
         columns={[
-          { title: 'Group', dataIndex: 'name', render: v => <Text strong>{v}</Text>, sorter: (a, b) => a.name.localeCompare(b.name) },
-          { title: 'Type', dataIndex: 'group_type', render: dash },
-          { title: 'Category', dataIndex: 'category', render: dash },
-          { title: 'Domain', dataIndex: 'domain', render: dash },
-          { title: 'Members', dataIndex: 'member_count', align: 'right',
-            render: (v, g) => v != null ? v : g.dynamic ? <Text type="secondary">by EC rule</Text> : dash(null) },
-          { title: 'Changed in EC', dataIndex: 'modified_on', render: v => dash(fmt(v)) },
-          { title: 'Last synced', dataIndex: 'members_synced_at', render: v => dash(fmt(v)) },
-        ]}
-      />
-    </>
+          { title: 'Group', dataIndex: 'name', render: (v) => <b>{v}</b> },
+          { title: 'Type', dataIndex: 'group_type', render: orDash },
+          { title: 'Category', dataIndex: 'category', render: orDash },
+          { title: 'Domain', dataIndex: 'domain', render: orDash },
+          { title: 'Members', render: (_, g) => (g.member_count !== null ? g.member_count : g.dynamic ? <span className="nx-dim">computed by EC</span> : <Dash />) },
+          { title: 'Changed in EC', dataIndex: 'modified_on', render: (v) => (v ? dayjs(v).format('D MMM YYYY HH:mm') : <Dash />) },
+          { title: 'Last synced', dataIndex: 'members_synced_at', render: (v) => (v ? dayjs(v).format('D MMM HH:mm') : <Dash />) },
+        ]} />
+    </div>
   );
 }

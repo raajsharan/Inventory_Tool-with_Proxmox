@@ -136,10 +136,10 @@ async function listAgents(req, res, next) {
 
 async function listGroups(_req, res, next) {
   try {
-    res.json({ groups: await groups.listGroups(), sync: groups.getSyncState() });
+    res.json({ groups: await groups.listGroups(), sync: groups.getSyncState(), auto: await groups.getAutoSync() });
   } catch (e) {
     // schema not applied yet — behave like "never synced"
-    if (e.code === '42P01') return res.json({ groups: [], sync: groups.getSyncState() });
+    if (e.code === '42P01') return res.json({ groups: [], sync: groups.getSyncState(), auto: { enabled: false, interval_minutes: 360 } });
     next(e);
   }
 }
@@ -159,6 +159,16 @@ async function startGroupSync(req, res, next) {
       details: { force: req.body?.force === true }, ipAddress: req.ip,
     });
     res.status(202).json(state);
+  } catch (e) { next(e); }
+}
+
+async function saveAutoSync(req, res, next) {
+  try {
+    const auto = await groups.setAutoSync({
+      enabled: req.body?.enabled === true, interval_minutes: req.body?.interval_minutes,
+    });
+    await audit.log({ user: req.user, action: 'UPDATE', entityType: 'endpoint_central_groups_auto_sync', details: auto, ipAddress: req.ip });
+    res.json(auto);
   } catch (e) { next(e); }
 }
 
@@ -196,4 +206,4 @@ async function explore(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { listGroups, groupMembers, startGroupSync, syncStatus, listStaged, explore, getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };
+module.exports = { saveAutoSync, listGroups, groupMembers, startGroupSync, syncStatus, listStaged, explore, getConfig, saveConfig, testConnection, checkUrl, listAgents, listSoftware, loginWithCredentials, validateOtp };

@@ -255,6 +255,45 @@ async function startSync({ force = false } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-sync — optional periodic background sync, persisted in the config row
+// ---------------------------------------------------------------------------
+
+const AUTO_MIN = 15, AUTO_MAX = 10080;
+let autoTimer = null;
+
+async function getAutoSync() {
+  try {
+    const { rows: [r] } = await db.query(
+      'SELECT groups_auto_sync, groups_auto_sync_minutes FROM endpoint_central_config WHERE id = 1');
+    return { enabled: !!r?.groups_auto_sync, interval_minutes: r?.groups_auto_sync_minutes || 360 };
+  } catch (e) {
+    if (e.code === '42P01' || e.code === '42703') return { enabled: false, interval_minutes: 360 };
+    throw e;
+  }
+}
+
+function scheduleAutoSync({ enabled, interval_minutes }) {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  if (!enabled) return;
+  autoTimer = setInterval(() => {
+    startSync({}).catch(() => { /* already running or not configured — try next tick */ });
+  }, interval_minutes * 60 * 1000);
+  autoTimer.unref?.();
+}
+
+async function setAutoSync({ enabled, interval_minutes }) {
+  const minutes = Math.min(AUTO_MAX, Math.max(AUTO_MIN, Math.round(Number(interval_minutes)) || 360));
+  const next = { enabled: !!enabled, interval_minutes: minutes };
+  await db.query(
+    `UPDATE endpoint_central_config SET groups_auto_sync = $1, groups_auto_sync_minutes = $2 WHERE id = 1`,
+    [next.enabled, next.interval_minutes]);
+  scheduleAutoSync(next);
+  return next;
+}
+
+async function initAutoSync() { scheduleAutoSync(await getAutoSync()); }
+
+// ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
 
@@ -389,6 +428,6 @@ module.exports = {
   LIVE_STATUS, INSTALL_STATUS, OS_PLATFORM, APPROVAL,
   nullify, epochToIso, label,
   createThrottle, parseGroupList, parseGroupDetails,
-  runSync, startSync, getSyncState,
+  runSync, startSync, getSyncState, getAutoSync, setAutoSync, initAutoSync,
   listGroups, groupMembers, attachGroups, fetchStaged, normalizeStaged,
 };

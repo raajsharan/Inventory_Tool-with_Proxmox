@@ -431,6 +431,9 @@ const STATEMENTS = [
   `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS auth_password TEXT    NOT NULL DEFAULT ''`,
   `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS session_token TEXT    NOT NULL DEFAULT ''`,
 
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS groups_auto_sync         BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE endpoint_central_config ADD COLUMN IF NOT EXISTS groups_auto_sync_minutes INTEGER NOT NULL DEFAULT 360`,
+
   // ── Endpoint Central custom groups (copied by ecGroupsService; read-only mirror of EC)
   `CREATE TABLE IF NOT EXISTS ec_custom_groups (
       group_id                BIGINT PRIMARY KEY,

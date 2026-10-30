@@ -1,0 +1,35 @@
+/* ME Endpoint Central — summary strip, status pills, toolbar. Scoped to .nx-page. */
+.nx-page { --nx-surface: #fff; --nx-surface-2: #f1f5f6; --nx-border: #e3e8ea; --nx-border-2: #d5dde0; --nx-muted: #5d6b6e; --nx-faint: #9aa7a9; }
+body[data-theme="dark"] .nx-page { --nx-surface: #1b2528; --nx-surface-2: #243034; --nx-border: #34434a; --nx-border-2: #3f5058; --nx-muted: #a3b2b6; --nx-faint: #6f8187; }
+
+.nx-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+.nx-head h1 { font-size: 20px; font-weight: 600; margin: 0 0 2px; }
+.nx-head .nx-sub { color: var(--nx-muted); font-size: 13px; max-width: 70ch; }
+.nx-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.nx-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+
+.nx-summary { display: grid; grid-template-columns: repeat(6, 1fr); background: var(--nx-surface); border: 1px solid var(--nx-border); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+.nx-cell { padding: 16px 22px; border-left: 1px solid var(--nx-border); }
+.nx-cell:first-child { border-left: 0; }
+.nx-k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--nx-muted); }
+.nx-big { font-size: 28px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+
+.nx-ver { font-family: Consolas, monospace; font-weight: 600; }
+.nx-small { font-size: 12px; }
+.nx-dim { color: var(--nx-faint); }
+.nx-stale { color: #c77700; font-weight: 500; }
+body[data-theme="dark"] .nx-stale { color: #f0b429; }
+
+.nx-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; border: 1px solid transparent; white-space: nowrap; }
+.nx-pill.ok   { background: rgba(82, 196, 26, .14);  color: #3fa516; border-color: rgba(82, 196, 26, .35); }
+.nx-pill.bad  { background: rgba(207, 19, 34, .14);  color: #e5484d; border-color: rgba(207, 19, 34, .35); }
+.nx-pill.warn { background: rgba(250, 173, 20, .14); color: #c77700; border-color: rgba(250, 173, 20, .4); }
+.nx-pill.idle { background: var(--nx-surface-2); color: var(--nx-muted); border-color: var(--nx-border-2); }
+body[data-theme="dark"] .nx-pill.ok   { color: #6ccf3e; }
+body[data-theme="dark"] .nx-pill.warn { color: #f0b429; }
+
+@media (max-width: 900px) {
+  .nx-summary { grid-template-columns: 1fr 1fr; }
+  .nx-cell { border-top: 1px solid var(--nx-border); }
+}

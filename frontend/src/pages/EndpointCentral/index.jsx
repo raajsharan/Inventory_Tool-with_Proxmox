@@ -1,139 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, App, AutoComplete, Badge, Button, Card, Col, Divider, Form, Input,
-  Modal, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography,
+  Modal, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Typography,
 } from 'antd';
 import {
-  AppstoreOutlined, CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, DesktopOutlined,
-  ExclamationCircleFilled, KeyOutlined, LockOutlined, LoginOutlined,
-  MobileOutlined, QuestionCircleOutlined, ReloadOutlined,
-  DownloadOutlined, SafetyCertificateOutlined, SettingOutlined, TeamOutlined, UserOutlined, WifiOutlined,
+  AppstoreOutlined, CheckCircleFilled, CloseCircleFilled, ExclamationCircleFilled, KeyOutlined, LockOutlined, LoginOutlined,
+  MobileOutlined, ReloadOutlined,
+  SafetyCertificateOutlined, SettingOutlined, UserOutlined, WifiOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
+import ComputersTab from './ComputersTab.jsx';
 import GroupsTab from './GroupsTab.jsx';
 import StagedTab from './StagedTab.jsx';
+import './nx.css';
 import { useAuth } from '../../context/AuthContext.jsx';
 
-const { Title, Text } = Typography;
-
-// ── Endpoint status helpers ────────────────────────────────────────────────
-
-const AGENT_STATUS = {
-  0: { label: 'Live',  color: 'success', icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
-  1: { label: 'Down', color: 'default', icon: <CloseCircleFilled style={{ color: '#d9d9d9' }} /> },
-  2: { label: 'Unknown', color: 'warning', icon: <QuestionCircleOutlined style={{ color: '#faad14' }} /> },
-};
-
-const MANAGED_STATUS = {
-  0: { label: 'Not Managed', color: 'error'   },
-  1: { label: 'Managed',     color: 'success' },
-};
-
-// agent_install_status (documented on /som/computers as agent_install_status,
-// on /inventory/scancomputers as installation_status): 21/22/23/24/29.
-const INSTALL_STATUS = {
-  21: { label: 'Yet to Install',       color: 'default' },
-  22: { label: 'Installed',            color: 'success' },
-  23: { label: 'Uninstalled',          color: 'default' },
-  24: { label: 'Yet to Uninstall',     color: 'warning' },
-  29: { label: 'Installation Failure', color: 'error'   },
-};
-
-function AgentStatusBadge({ status }) {
-  const meta = AGENT_STATUS[status] ?? { label: 'Unknown', color: 'default', icon: <QuestionCircleOutlined /> };
-  return <Badge status={meta.color} text={meta.label} />;
-}
-
-// "Staged" — hasn't checked in (last_sync) for longer than this, regardless
-// of current live_status. Distinct dimension from Online/Offline/Unknown:
-// a device can show Offline right now but have synced an hour ago, or show
-// Offline and genuinely be stale for months. Adjust this threshold as needed.
-const STALE_DAYS = 15;
-
-function isStaged(agent) {
-  if (!agent.last_sync || agent.last_sync === '—') return true;
-  const d = new Date(agent.last_sync);
-  if (isNaN(d)) return false;
-  const diffDays = (Date.now() - d.getTime()) / 86400000;
-  return diffDays > STALE_DAYS;
-}
-
-// Lifecycle category for the Managed / Staged / Pending report.
-//   Pending — agent not installed yet (install status 21 Yet to install,
-//             24 Yet to uninstall)
-//   Staged  — agent installed but no sync in over STALE_DAYS
-//   Managed — agent installed and checking in
-// Anything else (23 Uninstalled, 29 Install failure) is 'Other'.
-function computerCategory(a) {
-  const st = a.agent_install_status;
-  if (st === 21 || st === 24) return 'Pending';
-  if (st != null && st !== 22) return 'Other';
-  if (st == null && a.managed_status !== 1) return 'Other';
-  return isStaged(a) ? 'Staged' : 'Managed';
-}
-
-const CATEGORY_COLOR = { Managed: 'success', Staged: 'error', Pending: 'processing', Other: 'default' };
-
-// Exports the six fields requested for the report, from the filtered rows.
-function exportCategoryCsv(rows) {
-  const status = v => ({ 0: 'Live', 1: 'Down' }[v] ?? 'Unknown');
-  const cols = [
-    ['Computer Name',   a => a.computer_name],
-    ['IP Address',      a => a.ip_address],
-    ['Operating System', a => a.os_name],
-    ['Agent Status',    a => status(a.agent_status)],
-    ['Managed Status',  a => computerCategory(a)],
-    ['Remote Office',   a => a.office],
-  ];
-  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [cols.map(c => q(c[0])).join(','), ...rows.map(a => cols.map(c => q(c[1](a))).join(','))].join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  const el  = document.createElement('a');
-  el.href = url;
-  el.download = `endpoint-central-${new Date().toISOString().slice(0, 10)}.csv`;
-  el.click();
-  URL.revokeObjectURL(url);
-}
-
-function ManagedTag({ status }) {
-  const meta = MANAGED_STATUS[status] ?? { label: 'Unknown', color: 'default' };
-  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
-}
-
-function InstallStatusTag({ status }) {
-  const meta = INSTALL_STATUS[status] ?? { label: 'Not Reported', color: 'default' };
-  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
-}
-
-// scan_status (documented on /inventory/scancomputers): -1/0/1/2. Distinct
-// from agent_status (is the agent reachable now) and managed_status (is it
-// installed) — this is "did the last inventory scan itself succeed".
-const SCAN_STATUS = {
-  '-1': { label: 'Not Done',     color: 'default' },
-  0:    { label: 'Failed',       color: 'error'   },
-  1:    { label: 'In Progress',  color: 'processing' },
-  2:    { label: 'Success',      color: 'success' },
-};
-
-function ScanStatusTag({ status }) {
-  const meta = SCAN_STATUS[status] ?? { label: 'Unknown', color: 'default' };
-  return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
-}
-
-function OsTag({ osName }) {
-  if (!osName || osName === '—') return <Text type="secondary">—</Text>;
-  const lower = osName.toLowerCase();
-  const isWin = lower.includes('windows');
-  const isLin = lower.includes('linux') || lower.includes('ubuntu') || lower.includes('centos')
-             || lower.includes('debian') || lower.includes('red hat') || lower.includes('suse');
-  const color = isWin ? 'blue' : isLin ? 'green' : 'default';
-  const label = isWin ? 'Windows' : isLin ? 'Linux' : 'Other';
-  return (
-    <Tooltip title={osName}>
-      <Tag color={color} style={{ margin: 0 }}>{label}</Tag>
-    </Tooltip>
-  );
-}
+const { Text } = Typography;
 
 // ── Software status helpers ────────────────────────────────────────────────
 
@@ -622,44 +504,6 @@ function ConfigModal({ open, onClose, onSaved }) {
 
 // ── Summary cards ──────────────────────────────────────────────────────────
 
-function SummaryCards({ agents }) {
-  const total      = agents.length;
-  const online     = agents.filter(a => a.agent_status === 0).length;
-  const offline    = agents.filter(a => a.agent_status === 1).length;
-  const unknown    = agents.filter(a => a.agent_status === 2).length;
-  const notManaged = agents.filter(a => a.managed_status === 0).length;
-  const staged     = agents.filter(isStaged).length;
-
-  const cards = [
-    { label: 'Total Endpoints', value: total,      color: undefined,  icon: <DesktopOutlined /> },
-    { label: 'Live',          value: online,     color: '#52c41a',  icon: <WifiOutlined /> },
-    { label: 'Down',         value: offline,    color: '#8c8c8c',  icon: <CloseCircleFilled /> },
-    { label: 'Unknown',         value: unknown,     color: '#faad14',  icon: <QuestionCircleOutlined /> },
-    { label: 'Not Managed',     value: notManaged, color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
-    { label: `Staged (${STALE_DAYS}+ days)`, value: staged, color: '#d4380d', icon: <ClockCircleOutlined /> },
-  ];
-
-  return (
-    <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-      {cards.map(c => (
-        <Col xs={12} sm={8} key={c.label}>
-          <Card size="small" styles={{ body: { padding: '10px 16px' } }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22, color: c.color || '#1677ff' }}>{c.icon}</span>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
-                <div style={{ fontSize: 12, color: '#8c8c8c' }}>{c.label}</div>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      ))}
-    </Row>
-  );
-}
-
-// ── Software summary cards ─────────────────────────────────────────────────
-
 function SoftwareSummaryCards({ software }) {
   const total       = software.length;
   const commercial  = software.filter(s => s.sw_type === 1).length;
@@ -694,53 +538,6 @@ function SoftwareSummaryCards({ software }) {
 
 // ── Installation status summary cards ──────────────────────────────────────
 
-function InstallSummaryCards({ agents }) {
-  const total       = agents.length;
-  const installed    = agents.filter(a => a.agent_install_status === 22).length;
-  const yetToInstall = agents.filter(a => a.agent_install_status === 21).length;
-  const uninstalled  = agents.filter(a => a.agent_install_status === 23 || a.agent_install_status === 24).length;
-  const failed       = agents.filter(a => a.agent_install_status === 29).length;
-
-  const cards = [
-    { label: 'Total Endpoints',  value: total,        color: undefined,  icon: <DesktopOutlined /> },
-    { label: 'Installed',        value: installed,    color: '#52c41a',  icon: <CheckCircleFilled /> },
-    { label: 'Yet to Install',   value: yetToInstall, color: '#8c8c8c',  icon: <ClockCircleOutlined /> },
-    { label: 'Uninstalled',      value: uninstalled,  color: '#faad14',  icon: <CloseCircleFilled /> },
-    { label: 'Install Failure',  value: failed,       color: '#ff4d4f',  icon: <ExclamationCircleFilled /> },
-  ];
-
-  return (
-    <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-      {cards.map(c => (
-        <Col xs={12} sm={8} key={c.label}>
-          <Card size="small" styles={{ body: { padding: '10px 16px' } }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22, color: c.color || '#1677ff' }}>{c.icon}</span>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
-                <div style={{ fontSize: 12, color: '#8c8c8c' }}>{c.label}</div>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      ))}
-    </Row>
-  );
-}
-
-// ── OS filter helper ───────────────────────────────────────────────────────
-
-function osFamily(osName) {
-  if (!osName || osName === '—') return 'Other';
-  const s = osName.toLowerCase();
-  if (s.includes('windows')) return 'Windows';
-  if (s.includes('linux') || s.includes('ubuntu') || s.includes('centos')
-   || s.includes('debian') || s.includes('red hat') || s.includes('suse')) return 'Linux';
-  return 'Other';
-}
-
-// ── Main page ──────────────────────────────────────────────────────────────
-
 const PAGE_SIZE = 50;
 
 export default function EndpointCentral() {
@@ -760,28 +557,21 @@ export default function EndpointCentral() {
   const [swLoading,        setSwLoading]        = useState(false);
   const [swLoaded,         setSwLoaded]         = useState(false);
   const [swConnectionError,setSwConnectionError]= useState(null);
-  const [activeTab,        setActiveTab]        = useState('endpoints');
+  const [activeTab,        setActiveTab]        = useState('computers');
 
-  // Endpoint filters
-  const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState(null);
-  const [osFilter,     setOsFilter]     = useState(null);
-  const [managedFilt,  setManagedFilt]  = useState(null);
-  const [scanFilter,   setScanFilter]   = useState(null);
-  const [stagedFilt,   setStagedFilt]   = useState(null); // null | 'staged' | 'active'
-  const [categoryFilt, setCategoryFilt] = useState(null); // null | 'Managed' | 'Staged' | 'Pending'
-  const [groupFilt,    setGroupFilt]    = useState(null); // null | '(none)' | group name
-  const canSync = ['admin', 'asset_manager', 'superadmin'].includes(user?.role);
+  // Tab counts, and counters that make the tabs fetch again (Refresh forces Endpoint Central;
+  // a finished group sync only re-reads our own data).
+  const [counts,        setCounts]        = useState({});
+  const [refreshTick,   setRefreshTick]   = useState(0);
+  const [groupsVersion, setGroupsVersion] = useState(0);
+  const onGroups = useCallback((n) => setCounts(c => (c.groups === n ? c : { ...c, groups: n })), []);
+  const onStaged = useCallback((n) => setCounts(c => (c.staged === n ? c : { ...c, staged: n })), []);
 
   // Software filters
   const [swSearch,      setSwSearch]      = useState('');
   const [swTypeFilter,  setSwTypeFilter]  = useState(null);
   const [swUsageFilter, setSwUsageFilter] = useState(null);
   const [swCompliance,  setSwCompliance]  = useState(null);
-
-  // Installation Status filters
-  const [instSearch, setInstSearch] = useState('');
-  const [instFilter,  setInstFilter]  = useState(null);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -859,27 +649,6 @@ export default function EndpointCentral() {
     if (activeTab === 'software') loadSoftware();
   };
 
-  // ── Filtered endpoints ─────────────────────────────────────────────────
-  const filteredAgents = agents.filter(a => {
-    if (statusFilter !== null && a.agent_status !== statusFilter) return false;
-    if (managedFilt  !== null && a.managed_status !== managedFilt) return false;
-    if (scanFilter   !== null && a.scan_status !== scanFilter) return false;
-    if (osFilter && osFamily(a.os_name) !== osFilter) return false;
-    if (categoryFilt !== null && computerCategory(a) !== categoryFilt) return false;
-    if (groupFilt === '(none)' && a.custom_groups?.length) return false;
-    if (groupFilt && groupFilt !== '(none)' && !a.custom_groups?.includes(groupFilt)) return false;
-    if (stagedFilt === 'staged' && !isStaged(a)) return false;
-    if (stagedFilt === 'active' && isStaged(a)) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!a.computer_name.toLowerCase().includes(q)
-       && !a.ip_address.toLowerCase().includes(q)
-       && !a.domain.toLowerCase().includes(q)
-       && !a.os_name.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
-
   // ── Filtered software ──────────────────────────────────────────────────
   const filteredSoftware = software.filter(s => {
     if (swTypeFilter   !== null && s.sw_type             !== swTypeFilter)   return false;
@@ -893,91 +662,6 @@ export default function EndpointCentral() {
     }
     return true;
   });
-
-  // ── Filtered installation status (reuses the same agents dataset) ──────
-  const filteredInstall = agents.filter(a => {
-    if (instFilter !== null && a.agent_install_status !== instFilter) return false;
-    if (instSearch) {
-      const q = instSearch.toLowerCase();
-      if (!a.computer_name.toLowerCase().includes(q)
-       && !a.ip_address.toLowerCase().includes(q)
-       && !a.domain.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
-
-  // ── Endpoint columns ───────────────────────────────────────────────────
-  const agentColumns = [
-    {
-      title: 'Computer Name', dataIndex: 'computer_name', key: 'computer_name',
-      fixed: 'left', width: 200, ellipsis: true,
-      render: v => <Text strong style={{ fontSize: 13 }}>{v}</Text>,
-    },
-    {
-      title: 'Category', key: 'category', width: 110,
-      render: (_, r) => { const c = computerCategory(r); return <Tag color={CATEGORY_COLOR[c]}>{c}</Tag>; },
-    },
-    {
-      title: 'Agent Status', dataIndex: 'agent_status', key: 'agent_status', width: 120,
-      render: v => <AgentStatusBadge status={v} />,
-    },
-    {
-      title: 'Scan Status', dataIndex: 'scan_status', key: 'scan_status', width: 120,
-      render: v => <ScanStatusTag status={v} />,
-    },
-    {
-      title: 'IP Address', dataIndex: 'ip_address', key: 'ip_address', width: 140,
-      render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
-    },
-    { title: 'Domain',    dataIndex: 'domain',   key: 'domain',   width: 160, ellipsis: true },
-    {
-      title: 'OS', dataIndex: 'os_name', key: 'os_tag', width: 90,
-      render: v => <OsTag osName={v} />,
-    },
-    {
-      title: 'OS Name', dataIndex: 'os_name', key: 'os_name', width: 220, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
-    },
-    {
-      title: 'Service Pack', dataIndex: 'service_pack', key: 'service_pack', width: 140, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
-    },
-    {
-      title: 'OS Version', dataIndex: 'os_version', key: 'os_version', width: 120, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : <Text code style={{ fontSize: 12 }}>{v}</Text>,
-    },
-    {
-      title: 'Agent Version', dataIndex: 'agent_version', key: 'agent_version', width: 130,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : <Text code style={{ fontSize: 12 }}>{v}</Text>,
-    },
-    {
-      title: 'Last Sync', dataIndex: 'last_sync', key: 'last_sync', width: 160,
-      render: (v, r) => {
-        if (!v || v === '—') return <Tag color="error">Staged — never synced</Tag>;
-        const d = new Date(v);
-        if (isNaN(d)) return <Text type="secondary">{v}</Text>;
-        const diffH = (Date.now() - d.getTime()) / 3600000;
-        const fmt = d.toLocaleString();
-        if (isStaged(r)) return <Tooltip title={`No sync in over ${STALE_DAYS} days`}><Tag color="error">{fmt}</Tag></Tooltip>;
-        if (diffH > 72) return <Tooltip title={fmt}><Tag color="warning">{fmt}</Tag></Tooltip>;
-        return <span>{fmt}</span>;
-      },
-    },
-    {
-      title: 'OS License Status', dataIndex: 'os_license_status', key: 'os_license_status', width: 150, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
-    },
-    {
-      title: 'Remote Office', dataIndex: 'office', key: 'office', width: 160, ellipsis: true,
-      render: v => v === '—' ? <Text type="secondary">—</Text> : v,
-    },
-    {
-      title: 'Custom Group Name', dataIndex: 'custom_groups', key: 'custom_groups', width: 220, ellipsis: true,
-      render: v => Array.isArray(v) && v.length
-        ? <Tooltip title={v.join(', ')}><span>{v.join(', ')}</span></Tooltip>
-        : <Text type="secondary">—</Text>,
-    },
-  ];
 
   // ── Software columns ───────────────────────────────────────────────────
   const softwareColumns = [
@@ -1014,41 +698,6 @@ export default function EndpointCentral() {
     },
   ];
 
-  // ── Installation Status columns ────────────────────────────────────────
-  const installColumns = [
-    {
-      title: 'Computer Name', dataIndex: 'computer_name', key: 'computer_name',
-      fixed: 'left', width: 200, ellipsis: true,
-      render: v => <Text strong style={{ fontSize: 13 }}>{v}</Text>,
-    },
-    {
-      title: 'IP Address', dataIndex: 'ip_address', key: 'ip_address', width: 140,
-      render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
-    },
-    { title: 'Domain', dataIndex: 'domain', key: 'domain', width: 160, ellipsis: true },
-    {
-      title: 'Install Status', dataIndex: 'agent_install_status', key: 'agent_install_status', width: 170,
-      render: v => <InstallStatusTag status={v} />,
-    },
-    {
-      title: 'Agent Status', dataIndex: 'agent_status', key: 'agent_status', width: 120,
-      render: v => <AgentStatusBadge status={v} />,
-    },
-    {
-      title: 'Scan Status', dataIndex: 'scan_status', key: 'scan_status', width: 120,
-      render: v => <ScanStatusTag status={v} />,
-    },
-    {
-      title: 'Last Sync', dataIndex: 'last_sync', key: 'last_sync', width: 160,
-      render: v => {
-        if (!v || v === '—') return <Text type="secondary">—</Text>;
-        const d = new Date(v);
-        if (isNaN(d)) return <Text type="secondary">{v}</Text>;
-        return <span>{d.toLocaleString()}</span>;
-      },
-    },
-  ];
-
   const notConfiguredAlert = !configured && !loading && (
     <Alert
       type="info"
@@ -1070,235 +719,28 @@ export default function EndpointCentral() {
 
   const tabItems = [
     {
-      key: 'endpoints',
-      label: <span><DesktopOutlined /> Endpoints</span>,
-      children: (
-        <>
-          {configured && connectionError && (
-            <Alert
-              type="error"
-              showIcon
-              message="Could not reach Endpoint Central"
-              description={
-                <span>
-                  {connectionError}
-                  {isAdmin && (
-                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update the connection details, regenerate the API key, or re-login.</>
-                  )}
-                </span>
-              }
-              style={{ marginBottom: 16 }}
-              action={
-                <Button size="small" icon={<ReloadOutlined />} onClick={load}>Retry</Button>
-              }
-            />
-          )}
-          {configured && !connectionError && (
-            <>
-              <SummaryCards agents={agents} />
-              <Card size="small" style={{ marginBottom: 12 }}>
-                <Space wrap>
-                  <Input.Search
-                    placeholder="Search name / IP / domain / OS…"
-                    allowClear
-                    style={{ width: 280 }}
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                  />
-                  <Select
-                    allowClear placeholder="Agent Status"
-                    style={{ width: 150 }}
-                    value={statusFilter}
-                    onChange={v => setStatusFilter(v ?? null)}
-                    options={[
-                      { value: 0, label: 'Live'  },
-                      { value: 1, label: 'Down' },
-                      { value: 2, label: 'Unknown' },
-                    ]}
-                  />
-                  <Select
-                    allowClear showSearch placeholder="Custom group"
-                    style={{ width: 200 }}
-                    value={groupFilt}
-                    onChange={v => setGroupFilt(v ?? null)}
-                    options={[
-                      { value: '(none)', label: '(none)' },
-                      ...[...new Set(agents.flatMap(a => a.custom_groups || []))].sort().map(g => ({ value: g, label: g })),
-                    ]}
-                  />
-                  <Select
-                    allowClear placeholder="Managed Status"
-                    style={{ width: 160 }}
-                    value={managedFilt}
-                    onChange={v => setManagedFilt(v ?? null)}
-                    options={[
-                      { value: 1, label: 'Managed'     },
-                      { value: 0, label: 'Not Managed'  },
-                    ]}
-                  />
-                  <Select
-                    allowClear placeholder="Scan Status"
-                    style={{ width: 150 }}
-                    value={scanFilter}
-                    onChange={v => setScanFilter(v ?? null)}
-                    options={[
-                      { value: 2,  label: 'Success'     },
-                      { value: 1,  label: 'In Progress' },
-                      { value: 0,  label: 'Failed'      },
-                      { value: -1, label: 'Not Done'    },
-                    ]}
-                  />
-                  <Select
-                    allowClear placeholder="OS Family"
-                    style={{ width: 130 }}
-                    value={osFilter}
-                    onChange={v => setOsFilter(v ?? null)}
-                    options={[
-                      { value: 'Windows', label: 'Windows' },
-                      { value: 'Linux',   label: 'Linux'   },
-                      { value: 'Other',   label: 'Other'   },
-                    ]}
-                  />
-                  <Select
-                    allowClear placeholder="Category"
-                    style={{ width: 150 }}
-                    value={categoryFilt}
-                    onChange={v => setCategoryFilt(v ?? null)}
-                    options={[
-                      { value: 'Managed', label: 'Managed' },
-                      { value: 'Staged',  label: `Staged (${STALE_DAYS}+ days)` },
-                      { value: 'Pending', label: 'Pending (agent not installed)' },
-                    ]}
-                  />
-                  <Button icon={<DownloadOutlined />} disabled={!filteredAgents.length}
-                          onClick={() => exportCategoryCsv(filteredAgents)}>
-                    Export CSV
-                  </Button>
-                  <Select
-                    allowClear placeholder="Staged"
-                    style={{ width: 150 }}
-                    value={stagedFilt}
-                    onChange={v => setStagedFilt(v ?? null)}
-                    options={[
-                      { value: 'staged', label: `Staged (${STALE_DAYS}+ days)` },
-                      { value: 'active', label: 'Active' },
-                    ]}
-                  />
-                </Space>
-              </Card>
-              <div style={{ marginBottom: 6 }}>
-                <Text type="secondary">
-                  Showing {filteredAgents.length} of {agents.length} endpoints
-                </Text>
-              </div>
-              <Table
-                rowKey={(r, i) => r.resource_id ?? `${r.computer_name}-${i}`}
-                size="small"
-                loading={loading}
-                dataSource={filteredAgents}
-                columns={agentColumns}
-                pagination={{ pageSize: PAGE_SIZE, showSizeChanger: true, showTotal: t => `${t} endpoints` }}
-                scroll={{ x: 'max-content' }}
-                sticky
-              />
-            </>
-          )}
-        </>
-      ),
-    },
-    {
-      key: 'install-status',
-      label: <span><ClockCircleOutlined /> Installation Status</span>,
-      children: (
-        <>
-          {configured && connectionError && (
-            <Alert
-              type="error"
-              showIcon
-              message="Could not reach Endpoint Central"
-              description={
-                <span>
-                  {connectionError}
-                  {isAdmin && (
-                    <> — <a onClick={() => setConfigOpen(true)} style={{ cursor: 'pointer' }}>open settings</a> to update the connection details, regenerate the API key, or re-login.</>
-                  )}
-                </span>
-              }
-              style={{ marginBottom: 16 }}
-              action={
-                <Button size="small" icon={<ReloadOutlined />} onClick={load}>Retry</Button>
-              }
-            />
-          )}
-          {configured && !connectionError && (
-            <>
-              <InstallSummaryCards agents={agents} />
-              <Card size="small" style={{ marginBottom: 12 }}>
-                <Space wrap>
-                  <Input.Search
-                    placeholder="Search name / IP / domain…"
-                    allowClear
-                    style={{ width: 280 }}
-                    value={instSearch}
-                    onChange={e => setInstSearch(e.target.value)}
-                  />
-                  <Select
-                    allowClear placeholder="Install Status"
-                    style={{ width: 190 }}
-                    value={instFilter}
-                    onChange={v => setInstFilter(v ?? null)}
-                    options={[
-                      { value: 22, label: 'Installed'            },
-                      { value: 21, label: 'Yet to Install'       },
-                      { value: 23, label: 'Uninstalled'          },
-                      { value: 24, label: 'Yet to Uninstall'     },
-                      { value: 29, label: 'Installation Failure' },
-                    ]}
-                  />
-                  <Button
-                    icon={<ReloadOutlined />}
-                    loading={loading}
-                    onClick={load}
-                  >
-                    Refresh
-                  </Button>
-                </Space>
-              </Card>
-              <div style={{ marginBottom: 6 }}>
-                <Text type="secondary">
-                  Showing {filteredInstall.length} of {agents.length} endpoints
-                </Text>
-              </div>
-              <Table
-                rowKey={(r, i) => r.resource_id ?? `${r.computer_name}-${i}`}
-                size="small"
-                loading={loading}
-                dataSource={filteredInstall}
-                columns={installColumns}
-                pagination={{ pageSize: PAGE_SIZE, showSizeChanger: true, showTotal: t => `${t} endpoints` }}
-                scroll={{ x: 'max-content' }}
-                sticky
-              />
-            </>
-          )}
-        </>
-      ),
+      key: 'computers',
+      label: configured && !connectionError ? `Computers (${agents.length})` : 'Computers',
+      children: configured ? (
+        <ComputersTab agents={agents} loading={loading} error={connectionError} groupsVersion={groupsVersion}
+          onOpenGroups={() => setActiveTab('groups')} />
+      ) : null,
     },
     {
       key: 'groups',
-      label: <span><TeamOutlined /> Custom groups</span>,
+      label: counts.groups === undefined ? 'Custom groups' : `Custom groups (${counts.groups})`,
       children: configured && !connectionError
-        ? <GroupsTab canSync={canSync} onSynced={() => load(true)} />
+        ? <GroupsTab reload={refreshTick} onCount={onGroups} onSynced={() => { setGroupsVersion(n => n + 1); load(true); }} />
         : null,
     },
     {
       key: 'staged',
-      label: <span><ClockCircleOutlined /> Staged</span>,
-      children: configured && !connectionError ? <StagedTab /> : null,
+      label: counts.staged === undefined ? 'Staged' : `Staged (${counts.staged})`,
+      children: configured && !connectionError ? <StagedTab reload={refreshTick} onTotal={onStaged} /> : null,
     },
     {
       key: 'software',
-      label: <span><AppstoreOutlined /> Software Inventory</span>,
+      label: 'Software inventory',
       children: (
         <>
           {/* Connection error — same root cause as agents tab (auth/network) */}
@@ -1399,33 +841,26 @@ export default function EndpointCentral() {
     },
   ];
 
+  const refreshAll = () => {
+    if (activeTab === 'software') { loadSoftware(); return; }
+    load(true);
+    setRefreshTick(n => n + 1);
+  };
+
   return (
-    <div style={{ padding: '16px 20px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <div className="nx-page" style={{ padding: '16px 20px' }}>
+      <div className="nx-head">
         <div>
-          <Title level={4} style={{ margin: 0 }}>
-            <DesktopOutlined style={{ marginRight: 8, color: '#1677ff' }} />
-            ME Endpoint Central
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            ManageEngine Endpoint Central — agent status and software inventory
-          </Text>
+          <h1>ManageEngine Endpoint Central</h1>
+          <div className="nx-sub">
+            Computer status, custom groups and staged computers, read from Endpoint Central.
+            Nothing here changes data in Endpoint Central.
+          </div>
         </div>
-        <Space>
-          {isAdmin && (
-            <Button icon={<SettingOutlined />} onClick={() => setConfigOpen(true)}>
-              Configure
-            </Button>
-          )}
-          <Button
-            icon={<ReloadOutlined />}
-            loading={activeTab === 'software' ? swLoading : loading}
-            onClick={activeTab === 'software' ? loadSoftware : () => load(true)}
-          >
-            Refresh
-          </Button>
-        </Space>
+        <div className="nx-head-actions">
+          <Button onClick={refreshAll} loading={activeTab === 'software' ? swLoading : loading}>Refresh</Button>
+          {isAdmin && <Button type="primary" onClick={() => setConfigOpen(true)}>Configure</Button>}
+        </div>
       </div>
 
       {notConfiguredAlert}
