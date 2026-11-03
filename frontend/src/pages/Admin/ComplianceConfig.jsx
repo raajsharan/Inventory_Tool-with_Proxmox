@@ -42,7 +42,7 @@ const DEFAULT_CONFIG = {
     me_msl_footnote:             '',
     me_ext_footnote:             '',
     breakdown_hidden_columns:    [],
-    breakdown_pct_exclude:       ['alive_powered_off', 'eol', 'not_applicable', 'onboard_pending'],
+    breakdown_pct_exclude:       ['eol', 'onboard_pending'],
     breakdown_excluded_locations:    [],
     breakdown_excluded_departments:  [],
     report_title:    '',
@@ -1305,11 +1305,9 @@ function WeeklyReportTabContent({ cfg, setWeekly, dashData, dashLoading }) {
               style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 0' }}
             >
               {[
-                { value: 'alive_powered_off', label: 'Alive But Powered Off' },
                 { value: 'eol',               label: 'EOL - No Patches' },
                 { value: 'exception',         label: 'Exception' },
-                { value: 'not_applicable',    label: 'Not Applicable' },
-                { value: 'on_hold',          label: 'On Hold' },
+                { value: 'on_hold',         label: 'On Hold' },
                 { value: 'onboard_pending',   label: 'Onboard Pending' },
               ].map(o => (
                 <Col xs={12} key={o.value}>

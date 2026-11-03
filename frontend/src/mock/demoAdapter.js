@@ -39,7 +39,7 @@ const DEFAULT_COMPLIANCE_CONFIG = {
       me_msl_footnote:            '',
       me_ext_footnote:            '',
       breakdown_hidden_columns:   [],
-      breakdown_pct_exclude:      ['alive_powered_off', 'eol', 'not_applicable', 'onboard_pending'],
+      breakdown_pct_exclude:      ['eol', 'onboard_pending'],
       breakdown_excluded_locations:   [],
       breakdown_excluded_departments: [],
       report_title:    '',

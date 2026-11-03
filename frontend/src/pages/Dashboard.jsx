@@ -1562,8 +1562,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const MSL_FOOTNOTE   = compCfg.weekly?.me_msl_footnote   || '(*Excludes Bomgar & Beijing Team Managed count, esxi hosts and not applicable vms, powered off VMs EOL VMs)';
   const EXT_FOOTNOTE   = compCfg.weekly?.me_ext_footnote   || "(*Excludes ESXi hosts and not applicable vm's like appliances, Beijing IT managed, exceptions, EOL VMs)";
   const HIDDEN_COLS    = compCfg.weekly?.breakdown_hidden_columns    ?? [];
-  // Not Applicable and Onboard Pending are always out of scope for the Percentage column.
-  const PCT_EXCL       = [...new Set([...(compCfg.weekly?.breakdown_pct_exclude ?? ['alive_powered_off', 'eol']), 'not_applicable', 'onboard_pending'])];
+  // Not Applicable / Powered Off rows are already left out of Total by the query,
+  // so they must not be subtracted again; Onboard Pending is always out of scope.
+  const PCT_EXCL       = [...new Set([...(compCfg.weekly?.breakdown_pct_exclude ?? ['eol']), 'onboard_pending'])]
+    .filter(k => k !== 'alive_powered_off' && k !== 'not_applicable');
   const EXCL_LOCS      = compCfg.weekly?.breakdown_excluded_locations    ?? [];
   const EXCL_DEPTS     = compCfg.weekly?.breakdown_excluded_departments  ?? [];
   const REPORT_TITLE   = compCfg.weekly?.report_title    || 'Weekly Infrastructure Report';

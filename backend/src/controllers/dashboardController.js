@@ -604,24 +604,34 @@ async function summary(req, res, next) {
         UNION ALL
         SELECT 'physical_esxi_servers', location, department, server_status, NULL::text AS patching_type, NULL::text AS eol_status, os_type
           FROM physical_esxi_servers WHERE deleted_at IS NULL
+      ),
+      -- Proxmox / VMware (ESXi, vCenter) hosts are not patched by this process.
+      scoped AS (
+        SELECT *,
+               (patching_type ILIKE 'Not Applicable%' OR patching_type IN ('NA','N/A')) AS is_na,
+               (server_status ILIKE '%power%off%')                                       AS is_off
+          FROM inv
+         WHERE COALESCE(os_type, '') NOT ILIKE '%proxmox%'
+           AND COALESCE(os_type, '') NOT ILIKE '%vmware%'
+           AND COALESCE(os_type, '') NOT ILIKE '%esxi%'
       )
+      -- Not Applicable and Alive But Powered Off rows are shown in their own
+      -- columns but kept out of Total and every other column, so the Total and
+      -- Percentage are computed on in-scope assets only.
       SELECT
         COALESCE(NULLIF(TRIM(${groupCol}), ''), 'Unassigned')                                        AS bucket,
-        COUNT(*) FILTER (WHERE server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%')::int AS alive_powered_off,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int                                     AS auto_patching,
-        COUNT(*) FILTER (WHERE source = 'beijing_assets')::int                                       AS beijing_it,
-        COUNT(*) FILTER (WHERE eol_status = 'EOL')::int                                              AS eol,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Exception%')::int                                AS exception,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                                   AS manual_patching,
-        COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                                  AS on_hold,
-        COUNT(*) FILTER (WHERE patching_type ILIKE 'Not Applicable%' OR patching_type IN ('NA','N/A'))::int AS not_applicable,
-        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%' OR patching_type ILIKE 'Onboard%')::int AS onboard_pending,
-        COUNT(*)::int                                                                                AS total
-      FROM inv
-      -- Proxmox / VMware (ESXi, vCenter) hosts are not patched by this process.
-      WHERE COALESCE(os_type, '') NOT ILIKE '%proxmox%'
-        AND COALESCE(os_type, '') NOT ILIKE '%vmware%'
-        AND COALESCE(os_type, '') NOT ILIKE '%esxi%'
+        COUNT(*) FILTER (WHERE is_off)::int                                                          AS alive_powered_off,
+        COUNT(*) FILTER (WHERE is_na)::int                                                           AS not_applicable,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off AND patching_type ILIKE 'Auto%')::int        AS auto_patching,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off AND source = 'beijing_assets')::int          AS beijing_it,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off AND eol_status = 'EOL')::int                 AS eol,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off AND patching_type ILIKE 'Exception%')::int   AS exception,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off AND patching_type ILIKE 'Manual%')::int      AS manual_patching,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off AND server_status ILIKE 'On Hold%')::int     AS on_hold,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off
+                           AND (server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%' OR patching_type ILIKE 'Onboard%'))::int AS onboard_pending,
+        COUNT(*) FILTER (WHERE NOT is_na AND NOT is_off)::int                                        AS total
+      FROM scoped
       GROUP BY 1
       ORDER BY total DESC, 1
     `;
