@@ -43,12 +43,10 @@ const pct = (n, d) => (d ? Math.round((n / d) * 10000) / 100 : 0);
 // Dashboard.jsx's WeeklyReportTab. Only columns with at least one non-zero
 // value across the rows are kept, same "adapts to the data" behavior.
 const BREAKDOWN_METRICS = [
-  { key: 'alive_powered_off', title: 'Alive But Powered Off' },
   { key: 'auto_patching',     title: 'Auto' },
   { key: 'eol',               title: 'EOL - No Patches' },
   { key: 'exception',         title: 'Exception' },
   { key: 'manual_patching',   title: 'Manual' },
-  { key: 'not_applicable',    title: 'Not Applicable' },
   { key: 'on_hold',           title: 'On Hold' },
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];

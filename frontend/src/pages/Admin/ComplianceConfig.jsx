@@ -853,11 +853,9 @@ const BREAKDOWN_COLS = [
   { key: 'auto_patching',     title: 'Auto',        color: '#15803d' },
   { key: 'manual_patching',   title: 'Manual',      color: '#1d4ed8' },
   { key: 'exception',         title: 'Exception',   color: '#a16207' },
-  { key: 'not_applicable',    title: 'N/A',         color: '#64748b' },
   { key: 'eol',               title: 'EOL',         color: '#b91c1c' },
   { key: 'on_hold',           title: 'On Hold',     color: '#475569' },
   { key: 'onboard_pending',   title: 'Pending',     color: '#0e7490' },
-  { key: 'alive_powered_off', title: 'Pwrd Off',    color: '#c2410c' },
 ];
 
 function BreakdownTablePreview({ rows, bucketLabel = 'Bucket' }) {
@@ -1273,12 +1271,10 @@ function WeeklyReportTabContent({ cfg, setWeekly, dashData, dashLoading }) {
               style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 0' }}
             >
               {[
-                { value: 'alive_powered_off', label: 'Alive But Powered Off' },
                 { value: 'auto_patching',     label: 'Auto' },
                 { value: 'eol',               label: 'EOL - No Patches' },
                 { value: 'exception',         label: 'Exception' },
                 { value: 'manual_patching',   label: 'Manual' },
-                { value: 'not_applicable',    label: 'Not Applicable' },
                 { value: 'on_hold',           label: 'On Hold' },
                 { value: 'onboard_pending',   label: 'Onboard Pending' },
               ].map(o => (

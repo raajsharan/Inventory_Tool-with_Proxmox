@@ -1318,12 +1318,10 @@ function WeeklyReportRow({ label, children }) {
 // All possible patching-type columns; only those with at least one non-zero
 // value across the rows are rendered, so the table adapts to the data.
 const BREAKDOWN_METRICS = [
-  { key: 'alive_powered_off', title: 'Alive But Powered Off' },
   { key: 'auto_patching',     title: 'Auto' },
   { key: 'eol',               title: 'EOL - No Patches' },
   { key: 'exception',         title: 'Exception' },
   { key: 'manual_patching',   title: 'Manual' },
-  { key: 'not_applicable',    title: 'Not Applicable' },
   { key: 'on_hold',           title: 'On Hold' },
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
@@ -1571,6 +1569,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const REPORT_TITLE   = compCfg.weekly?.report_title    || 'Weekly Infrastructure Report';
   const REPORT_SUB     = compCfg.weekly?.report_subtitle || 'Patch & Agent Compliance';
 
+  const pctExclLabels = BREAKDOWN_METRICS.filter(m => PCT_EXCL.includes(m.key)).map(m => m.title);
+  const BREAKDOWN_HINT = `(*Total excludes Proxmox / VMware ESXi hosts, Not Applicable and Alive But Powered Off assets. `
+    + `Percentage = (Total${pctExclLabels.map(t => ` − ${t}`).join('')}) ÷ Total)`;
+
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
   const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));
 
@@ -1758,6 +1760,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8 }}>
           <WTitle tab="weekly" k="location_patching" d="Location wise auto/Manual-patching status:" />
         </Typography.Text>
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{BREAKDOWN_HINT}</Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
           <WeeklyBreakdownTable rows={filteredLocRows} groupLabel="Location" isDark={isDark}
             linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`}
@@ -1769,6 +1772,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
           <WTitle tab="weekly" k="department_patching" d="Departments Patching Onboarding Status:" />
         </Typography.Text>
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{BREAKDOWN_HINT}</Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
           <WeeklyBreakdownTable rows={filteredDeptRows} groupLabel="Department" isDark={isDark}
             linkFor={(dept) => `/assets?q=${encodeURIComponent(dept)}`}
