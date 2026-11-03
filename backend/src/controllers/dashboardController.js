@@ -591,24 +591,33 @@ async function summary(req, res, next) {
 
     // ---------------------------------------------------------------
     // Weekly Report extras: location-wise + department-wise patching
-    // breakdown across the three VM-side tables. Beijing IT column =
-    // rows that came from the beijing_assets table for that bucket.
+    // breakdown across assets + beijing_assets + ext_assets + physical_esxi_servers.
     // ---------------------------------------------------------------
     const buildWeeklyBreakdown = (groupCol) => `
       WITH inv AS (
-        SELECT 'assets'::text AS source, location, department, server_status, patching_type, eol_status, os_type
+        SELECT 'assets'::text AS source, location, department, server_status, patching_type, eol_status, os_type, NULL::text AS asset_type
           FROM assets WHERE deleted_at IS NULL
         UNION ALL
-        SELECT 'beijing_assets', location, department, server_status, patching_type, eol_status, os_type
+        SELECT 'beijing_assets', location, department, server_status, patching_type, eol_status, os_type, NULL::text
           FROM beijing_assets WHERE deleted_at IS NULL
         UNION ALL
-        SELECT 'physical_esxi_servers', location, department, server_status, NULL::text AS patching_type, NULL::text AS eol_status, os_type
+        SELECT 'physical_esxi_servers', location, department, server_status, NULL::text AS patching_type, NULL::text AS eol_status, os_type, NULL::text
           FROM physical_esxi_servers WHERE deleted_at IS NULL
+        UNION ALL
+        SELECT 'ext_assets', location, department, server_status, patching_type, eol_status, os_type, asset_type
+          FROM ext_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND (server_status IS NULL
+            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
       ),
       -- Proxmox / VMware (ESXi, vCenter) hosts are not patched by this process.
       scoped AS (
         SELECT *,
-               (patching_type ILIKE 'Not Applicable%' OR patching_type IN ('NA','N/A')) AS is_na,
+               (patching_type ILIKE 'Not Applicable%' OR patching_type IN ('NA','N/A')
+                OR (source = 'ext_assets'
+                    AND (asset_type ILIKE '%network%' OR asset_type ILIKE '%switch%'
+                      OR asset_type ILIKE '%printer%' OR asset_type ILIKE '%ups%'
+                      OR asset_type ILIKE '%router%'  OR asset_type ILIKE '%firewall%'))) AS is_na,
                (server_status ILIKE '%power%off%')                                       AS is_off
           FROM inv
          WHERE COALESCE(os_type, '') NOT ILIKE '%proxmox%'

@@ -1561,8 +1561,8 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const EXT_FOOTNOTE   = compCfg.weekly?.me_ext_footnote   || "(*Excludes ESXi hosts and not applicable vm's like appliances, Beijing IT managed, exceptions, EOL VMs)";
   const HIDDEN_COLS    = compCfg.weekly?.breakdown_hidden_columns    ?? [];
   // Not Applicable / Powered Off rows are already left out of Total by the query,
-  // so they must not be subtracted again; Onboard Pending is always out of scope.
-  const PCT_EXCL       = [...new Set([...(compCfg.weekly?.breakdown_pct_exclude ?? ['eol']), 'onboard_pending'])]
+  // so they must not be subtracted again; Onboard Pending and Exception are always out of scope.
+  const PCT_EXCL       = [...new Set([...(compCfg.weekly?.breakdown_pct_exclude ?? ['eol']), 'onboard_pending', 'exception'])]
     .filter(k => k !== 'alive_powered_off' && k !== 'not_applicable');
   const EXCL_LOCS      = compCfg.weekly?.breakdown_excluded_locations    ?? [];
   const EXCL_DEPTS     = compCfg.weekly?.breakdown_excluded_departments  ?? [];

@@ -140,10 +140,11 @@ async function getPatchManagementSection(dashboardData) {
   const extFootnote = weeklyCfg.me_ext_footnote || COMPLIANCE_DEFAULTS.weekly.me_ext_footnote
     || "(*Excludes ESXi hosts and not applicable vm's like appliances, Beijing IT managed, exceptions, EOL VMs)";
   // Not Applicable / Powered Off rows are already left out of Total by the query,
-  // so they must not be subtracted again; Onboard Pending is always out of scope.
+  // so they must not be subtracted again; Onboard Pending and Exception are always out of scope.
   const pctExclude = [...new Set([
     ...(weeklyCfg.breakdown_pct_exclude ?? COMPLIANCE_DEFAULTS.weekly.breakdown_pct_exclude),
     'onboard_pending',
+    'exception',
   ])].filter(k => k !== 'alive_powered_off' && k !== 'not_applicable');
   const exclLocs = weeklyCfg.breakdown_excluded_locations ?? [];
   const exclDepts = weeklyCfg.breakdown_excluded_departments ?? [];
