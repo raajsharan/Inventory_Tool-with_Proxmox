@@ -596,13 +596,13 @@ async function summary(req, res, next) {
     // ---------------------------------------------------------------
     const buildWeeklyBreakdown = (groupCol) => `
       WITH inv AS (
-        SELECT 'assets'::text AS source, location, department, server_status, patching_type, eol_status
+        SELECT 'assets'::text AS source, location, department, server_status, patching_type, eol_status, os_type
           FROM assets WHERE deleted_at IS NULL
         UNION ALL
-        SELECT 'beijing_assets', location, department, server_status, patching_type, eol_status
+        SELECT 'beijing_assets', location, department, server_status, patching_type, eol_status, os_type
           FROM beijing_assets WHERE deleted_at IS NULL
         UNION ALL
-        SELECT 'physical_esxi_servers', location, department, server_status, NULL::text AS patching_type, NULL::text AS eol_status
+        SELECT 'physical_esxi_servers', location, department, server_status, NULL::text AS patching_type, NULL::text AS eol_status, os_type
           FROM physical_esxi_servers WHERE deleted_at IS NULL
       )
       SELECT
@@ -618,6 +618,10 @@ async function summary(req, res, next) {
         COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%' OR patching_type ILIKE 'Onboard%')::int AS onboard_pending,
         COUNT(*)::int                                                                                AS total
       FROM inv
+      -- Proxmox / VMware (ESXi, vCenter) hosts are not patched by this process.
+      WHERE COALESCE(os_type, '') NOT ILIKE '%proxmox%'
+        AND COALESCE(os_type, '') NOT ILIKE '%vmware%'
+        AND COALESCE(os_type, '') NOT ILIKE '%esxi%'
       GROUP BY 1
       ORDER BY total DESC, 1
     `;
