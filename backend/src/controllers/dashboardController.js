@@ -645,12 +645,13 @@ async function summary(req, res, next) {
       cat AS (
         SELECT
           CASE
-            WHEN src = 'beijing_assets'                                                              THEN 'Beijing IT Team'
             WHEN server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'             THEN 'Alive But Powered Off'
             WHEN eol_status = 'EOL'                                                                  THEN 'EOL - No Patches'
-            WHEN eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A')                   THEN 'Not Applicable'
+            WHEN eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A')
+              OR patching_type ILIKE 'Not Applicable%' OR patching_type IN ('NA','N/A')             THEN 'Not Applicable'
             WHEN server_status ILIKE 'On Hold%'                                                      THEN 'On Hold'
-            WHEN server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%'                   THEN 'Onboard Pending'
+            WHEN server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%'
+              OR patching_type ILIKE 'Onboard%'                                                      THEN 'Onboard Pending'
             WHEN patching_type ILIKE 'Auto%'                                                         THEN 'Auto'
             WHEN patching_type ILIKE 'Exception%'                                                    THEN 'Exception'
             WHEN patching_type ILIKE 'Manual%'                                                       THEN 'Manual'
