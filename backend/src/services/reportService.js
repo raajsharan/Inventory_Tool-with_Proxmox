@@ -141,7 +141,54 @@ function buildAssetWhere(filters, params, fields = ASSET_FIELDS) {
   return where.length ? `WHERE ${where.join(' AND ')}` : '';
 }
 
-async function run({ source, columns = [], filters = [], limit = 5000, allowPasswords = false }) {
+// Combine several table-backed sources into one result. Only fields every
+// selected source has can be reported on; a "Source" column says which
+// inventory each row came from. Custom pages are single-source only.
+async function runMulti({ sourceKeys, columns, filters, limit, allowPasswords }) {
+  const all = await sources();
+  const picked = sourceKeys.map(k => all.find(s => s.key === k));
+  if (picked.some(s => !s)) throw new ApiError(400, 'Unknown report source');
+  if (picked.some(s => s.kind !== 'table')) {
+    throw new ApiError(400, 'Custom pages cannot be combined with other sources');
+  }
+  const cap = Math.min(Number(limit) || 5000, 50000);
+  const common = picked[0].fields.filter(f => picked.every(s => s.fields.some(x => x.key === f.key)));
+  const commonKeys = new Set(common.map(f => f.key));
+  const cols = (columns.length ? columns : common.map(f => f.key)).filter(c => commonKeys.has(c));
+  const wanted = cols.length ? cols : ['vm_name'];
+  const effFilters = (filters || []).filter(f => commonKeys.has(f.field));
+
+  const parts = await Promise.all(picked.map(async (s) => {
+    const r = await run({
+      source: s.key,
+      columns: [...new Set([...wanted, 'created_at'])],
+      filters: effFilters,
+      limit: cap,
+      allowPasswords,
+    });
+    return r.rows.map(row => ({ ...row, __source: s.label }));
+  }));
+  const rows = parts.flat()
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    .slice(0, cap)
+    .map(row => {
+      if (!wanted.includes('created_at')) delete row.created_at;
+      return row;
+    });
+  return {
+    columns: [
+      { key: '__source', label: 'Source', type: 'string' },
+      ...wanted.map(c => common.find(f => f.key === c)),
+    ],
+    rows,
+  };
+}
+
+async function run({ source, sourceKeys, columns = [], filters = [], limit = 5000, allowPasswords = false }) {
+  if (Array.isArray(sourceKeys) && sourceKeys.length > 1) {
+    return runMulti({ sourceKeys: [...new Set(sourceKeys)], columns, filters, limit, allowPasswords });
+  }
+  if (Array.isArray(sourceKeys) && sourceKeys.length === 1) source = sourceKeys[0];
   const all = await sources();
   const src = all.find(s => s.key === source);
   if (!src) throw new ApiError(400, 'Unknown report source');

@@ -1530,6 +1530,8 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const msl = data.mslCompliance || {};
   const vmGaps = data.weeklyVmGaps || {};
   const nessusApplicability = data.weeklyNessusApplicability || {};
+  // Assets + Ext. + Beijing rolled up into one column (Physical & ESXi excluded).
+  const combined3 = (r) => (r.mslAssets ?? 0) + (r.extAssets ?? 0) + (r.beijingAssets ?? 0);
   const assetPatching = data.assetInventoryPatchingStatus || {};
   const extPatching   = data.extInventoryPatchingStatus || {};
   const locRows  = data.weeklyLocationPatching || [];
@@ -1686,6 +1688,8 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                   render: v => (v ?? 0).toLocaleString() },
                 { title: 'Beijing Inventory', dataIndex: 'beijingAssets', align: 'right', width: 130,
                   render: v => (v ?? 0).toLocaleString() },
+                { title: 'Assets + Ext. + Beijing', key: 'threeCombined', align: 'right', width: 150,
+                  render: (_, r) => combined3(r).toLocaleString() },
                 { title: 'Physical & ESXi Inventory', dataIndex: 'physicalEsxi', align: 'right', width: 150,
                   render: v => (v ?? 0).toLocaleString() },
                 { title: 'Total Count', dataIndex: 'count', align: 'right', width: 110,
@@ -1701,8 +1705,11 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
                     <Table.Summary.Cell index={2} align="right"><strong>{sum('mslAssets').toLocaleString()}</strong></Table.Summary.Cell>
                     <Table.Summary.Cell index={3} align="right"><strong>{sum('extAssets').toLocaleString()}</strong></Table.Summary.Cell>
                     <Table.Summary.Cell index={4} align="right"><strong>{sum('beijingAssets').toLocaleString()}</strong></Table.Summary.Cell>
-                    <Table.Summary.Cell index={5} align="right"><strong>{sum('physicalEsxi').toLocaleString()}</strong></Table.Summary.Cell>
-                    <Table.Summary.Cell index={6} align="right"><strong>{sum('count').toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="right">
+                      <strong>{(sum('mslAssets') + sum('extAssets') + sum('beijingAssets')).toLocaleString()}</strong>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="right"><strong>{sum('physicalEsxi').toLocaleString()}</strong></Table.Summary.Cell>
+                    <Table.Summary.Cell index={7} align="right"><strong>{sum('count').toLocaleString()}</strong></Table.Summary.Cell>
                   </Table.Summary.Row>
                 );
               }}

@@ -29,6 +29,7 @@ async function run(req, res, next) {
 
     const result = await svc.run({
       source: req.body.source,
+      sourceKeys: Array.isArray(req.body.sources) ? req.body.sources.map(String) : undefined,
       columns,
       filters,
       limit: req.body.limit,

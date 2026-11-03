@@ -39,7 +39,8 @@ export default function ReportBuilder() {
   const { user, canViewPasswords } = useAuth();
   const canSeePasswords = ['admin', 'superadmin', 'asset_manager'].includes(user?.role) || !!canViewPasswords;
   const [sources, setSources] = useState([]);
-  const [source, setSource] = useState('assets');
+  const [selectedSources, setSelectedSources] = useState(['assets']);
+  const sourceKey = selectedSources.join(',');
   const [viz, setViz] = useState('table');
   const [columns, setColumns] = useState([]);
   const [filters, setFilters] = useState([]);
@@ -56,7 +57,26 @@ export default function ReportBuilder() {
       .catch(e => message.error(e.response?.data?.error || 'Failed to load sources'));
   }, []);
 
-  const currentSource = useMemo(() => sources.find(s => s.key === source), [sources, source]);
+  // With several sources picked, only the fields common to all of them can be used.
+  const currentSource = useMemo(() => {
+    const picked = selectedSources.map(k => sources.find(s => s.key === k)).filter(Boolean);
+    if (!picked.length) return undefined;
+    if (picked.length === 1) return picked[0];
+    return {
+      ...picked[0],
+      fields: picked[0].fields.filter(f => picked.every(s => s.fields.some(x => x.key === f.key))),
+    };
+  }, [sources, selectedSources]);
+
+  // Custom pages can't be merged with other inventories: picking one makes it
+  // the only selection, and picking an inventory drops any custom page.
+  function onSourcesChange(next) {
+    if (!next.length) return;
+    const isCustom = k => sources.find(s => s.key === k)?.kind === 'custom_page';
+    const added = next.find(k => !selectedSources.includes(k));
+    if (added && isCustom(added)) return setSelectedSources([added]);
+    setSelectedSources(next.filter(k => !isCustom(k)).length ? next.filter(k => !isCustom(k)) : next);
+  }
   const allFields = useMemo(() => {
     const fields = currentSource?.fields || [];
     // Hide rather than merely disable — selecting it and only then hitting a
@@ -74,7 +94,7 @@ export default function ReportBuilder() {
     setPivotRow(allFields[0]?.key);
     setPivotCol(allFields[1]?.key);
     setResult(null);
-  }, [source]); // eslint-disable-line
+  }, [sourceKey]); // eslint-disable-line
 
   function toggleColumn(key) {
     setColumns(c => c.includes(key) ? c.filter(k => k !== key) : [...c, key]);
@@ -95,7 +115,7 @@ export default function ReportBuilder() {
     setRunning(true);
     try {
       const { data } = await api.post('/reports/run', {
-        source,
+        sources: selectedSources,
         columns,
         filters: filters.filter(f => f.field && f.op && (['isnull','notnull'].includes(f.op) || f.value !== '')),
       });
@@ -119,7 +139,7 @@ export default function ReportBuilder() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `report-${source}.csv`; a.click();
+    a.href = url; a.download = `report-${selectedSources.join('+')}.csv`; a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -145,11 +165,19 @@ export default function ReportBuilder() {
               <DatabaseOutlined style={{ marginRight: 6 }} />DATA SOURCE
             </Typography.Text>
             <Select
-              value={source}
-              onChange={setSource}
+              mode="multiple"
+              value={selectedSources}
+              onChange={onSourcesChange}
               style={{ width: '100%' }}
+              maxTagCount="responsive"
+              placeholder="Select one or more inventories"
               options={sources.map(s => ({ value: s.key, label: s.label }))}
             />
+            {selectedSources.length > 1 && (
+              <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                Combined report: only fields common to all selected inventories are available, and a Source column is added.
+              </Typography.Text>
+            )}
           </Col>
           <Col xs={24} md={12}>
             <Typography.Text strong style={{ display: 'block', marginBottom: 8, letterSpacing: 1, fontSize: 11 }}>
