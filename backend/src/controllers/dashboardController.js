@@ -614,10 +614,10 @@ async function summary(req, res, next) {
         COUNT(*) FILTER (WHERE patching_type ILIKE 'Exception%')::int                                AS exception,
         COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                                   AS manual_patching,
         COUNT(*) FILTER (WHERE server_status ILIKE 'On Hold%')::int                                  AS on_hold,
-        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%')::int AS onboard_pending,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Not Applicable%' OR patching_type IN ('NA','N/A'))::int AS not_applicable,
+        COUNT(*) FILTER (WHERE server_status ILIKE 'Onboard%' OR server_status ILIKE 'Pending%' OR patching_type ILIKE 'Onboard%')::int AS onboard_pending,
         COUNT(*)::int                                                                                AS total
       FROM inv
-      WHERE COALESCE(NULLIF(TRIM(${groupCol}), ''), '') <> ''
       GROUP BY 1
       ORDER BY total DESC, 1
     `;

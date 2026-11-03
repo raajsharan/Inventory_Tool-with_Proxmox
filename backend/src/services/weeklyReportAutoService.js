@@ -45,10 +45,10 @@ const pct = (n, d) => (d ? Math.round((n / d) * 10000) / 100 : 0);
 const BREAKDOWN_METRICS = [
   { key: 'alive_powered_off', title: 'Alive But Powered Off' },
   { key: 'auto_patching',     title: 'Auto' },
-  { key: 'beijing_it',        title: 'Beijing IT Team' },
   { key: 'eol',               title: 'EOL - No Patches' },
   { key: 'exception',         title: 'Exception' },
   { key: 'manual_patching',   title: 'Manual' },
+  { key: 'not_applicable',    title: 'Not Applicable' },
   { key: 'on_hold',           title: 'On Hold' },
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
