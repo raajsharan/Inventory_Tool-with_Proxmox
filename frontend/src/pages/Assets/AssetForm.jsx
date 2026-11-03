@@ -39,7 +39,7 @@ function skipAgentInstall(assetType, osType) {
   return NO_AGENT_ASSET_TYPES.includes(t) || NO_AGENT_OS_TYPES.some(x => o.includes(x));
 }
 
-export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/assets', entityLabel = 'Asset', pageKey = 'assets' }) {
+export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/assets', entityLabel = 'Asset', pageKey = 'assets', disableAgentInstall = false }) {
   const { id } = useParams();
   const nav = useNavigate();
   const { message, modal } = App.useApp();
@@ -207,7 +207,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       // quietly (no popup when it's skipped for lack of credentials).
       // Never deploy agents to hypervisor hosts: Physical / Bare Metal servers,
       // or anything whose OS Type is Proxmox or VMware.
-      if (savedId && values.ipAddress && (isAdmin || canManageAgents) && !skipAgentInstall(values.assetType, values.osType)) {
+      if (savedId && values.ipAddress && (isAdmin || canManageAgents) && !disableAgentInstall && !skipAgentInstall(values.assetType, values.osType)) {
         const isCreate  = mode === 'create';
         const installMe     = isCreate ? hnInstallAgents : !values.manageEngineInstalled;
         const installNessus = isCreate ? hnInstallAgents : !values.tenableInstalled;
@@ -610,7 +610,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
                     assign={hnAssign} setAssign={setHnAssign}
                     siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                     segmentOrder={hnConfig.segment_order}
-                    canInstallAgents={(isAdmin || canManageAgents) && !skipAgentInstall(watchedAssetType, osType)}
+                    canInstallAgents={(isAdmin || canManageAgents) && !disableAgentInstall && !skipAgentInstall(watchedAssetType, osType)}
                     installAgents={hnInstallAgents} setInstallAgents={setHnInstallAgents}
                   />
                 )}

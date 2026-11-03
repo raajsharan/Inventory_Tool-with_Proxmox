@@ -8,6 +8,7 @@ export default function BeijingAssetForm({ mode }) {
       listPath="/beijing-assets"
       entityLabel="Beijing Asset"
       pageKey="beijing_assets"
+      disableAgentInstall
     />
   );
 }
