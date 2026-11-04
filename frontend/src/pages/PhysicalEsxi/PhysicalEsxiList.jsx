@@ -81,7 +81,7 @@ export default function PhysicalEsxiList() {
   const [syncResult, setSyncResult]           = useState(null);
 
   const canWrite      = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
-  const isAdmin       = ['admin', 'superadmin'].includes(user?.role);
+  const canDelete     = canWrite; // asset managers too; every delete asks for the user's password
   const canSeePasswords = canWrite || !!canViewPasswords;
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -454,7 +454,7 @@ export default function PhysicalEsxiList() {
           <Tooltip title="Edit">
             <Button size="small" icon={<EditOutlined />} onClick={() => nav(`/physical-esxi/${r.id}/edit`)} />
           </Tooltip>
-          {isAdmin && (
+          {canDelete && (
             <Tooltip title="Delete">
               <Button size="small" danger icon={<DeleteOutlined />}
                 onClick={() => setDeleteTarget({ id: r.id, vm_name: r.vm_name })} />
@@ -567,7 +567,7 @@ export default function PhysicalEsxiList() {
             <Select size="small" style={{ minWidth: 160 }} placeholder="Set location…"
               options={ddLocation} loading={bulkWorking}
               onChange={v => onBulkUpdate('location', v)} />
-            {isAdmin && (
+            {canDelete && (
               <Button size="small" danger icon={<DeleteOutlined />}
                 onClick={() => setBulkDeleteOpen(true)} loading={bulkWorking}>
                 Delete selected

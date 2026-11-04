@@ -33,7 +33,7 @@ router.post('/smart-import',         authenticate, authorize(...writeRoles), imp
 
 const bulk = require('../controllers/bulkActionsController')(require('../services/extAssetService'), 'ext_asset');
 router.post('/bulk-update', authenticate, authorize(...writeRoles), bulk.bulkUpdate);
-router.post('/bulk-delete', authenticate, authorize('admin'), bulk.bulkRemove);
+router.post('/bulk-delete', authenticate, authorize(...writeRoles), bulk.bulkRemove);
 
 router.get('/', authenticate, c.list);
 router.get('/:id', authenticate, param('id').isUUID(), validate, c.get);
@@ -85,7 +85,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  authorize('admin'),
+  authorize(...writeRoles),
   param('id').isUUID(),
   validate,
   c.remove

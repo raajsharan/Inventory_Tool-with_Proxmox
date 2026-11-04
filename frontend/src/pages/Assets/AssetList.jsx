@@ -78,7 +78,7 @@ export default function AssetList({
   const [bulkResetKey, setBulkResetKey] = useState(0);    // remounts the bulk selects after each action
 
   const canWrite = ['admin', 'superadmin', 'asset_manager'].includes(user?.role);
-  const isAdmin  = ['admin', 'superadmin'].includes(user?.role);
+  const canDelete = canWrite; // asset managers too; every delete asks for the user's password
   const canSeePasswords = canWrite || !!canViewPasswords;
 
   async function load(overrides = {}) {
@@ -371,7 +371,7 @@ export default function AssetList({
           <Tooltip title="Edit">
             <Button size="small" icon={<EditOutlined />} onClick={() => nav(`${basePath}/${r.id}/edit`)} />
           </Tooltip>
-          {isAdmin && (
+          {canDelete && (
             <Tooltip title="Delete">
               <Button size="small" danger icon={<DeleteOutlined />}
                 onClick={() => setDeleteTarget({ id: r.id, vm_name: r.vm_name })} />
@@ -445,7 +445,7 @@ export default function AssetList({
             <Select size="small" style={{ minWidth: 150 }} placeholder="Set EOL status…"
               options={ddOptions('eol_status')} loading={bulkWorking}
               onChange={(v) => onBulkUpdate('eolStatus', v)} />
-            {isAdmin && (
+            {canDelete && (
               <Button size="small" danger icon={<DeleteOutlined />}
                 onClick={() => setBulkDeleteOpen(true)} loading={bulkWorking}>
                 Delete selected
