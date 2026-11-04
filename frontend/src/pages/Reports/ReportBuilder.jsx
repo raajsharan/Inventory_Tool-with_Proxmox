@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Card, Select, Button, Space, Typography, Row, Col, Checkbox, Input, Table, Tag,
-  App, Empty, Divider, Tabs, Tooltip,
+  App, Empty, Divider, Tabs, Tooltip, theme,
 } from 'antd';
 import {
   BarChartOutlined, PieChartOutlined, LineChartOutlined, TableOutlined,
@@ -378,6 +378,7 @@ function pivot(rows, rowKey, colKey, measure) {
 }
 
 function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivotCol, visibleCols }) {
+  const { token } = theme.useToken();
   if (viz === 'table') {
     const shownCols = cols.filter(c => visibleCols.includes(c.key));
     const tableColumns = shownCols.map(c => ({ title: c.label, dataIndex: c.key, key: c.key,
@@ -437,7 +438,9 @@ function ReportVisualization({ viz, rows, cols, groupBy, measure, pivotRow, pivo
           for (const c of pcols) totals[c] = data.reduce((a, r) => a + (r[c] || 0), 0);
           const grand = data.reduce((a, r) => a + (r.__total__ || 0), 0);
           return (
-            <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 600 }}>
+            // Theme tokens, not a fixed light colour — a hard-coded #fafafa made
+            // the row unreadable (light text on white) in dark mode.
+            <Table.Summary.Row style={{ background: token.colorFillAlter, color: token.colorText, fontWeight: 600 }}>
               <Table.Summary.Cell index={0}>Total</Table.Summary.Cell>
               {pcols.map((c, i) => <Table.Summary.Cell key={c} index={i+1} align="right">{totals[c]}</Table.Summary.Cell>)}
               <Table.Summary.Cell index={pcols.length+1} align="right"><Tag color="green">{grand}</Tag></Table.Summary.Cell>
