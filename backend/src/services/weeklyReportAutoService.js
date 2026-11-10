@@ -37,6 +37,14 @@ async function getComplianceConfig() {
   }
 }
 
+// Location table: (Auto + Manual + Onboard Pending) / (those + EOL + Exception).
+const LOCATION_PCT_FORMULA = {
+  num: ['auto_patching', 'manual_patching', 'onboard_pending'],
+  den: ['auto_patching', 'manual_patching', 'onboard_pending', 'eol', 'exception'],
+  // Beijing: (Auto + Manual) / (Auto + Manual + Onboard Pending).
+  overrides: { beijing: { num: ['auto_patching', 'manual_patching'], den: ['auto_patching', 'manual_patching', 'onboard_pending'] } },
+};
+
 const pct = (n, d) => (d ? Math.round((n / d) * 10000) / 100 : 0);
 
 // All possible patching-type columns — mirrors BREAKDOWN_METRICS in
@@ -53,19 +61,24 @@ const BREAKDOWN_METRICS = [
 
 // Percentage = (Total - out-of-scope types) / Total, using pctExclude — same
 // formula as WeeklyBreakdownTable in Dashboard.jsx.
-function enrichBreakdownRows(rows, excludedBuckets, pctExclude, numeratorKey = null) {
+function enrichBreakdownRows(rows, excludedBuckets, pctExclude, formula = null) {
   const filtered = (rows || []).filter(r => !excludedBuckets.includes(r.bucket));
   const enriched = filtered.map(r => {
     const total = Number(r.total || 0);
     const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
-    const inScope = numeratorKey ? Number(r[numeratorKey] || 0) : total - excluded;
+    const inScope = total - excluded;
+    if (formula) {
+      const f = formula.overrides?.[String(r.bucket || '').trim().toLowerCase()] || formula;
+      const num = f.num.reduce((x, k) => x + Number(r[k] || 0), 0);
+      const den = f.den.reduce((x, k) => x + Number(r[k] || 0), 0);
+      return { ...r, pct: den ? Math.round((num / den) * 10000) / 100 : 0 };
+    }
     return { ...r, pct: total ? Math.round((inScope / total) * 10000) / 100 : 0 };
   });
   const sumKey = (key) => enriched.reduce((s, r) => s + Number(r[key] || 0), 0);
   const totalSum = sumKey('total');
-  const inScopeSum = numeratorKey
-    ? sumKey(numeratorKey)
-    : totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
+  const inScopeSum = totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
+  const sumOf = (keys) => keys.reduce((x, k) => x + sumKey(k), 0);
   const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0);
   return {
     columns: activeMetrics.map(m => m.title),
@@ -78,7 +91,9 @@ function enrichBreakdownRows(rows, excludedBuckets, pctExclude, numeratorKey = n
     totals: {
       values: activeMetrics.map(m => sumKey(m.key)),
       total: totalSum,
-      pct: totalSum ? Math.round((inScopeSum / totalSum) * 10000) / 100 : 0,
+      pct: formula
+        ? (sumOf(formula.den) ? Math.round((sumOf(formula.num) / sumOf(formula.den)) * 10000) / 100 : 0)
+        : (totalSum ? Math.round((inScopeSum / totalSum) * 10000) / 100 : 0),
     },
   };
 }
@@ -151,7 +166,7 @@ async function getPatchManagementSection(dashboardData) {
   const exclLocs = weeklyCfg.breakdown_excluded_locations ?? [];
   const exclDepts = weeklyCfg.breakdown_excluded_departments ?? [];
 
-  const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude, 'auto_patching');
+  const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude, LOCATION_PCT_FORMULA);
   const departmentPatching = enrichBreakdownRows(data.weeklyDepartmentPatching, exclDepts, pctExclude);
 
   const meMslRows = data.meMslBreakdown || [];

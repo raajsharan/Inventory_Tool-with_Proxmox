@@ -1326,7 +1326,7 @@ const BREAKDOWN_METRICS = [
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
 
-function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'], pctNumeratorKey = null }) {
+function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'], pctFormula = null }) {
   // Single accent colour + dimmed dash — same scheme as the Auto Patching
   // Group Count table (MEComplianceTable) for visual consistency across
   // Weekly Report breakdown tables.
@@ -1342,16 +1342,23 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
   const enriched = (rows || []).map(r => {
     const total = Number(r.total || 0);
     const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
-    const inScope = pctNumeratorKey ? Number(r[pctNumeratorKey] || 0) : total - excluded;
+    const inScope = total - excluded;
+    if (pctFormula) {
+      const f = pctFormula.overrides?.[String(r.bucket || '').trim().toLowerCase()] || pctFormula;
+      const num = f.num.reduce((x, k) => x + Number(r[k] || 0), 0);
+      const den = f.den.reduce((x, k) => x + Number(r[k] || 0), 0);
+      return { ...r, pct: den ? (num / den) * 100 : 0 };
+    }
     return { ...r, pct: total ? (inScope / total) * 100 : 0 };
   });
 
   const sumKey = (key) => enriched.reduce((s, r) => s + Number(r[key] || 0), 0);
   const totalSum = sumKey('total');
-  const inScopeSum = pctNumeratorKey
-    ? sumKey(pctNumeratorKey)
-    : totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
-  const totalPct = totalSum ? (inScopeSum / totalSum) * 100 : 0;
+  const inScopeSum = totalSum - pctExclude.reduce((x, k) => x + sumKey(k), 0);
+  const sumOf = (keys) => keys.reduce((x, k) => x + sumKey(k), 0);
+  const totalPct = pctFormula
+    ? (sumOf(pctFormula.den) ? (sumOf(pctFormula.num) / sumOf(pctFormula.den)) * 100 : 0)
+    : (totalSum ? (inScopeSum / totalSum) * 100 : 0);
 
   // Dynamic columns: drop any metric that is zero/empty for every row, then apply explicit hidden list.
   const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0 && !hiddenColumns.includes(m.key));
@@ -1577,11 +1584,17 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const BREAKDOWN_HINT = `(*Total excludes Proxmox / VMware ESXi hosts, Not Applicable and Alive But Powered Off assets. `
     + `Percentage = (Total${pctExclLabels.map(t => ` − ${t}`).join('')}) ÷ Total)`;
 
+  const LOCATION_PCT_FORMULA = {
+    num: ['auto_patching', 'manual_patching', 'onboard_pending'],
+    den: ['auto_patching', 'manual_patching', 'onboard_pending', 'eol', 'exception'],
+    // Beijing has no EOL / Exception columns to weigh against.
+    overrides: { beijing: { num: ['auto_patching', 'manual_patching'], den: ['auto_patching', 'manual_patching', 'onboard_pending'] } },
+  };
   const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
     + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
     + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
     + 'EOL / Exception / Onboard Pending columns show assets left out by these rules and are not part of Total. '
-    + 'Percentage = Auto ÷ Total)';
+    + 'Percentage = (Auto + Manual + Onboard Pending) ÷ (Auto + Manual + Onboard Pending + EOL - No Patches + Exception). Beijing = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending))';
 
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
   const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));
@@ -1779,7 +1792,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
           <WeeklyBreakdownTable rows={filteredLocRows} groupLabel="Location" isDark={isDark}
             linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`}
-            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} pctNumeratorKey="auto_patching" />
+            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} pctFormula={LOCATION_PCT_FORMULA} />
         </Card>
       </div></Wgt>
 
