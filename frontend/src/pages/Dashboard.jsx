@@ -1580,6 +1580,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
     + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
     + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
+    + 'EOL / Exception / Onboard Pending columns show assets left out by these rules and are not part of Total. '
     + 'Percentage = Auto ÷ Total)';
 
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
