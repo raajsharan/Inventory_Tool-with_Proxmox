@@ -1591,7 +1591,7 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
     + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
     + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
-    + 'EOL / Exception / Onboard Pending columns show assets left out by these rules and are not part of Total. '
+    + 'EOL / Exception / Onboard Pending show assets left out by these rules; Total = Auto + Manual + EOL + Exception + Onboard Pending. '
     + 'Percentage = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending + EOL - No Patches + Exception))';
 
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));

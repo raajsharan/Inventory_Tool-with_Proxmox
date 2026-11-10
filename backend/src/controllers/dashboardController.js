@@ -646,11 +646,11 @@ async function summary(req, res, next) {
     `;
     // Location-wise table uses stricter per-inventory rules (Alive only, OS and
     // patching-type exclusions). Physical & ESXi hosts are not in scope here.
-    // Total / Auto / Manual / Percentage use only rows that pass every rule
-    // (in_total). The EOL / Exception / Onboard Pending columns are
-    // informational: they count assets that pass the OS / location /
-    // not-Not-Applicable rules but carry that flag (any status), so they show
-    // what the filters left out and are NOT part of Total.
+    // Auto / Manual count rows that pass every rule (in_total). EOL / Exception /
+    // Onboard Pending count assets that pass the OS / location / not-Not-Applicable
+    // rules but carry that flag (any status). Total is the sum of those five
+    // columns, so the row always adds up; Alive assets with a blank/other
+    // patching type have no column and are not counted.
     const weeklyLocationPatchingQ = db.query(`
       WITH base AS (
         -- Beijing: Alive, Windows or Linux, patching type not Not Applicable
@@ -698,19 +698,23 @@ async function summary(req, res, next) {
                 AND NOT COALESCE(patching_type,'') ILIKE 'Exception%') AS is_onb
           FROM base
       )
-      SELECT
-        COALESCE(NULLIF(TRIM(location), ''), 'Unassigned')                                   AS bucket,
-        COUNT(*) FILTER (WHERE in_total AND patching_type ILIKE 'Auto%')::int                 AS auto_patching,
-        COUNT(*) FILTER (WHERE in_total AND patching_type ILIKE 'Manual%')::int               AS manual_patching,
-        COUNT(*) FILTER (WHERE is_eol)::int                                                   AS eol,
-        COUNT(*) FILTER (WHERE is_exc)::int                                                   AS exception,
-        COUNT(*) FILTER (WHERE is_onb)::int                                                   AS onboard_pending,
-        0 AS on_hold, 0 AS alive_powered_off, 0 AS not_applicable,
-        COUNT(*) FILTER (WHERE in_total)::int                                                 AS total
-      FROM flagged
-      GROUP BY 1
-      HAVING COUNT(*) FILTER (WHERE in_total OR is_eol OR is_exc OR is_onb) > 0
-      ORDER BY total DESC, 1
+      SELECT bucket, auto_patching, manual_patching, eol, exception, onboard_pending,
+             on_hold, alive_powered_off, not_applicable,
+             (auto_patching + manual_patching + eol + exception + onboard_pending)::int AS total
+        FROM (
+          SELECT
+            COALESCE(NULLIF(TRIM(location), ''), 'Unassigned')                                   AS bucket,
+            COUNT(*) FILTER (WHERE in_total AND patching_type ILIKE 'Auto%')::int                 AS auto_patching,
+            COUNT(*) FILTER (WHERE in_total AND patching_type ILIKE 'Manual%')::int               AS manual_patching,
+            COUNT(*) FILTER (WHERE is_eol)::int                                                   AS eol,
+            COUNT(*) FILTER (WHERE is_exc)::int                                                   AS exception,
+            COUNT(*) FILTER (WHERE is_onb)::int                                                   AS onboard_pending,
+            0 AS on_hold, 0 AS alive_powered_off, 0 AS not_applicable
+          FROM flagged
+          GROUP BY 1
+        ) t
+       WHERE auto_patching + manual_patching + eol + exception + onboard_pending > 0
+       ORDER BY total DESC, bucket
     `);
     const weeklyDepartmentPatchingQ = db.query(buildWeeklyBreakdown('department'));
 
