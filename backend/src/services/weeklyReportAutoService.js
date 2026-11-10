@@ -37,12 +37,10 @@ async function getComplianceConfig() {
   }
 }
 
-// Location table: (Auto + Manual + Onboard Pending) / (those + EOL + Exception).
+// Location table: (Auto + Manual) / (Auto + Manual + Onboard Pending + EOL + Exception).
 const LOCATION_PCT_FORMULA = {
-  num: ['auto_patching', 'manual_patching', 'onboard_pending'],
+  num: ['auto_patching', 'manual_patching'],
   den: ['auto_patching', 'manual_patching', 'onboard_pending', 'eol', 'exception'],
-  // Beijing: (Auto + Manual) / (Auto + Manual + Onboard Pending).
-  overrides: { beijing: { num: ['auto_patching', 'manual_patching'], den: ['auto_patching', 'manual_patching', 'onboard_pending'] } },
 };
 
 const pct = (n, d) => (d ? Math.round((n / d) * 10000) / 100 : 0);
@@ -68,7 +66,7 @@ function enrichBreakdownRows(rows, excludedBuckets, pctExclude, formula = null) 
     const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
     const inScope = total - excluded;
     if (formula) {
-      const f = formula.overrides?.[String(r.bucket || '').trim().toLowerCase()] || formula;
+      const f = formula;
       const num = f.num.reduce((x, k) => x + Number(r[k] || 0), 0);
       const den = f.den.reduce((x, k) => x + Number(r[k] || 0), 0);
       return { ...r, pct: den ? Math.round((num / den) * 10000) / 100 : 0 };

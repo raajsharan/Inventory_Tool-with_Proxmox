@@ -1344,7 +1344,7 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
     const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
     const inScope = total - excluded;
     if (pctFormula) {
-      const f = pctFormula.overrides?.[String(r.bucket || '').trim().toLowerCase()] || pctFormula;
+      const f = pctFormula;
       const num = f.num.reduce((x, k) => x + Number(r[k] || 0), 0);
       const den = f.den.reduce((x, k) => x + Number(r[k] || 0), 0);
       return { ...r, pct: den ? (num / den) * 100 : 0 };
@@ -1585,16 +1585,14 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
     + `Percentage = (Total${pctExclLabels.map(t => ` − ${t}`).join('')}) ÷ Total)`;
 
   const LOCATION_PCT_FORMULA = {
-    num: ['auto_patching', 'manual_patching', 'onboard_pending'],
+    num: ['auto_patching', 'manual_patching'],
     den: ['auto_patching', 'manual_patching', 'onboard_pending', 'eol', 'exception'],
-    // Beijing has no EOL / Exception columns to weigh against.
-    overrides: { beijing: { num: ['auto_patching', 'manual_patching'], den: ['auto_patching', 'manual_patching', 'onboard_pending'] } },
   };
   const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
     + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
     + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
     + 'EOL / Exception / Onboard Pending columns show assets left out by these rules and are not part of Total. '
-    + 'Percentage = (Auto + Manual + Onboard Pending) ÷ (Auto + Manual + Onboard Pending + EOL - No Patches + Exception). Beijing = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending))';
+    + 'Percentage = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending + EOL - No Patches + Exception))';
 
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
   const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));
