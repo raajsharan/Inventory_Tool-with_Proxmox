@@ -644,7 +644,66 @@ async function summary(req, res, next) {
       GROUP BY 1
       ORDER BY total DESC, 1
     `;
-    const weeklyLocationPatchingQ   = db.query(buildWeeklyBreakdown('location'));
+    // Location-wise table uses stricter per-inventory rules (Alive only, OS and
+    // patching-type exclusions). Physical & ESXi hosts are not in scope here.
+    // EOL / Exception / Onboard Pending / On Hold rows are filtered out rather
+    // than shown in their own columns, so those keys are always 0.
+    const weeklyLocationPatchingQ = db.query(`
+      WITH inv AS (
+        -- Beijing: Alive, Windows or Linux, patching type not Not Applicable
+        SELECT location, patching_type
+          FROM beijing_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND LOWER(TRIM(COALESCE(server_status,''))) = 'alive'
+           AND (os_type ILIKE '%windows%' OR os_type ILIKE '%linux%')
+           AND COALESCE(patching_type,'') NOT ILIKE 'Not Applicable%'
+           AND COALESCE(patching_type,'') NOT IN ('NA','N/A')
+        UNION ALL
+        -- Assets: Alive, not Appliance/Cisco IOS/MacOS/Storage/ESXi/Proxmox,
+        -- patching type not Not Applicable / EOL / Powered Off / Exception
+        SELECT location, patching_type
+          FROM assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND LOWER(TRIM(COALESCE(server_status,''))) = 'alive'
+           AND COALESCE(os_type,'') NOT ILIKE '%appliance%'
+           AND COALESCE(os_type,'') NOT ILIKE '%cisco%'
+           AND COALESCE(os_type,'') NOT ILIKE '%mac%'
+           AND COALESCE(os_type,'') NOT ILIKE '%storage%'
+           AND COALESCE(os_type,'') NOT ILIKE '%esxi%'
+           AND COALESCE(os_type,'') NOT ILIKE '%proxmox%'
+           AND COALESCE(patching_type,'') NOT ILIKE 'Not Applicable%'
+           AND COALESCE(patching_type,'') NOT IN ('NA','N/A')
+           AND COALESCE(patching_type,'') NOT ILIKE 'EOL%'
+           AND COALESCE(patching_type,'') NOT ILIKE '%power%off%'
+           AND COALESCE(patching_type,'') NOT ILIKE 'Exception%'
+           AND COALESCE(eol_status,'') <> 'EOL'
+        UNION ALL
+        -- Extended: Alive, not ESXi/Appliances, not Beijing location,
+        -- patching type not EOL / Exception / Not Applicable
+        SELECT location, patching_type
+          FROM ext_assets
+         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+           AND LOWER(TRIM(COALESCE(server_status,''))) = 'alive'
+           AND COALESCE(os_type,'') NOT ILIKE '%esxi%'
+           AND COALESCE(os_type,'') NOT ILIKE '%appliance%'
+           AND COALESCE(location,'') NOT ILIKE '%beijing%'
+           AND COALESCE(patching_type,'') NOT ILIKE 'Not Applicable%'
+           AND COALESCE(patching_type,'') NOT IN ('NA','N/A')
+           AND COALESCE(patching_type,'') NOT ILIKE 'EOL%'
+           AND COALESCE(patching_type,'') NOT ILIKE 'Exception%'
+           AND COALESCE(eol_status,'') <> 'EOL'
+      )
+      SELECT
+        COALESCE(NULLIF(TRIM(location), ''), 'Unassigned')                       AS bucket,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Auto%')::int                  AS auto_patching,
+        COUNT(*) FILTER (WHERE patching_type ILIKE 'Manual%')::int                AS manual_patching,
+        0 AS eol, 0 AS exception, 0 AS on_hold, 0 AS onboard_pending,
+        0 AS alive_powered_off, 0 AS not_applicable,
+        COUNT(*)::int                                                             AS total
+      FROM inv
+      GROUP BY 1
+      ORDER BY total DESC, 1
+    `);
     const weeklyDepartmentPatchingQ = db.query(buildWeeklyBreakdown('department'));
 
     // ---------------------------------------------------------------

@@ -53,17 +53,19 @@ const BREAKDOWN_METRICS = [
 
 // Percentage = (Total - out-of-scope types) / Total, using pctExclude — same
 // formula as WeeklyBreakdownTable in Dashboard.jsx.
-function enrichBreakdownRows(rows, excludedBuckets, pctExclude) {
+function enrichBreakdownRows(rows, excludedBuckets, pctExclude, numeratorKey = null) {
   const filtered = (rows || []).filter(r => !excludedBuckets.includes(r.bucket));
   const enriched = filtered.map(r => {
     const total = Number(r.total || 0);
     const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
-    const inScope = total - excluded;
+    const inScope = numeratorKey ? Number(r[numeratorKey] || 0) : total - excluded;
     return { ...r, pct: total ? Math.round((inScope / total) * 10000) / 100 : 0 };
   });
   const sumKey = (key) => enriched.reduce((s, r) => s + Number(r[key] || 0), 0);
   const totalSum = sumKey('total');
-  const inScopeSum = totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
+  const inScopeSum = numeratorKey
+    ? sumKey(numeratorKey)
+    : totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
   const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0);
   return {
     columns: activeMetrics.map(m => m.title),
@@ -149,7 +151,7 @@ async function getPatchManagementSection(dashboardData) {
   const exclLocs = weeklyCfg.breakdown_excluded_locations ?? [];
   const exclDepts = weeklyCfg.breakdown_excluded_departments ?? [];
 
-  const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude);
+  const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude, 'auto_patching');
   const departmentPatching = enrichBreakdownRows(data.weeklyDepartmentPatching, exclDepts, pctExclude);
 
   const meMslRows = data.meMslBreakdown || [];

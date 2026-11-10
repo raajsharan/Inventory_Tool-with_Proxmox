@@ -1326,7 +1326,7 @@ const BREAKDOWN_METRICS = [
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
 
-function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'] }) {
+function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'], pctNumeratorKey = null }) {
   // Single accent colour + dimmed dash — same scheme as the Auto Patching
   // Group Count table (MEComplianceTable) for visual consistency across
   // Weekly Report breakdown tables.
@@ -1342,13 +1342,15 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
   const enriched = (rows || []).map(r => {
     const total = Number(r.total || 0);
     const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
-    const inScope = total - excluded;
+    const inScope = pctNumeratorKey ? Number(r[pctNumeratorKey] || 0) : total - excluded;
     return { ...r, pct: total ? (inScope / total) * 100 : 0 };
   });
 
   const sumKey = (key) => enriched.reduce((s, r) => s + Number(r[key] || 0), 0);
   const totalSum = sumKey('total');
-  const inScopeSum = totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
+  const inScopeSum = pctNumeratorKey
+    ? sumKey(pctNumeratorKey)
+    : totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
   const totalPct = totalSum ? (inScopeSum / totalSum) * 100 : 0;
 
   // Dynamic columns: drop any metric that is zero/empty for every row, then apply explicit hidden list.
@@ -1575,6 +1577,11 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const BREAKDOWN_HINT = `(*Total excludes Proxmox / VMware ESXi hosts, Not Applicable and Alive But Powered Off assets. `
     + `Percentage = (Total${pctExclLabels.map(t => ` − ${t}`).join('')}) ÷ Total)`;
 
+  const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
+    + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
+    + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
+    + 'Percentage = Auto ÷ Total)';
+
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
   const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));
 
@@ -1767,11 +1774,11 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8 }}>
           <WTitle tab="weekly" k="location_patching" d="Location wise auto/Manual-patching status:" />
         </Typography.Text>
-        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{BREAKDOWN_HINT}</Typography.Text>
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{LOCATION_HINT}</Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
           <WeeklyBreakdownTable rows={filteredLocRows} groupLabel="Location" isDark={isDark}
             linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`}
-            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} />
+            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} pctNumeratorKey="auto_patching" />
         </Card>
       </div></Wgt>
 
