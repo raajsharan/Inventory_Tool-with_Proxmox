@@ -245,20 +245,21 @@ async function getMigrationSection() {
   };
 }
 
-async function buildAutoSections() {
+async function buildAutoSections({ pivotOverride = null, skipMigration = false } = {}) {
   // dashboardController.summary() runs ~25 queries — fetch it exactly once
   // and share it across the three sections that need it, rather than each
-  // triggering its own independent, redundant call.
-  const dashboardData = await callController(dashboardController.summary);
+  // triggering its own independent, redundant call. pivotOverride builds
+  // them from an unsaved Table Settings draft (preview only).
+  const dashboardData = await callController(dashboardController.summary, pivotOverride ? { pivotConfigOverride: pivotOverride } : {});
   const [assetInventory, patchManagement, nessus, migration] = await Promise.all([
     getAssetInventorySection(dashboardData),
     getPatchManagementSection(dashboardData),
     getNessusSection(dashboardData),
-    getMigrationSection(),
+    skipMigration ? Promise.resolve(null) : getMigrationSection(),
   ]);
   // Screenshot row order: Asset Inventory, Patch Management, Nessus, then
   // Migration further down alongside the manual sections.
-  return { assetInventory, patchManagement, nessus, migration };
+  return skipMigration ? { assetInventory, patchManagement, nessus } : { assetInventory, patchManagement, nessus, migration };
 }
 
 module.exports = {

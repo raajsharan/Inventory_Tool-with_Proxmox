@@ -22,7 +22,11 @@ async function summary(req, res, next) {
       compCfg = COMPLIANCE_DEFAULTS;
     }
     // Admin-editable settings for the Weekly Report tables (Weekly Report -> Table Settings).
-    const pivotCfg = await weeklyPivot.getConfig();
+    // req.pivotConfigOverride (Table Settings "Preview") builds the numbers from an
+    // unsaved draft; it is only ever set by in-process callers, never from a request.
+    const pivotCfg = req?.pivotConfigOverride
+      ? { tables: weeklyPivot.sanitizeAll(req.pivotConfigOverride) }
+      : await weeklyPivot.getConfig();
     const pivotRun = (q) => (q ? db.query(q.text, q.values) : Promise.resolve({ rows: [] }));
     const mslInclStatuses = compCfg.msl?.include_server_statuses || COMPLIANCE_DEFAULTS.msl.include_server_statuses;
     const mslExclEol      = compCfg.msl?.exclude_eol_statuses    || COMPLIANCE_DEFAULTS.msl.exclude_eol_statuses;

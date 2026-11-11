@@ -95,8 +95,21 @@ async function savePivotConfig(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// Builds the three pivot-driven sections from an unsaved draft so an admin can
+// see the result before saving. Read-only: nothing is written.
+async function previewPivotConfig(req, res, next) {
+  try {
+    if (!req.body || typeof req.body.tables !== 'object') {
+      return res.status(400).json({ error: 'tables object is required' });
+    }
+    const auto = await require('../services/weeklyReportAutoService')
+      .buildAutoSections({ pivotOverride: req.body.tables, skipMigration: true });
+    res.json({ sections: auto });
+  } catch (e) { next(e); }
+}
+
 module.exports = {
-  getPivotConfig, savePivotConfig,
+  getPivotConfig, savePivotConfig, previewPivotConfig,
   getCurrent, listSnapshots, getSnapshot, generateNow, deleteSnapshot,
   listManualSections, updateManualSection, createManualSection, deleteManualSection,
   getSchedule, saveSchedule,

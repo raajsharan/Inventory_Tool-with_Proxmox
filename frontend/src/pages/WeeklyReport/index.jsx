@@ -64,9 +64,10 @@ function sanitizeSectionHtml(html) {
   return DOMPurify.sanitize(plainTextToHtml(html), SANITIZE_OPTS);
 }
 
-function AssetInventorySection({ data }) {
+function AssetInventorySection({ data, onlyLocations = false }) {
   return (
     <>
+      {!onlyLocations && (<>
       <Title level={5} style={{ marginTop: 0 }}>MSL Overall Active Count Status</Title>
       <Paragraph>
         Overall Asset Inventory: <strong>{pctText(data.combinedNumerator, data.combinedDenominator, data.combinedPct)}</strong>
@@ -80,6 +81,7 @@ function AssetInventorySection({ data }) {
         <li><strong>{(data.noHostedIp ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
         <li><strong>{(data.nameConflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
       </ul>
+      </>)}
       <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>{data.locationTable?.title || 'Location-wise endpoint count:'}</Text>
       <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
@@ -208,29 +210,37 @@ function BreakdownTable({ breakdown, groupLabel }) {
   );
 }
 
-function PatchManagementSection({ data }) {
+function PatchManagementSection({ data, only = null }) {
+  const show = (k) => !only || only === k;
   const tc = data.tableConfig || {};
   const meHidden = tc.me?.hiddenColumns || [];
   const meLab = tc.me?.labels || {};
   return (
     <>
+      {!only && (
       <Space size={24} wrap style={{ marginBottom: 16 }}>
         <Statistic title="Managed computers" value={data.managedComputers} />
         <Statistic title="Waiting computers" value={data.waitingComputers} valueStyle={{ color: '#fa8c16' }} />
       </Space>
+      )}
 
+      {show('location') && (<>
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.location?.title || 'Location-wise Auto/Manual patching status:'}</Text>
       {tc.location?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.location.hint}</Text>}
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.locationPatching} groupLabel={tc.location?.groupLabel || 'Location'} />
       </Card>
+      </>)}
 
+      {show('department') && (<>
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.department?.title || 'Departments Patching Onboarding Status:'}</Text>
       {tc.department?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.department.hint}</Text>}
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.departmentPatching} groupLabel={tc.department?.groupLabel || 'Department'} />
       </Card>
+      </>)}
 
+      {show('me') && (<>
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.me?.title || 'Auto Patching Group Count Status'}:</Text>
       <Paragraph>
         <strong>ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
@@ -252,6 +262,7 @@ function PatchManagementSection({ data }) {
           ].filter(c => !meHidden.includes(c.key))}
         />
       </Card>
+      </>)}
     </>
   );
 }
@@ -784,6 +795,20 @@ function ReportMasthead({ report }) {
   );
 }
 
+// Renders just the table being edited in Table Settings, from sections built
+// with the unsaved draft (see /weekly-report/pivot-preview).
+function renderTablePreview(tableKey, sections) {
+  const patch = sections?.patchManagement?.data;
+  switch (tableKey) {
+    case 'location_patching':   return patch && <PatchManagementSection data={patch} only="location" />;
+    case 'department_patching': return patch && <PatchManagementSection data={patch} only="department" />;
+    case 'me_compliance':       return patch && <PatchManagementSection data={patch} only="me" />;
+    case 'location_count':      return sections?.assetInventory && <AssetInventorySection data={sections.assetInventory.data} onlyLocations />;
+    case 'nessus':              return sections?.nessus && <NessusSection data={sections.nessus.data} />;
+    default:                    return null;
+  }
+}
+
 export default function WeeklyReport() {
   const { user } = useAuth();
   const { message } = App.useApp();
@@ -871,7 +896,7 @@ export default function WeeklyReport() {
           ...(isAdmin ? [{
             key: 'table-settings',
             label: <span><SettingOutlined /> Table Settings</span>,
-            children: <PivotSettingsPanel />,
+            children: <PivotSettingsPanel renderPreview={renderTablePreview} />,
           }] : []),
           ...(isAdmin ? [{
             key: 'webhook',

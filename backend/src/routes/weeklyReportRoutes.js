@@ -19,6 +19,7 @@ router.delete('/snapshots/:id',   ...configGuard, ctrl.deleteSnapshot);
 // they use the report's page key rather than the separate admin-page one.
 router.get('/pivot-config', ...adminGuard, ctrl.getPivotConfig);
 router.put('/pivot-config', ...adminGuard, ctrl.savePivotConfig);
+router.post('/pivot-preview', ...adminGuard, ctrl.previewPivotConfig);
 
 router.get('/schedule', ...configGuard, ctrl.getSchedule);
 router.put('/schedule', ...configGuard, ctrl.saveSchedule);
