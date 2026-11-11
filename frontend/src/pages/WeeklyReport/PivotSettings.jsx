@@ -330,7 +330,7 @@ function PivotOptions({ meta, value, onChange, disabled }) {
 }
 
 // ── The tab ────────────────────────────────────────────────────────────────
-export default function TableSettingsPanel({ renderPreview }) {
+export default function TableSettingsPanel({ renderPreview, onSaved }) {
   const { message } = App.useApp();
   const { user } = useAuth();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
@@ -409,6 +409,7 @@ export default function TableSettingsPanel({ renderPreview }) {
     try {
       const { data } = await api.put('/weekly-report/table-config', { tables, options });
       apply(data);
+      onSaved?.();
       message.success('Saved — the Report tab, Pivot and exports use these settings');
     } catch (e) {
       message.error(e.response?.data?.error || 'Failed to save table settings');

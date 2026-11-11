@@ -912,7 +912,7 @@ export default function WeeklyReport() {
           {
             key: 'table-settings',
             label: <span><SettingOutlined /> Table Settings</span>,
-            children: <PivotSettingsPanel renderPreview={renderTablePreview} />,
+            children: <PivotSettingsPanel renderPreview={renderTablePreview} onSaved={() => { setSelectedId('current'); loadReport('current'); }} />,
           },
           ...(isAdmin ? [{
             key: 'webhook',
