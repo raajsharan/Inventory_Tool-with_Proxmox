@@ -1051,13 +1051,18 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS weekly_report_pivot_options (
       id             INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       allow_pivot    BOOLEAN NOT NULL DEFAULT TRUE,
-      row_fields     TEXT[] NOT NULL DEFAULT '{department,server_status,os_type,location}',
+      row_fields     TEXT[] NOT NULL DEFAULT '{department,server_status,os_type,location,patching_type,eol_status,asset_type,source}',
       value_options  TEXT[] NOT NULL DEFAULT '{count,pct,rowpct}',
       default_rows   TEXT NOT NULL DEFAULT 'department',
       default_cols   TEXT NOT NULL DEFAULT 'server_status',
       updated_by     UUID REFERENCES users(id) ON DELETE SET NULL,
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+  // Widen the pivot field list for installs still on the original default
+  // (updated_by IS NULL = no admin has saved their own choice).
+  `UPDATE weekly_report_pivot_options
+      SET row_fields = '{department,server_status,os_type,location,patching_type,eol_status,asset_type,source}'
+    WHERE row_fields = '{department,server_status,os_type,location}' AND updated_by IS NULL`,
   `CREATE TABLE IF NOT EXISTS weekly_report_views (
       id          SERIAL PRIMARY KEY,
       user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

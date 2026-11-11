@@ -55,7 +55,7 @@ const LIMITS = { tables: 20, columns: 30, minWidth: 60, maxWidth: 600, label: 60
 
 const DEFAULT_OPTIONS = {
   allow_pivot: true,
-  row_fields: ['department', 'server_status', 'os_type', 'location'],
+  row_fields: ['department', 'server_status', 'os_type', 'location', 'patching_type', 'eol_status', 'asset_type', 'source'],
   value_options: ['count', 'pct', 'rowpct'],
   default_rows: 'department',
   default_cols: 'server_status',
