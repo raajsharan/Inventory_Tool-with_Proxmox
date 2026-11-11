@@ -213,7 +213,9 @@ async function run({ source, sourceKeys, columns = [], filters = [], limit = 500
     const whereSql = buildAssetWhere(effectiveFilters, params, tableFields);
     // Baseline exclusion of soft-deleted/decommissioned rows, consistent with
     // every other read path over these tables (see assetService.list(), etc.).
-    const liveWhere = 'deleted_at IS NULL AND decommissioned_at IS NULL';
+    // Also drops rows whose status text is "Decommissioned" even when the
+    // decommissioned_at flag was never set, so they never reach a report/export.
+    const liveWhere = "deleted_at IS NULL AND decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'";
     const combinedWhere = whereSql
       ? whereSql.replace(/^WHERE /, `WHERE ${liveWhere} AND `)
       : `WHERE ${liveWhere}`;
