@@ -915,6 +915,8 @@ async function summary(req, res, next) {
       },
 
       weeklyPivotConfig: pivotCfg.tables,
+      // enabled flag + order per table (Weekly Report -> Table Settings)
+      weeklyPivotLayout: pivotCfg.layout || {},
 
       mslCompliance: {
         mslNumerator:   mslRow.rows[0].msl_numerator,

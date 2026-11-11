@@ -1034,6 +1034,39 @@ const STATEMENTS = [
    )`,
   `INSERT INTO weekly_pivot_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
 
+  // Weekly Report table configuration (WEEKLY_REPORT_CONFIG.md): per-table
+  // order/enabled/columns, end-user pivot options, per-user saved views.
+  // Built-in tables are seeded from weekly_pivot_config on first read
+  // (weeklyReportTablesService.seedIfEmpty).
+  `CREATE TABLE IF NOT EXISTS weekly_report_tables (
+      id          SERIAL PRIMARY KEY,
+      table_key   TEXT UNIQUE NOT NULL,
+      title       TEXT NOT NULL,
+      enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS weekly_report_pivot_options (
+      id             INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      allow_pivot    BOOLEAN NOT NULL DEFAULT TRUE,
+      row_fields     TEXT[] NOT NULL DEFAULT '{department,server_status,os_type,location}',
+      value_options  TEXT[] NOT NULL DEFAULT '{count,pct,rowpct}',
+      default_rows   TEXT NOT NULL DEFAULT 'department',
+      default_cols   TEXT NOT NULL DEFAULT 'server_status',
+      updated_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS weekly_report_views (
+      id          SERIAL PRIMARY KEY,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      view_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, name)
+   )`,
+
   // Custom Topology Builder — manually designed diagrams (free-form nodes +
   // edges, independent of any discovery data). nodes/edges store React
   // Flow's own JSON shape directly.

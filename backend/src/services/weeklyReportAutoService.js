@@ -116,6 +116,7 @@ async function getAssetInventorySection(dashboardData) {
         title: data.weeklyPivotConfig?.location_count?.title || 'Location-wise endpoint count:',
         groupLabel: data.weeklyPivotConfig?.location_count?.group_label || 'Location',
         countLabel: data.weeklyPivotConfig?.location_count?.count_label || 'Count',
+        enabled: data.weeklyPivotLayout?.location_count?.enabled !== false,
       },
     },
   };
@@ -136,6 +137,7 @@ async function getNessusSection(dashboardData) {
         title: data.weeklyPivotConfig?.nessus?.title || 'Nessus Agent Install',
         hiddenColumns: data.weeklyPivotConfig?.nessus?.hidden_columns || [],
         labels: data.weeklyPivotConfig?.nessus?.column_labels || {},
+        enabled: data.weeklyPivotLayout?.nessus?.enabled !== false,
       },
       applicable,
       notApplicable,
@@ -180,6 +182,7 @@ async function getPatchManagementSection(dashboardData) {
 
   const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude, withHidden(locTc));
   const departmentPatching = enrichBreakdownRows(data.weeklyDepartmentPatching, exclDepts, pctExclude, withHidden(deptTc));
+  const layoutOf = (k) => ({ enabled: data.weeklyPivotLayout?.[k]?.enabled !== false, order: data.weeklyPivotLayout?.[k]?.order ?? 0 });
   const groupLabelOf = (tc) => (weeklyPivot.getMeta().group_fields.find(g => g.key === tc.group_by)?.label) || 'Location';
 
   const meMslRows = data.meMslBreakdown || [];
@@ -219,9 +222,9 @@ async function getPatchManagementSection(dashboardData) {
       locationPatching,
       departmentPatching,
       tableConfig: {
-        location:   { title: locTc.title,  hint: locTc.hint,  groupLabel: groupLabelOf(locTc) },
-        department: { title: deptTc.title, hint: deptTc.hint, groupLabel: groupLabelOf(deptTc) },
-        me: { title: meTc.title, hiddenColumns: meTc.hidden_columns || [], labels: meTc.column_labels || {} },
+        location:   { title: locTc.title,  hint: locTc.hint,  groupLabel: groupLabelOf(locTc), ...layoutOf('location_patching') },
+        department: { title: deptTc.title, hint: deptTc.hint, groupLabel: groupLabelOf(deptTc), ...layoutOf('department_patching') },
+        me: { title: meTc.title, hiddenColumns: meTc.hidden_columns || [], labels: meTc.column_labels || {}, ...layoutOf('me_compliance') },
       },
       meCompliance: {
         combinedYes, combinedDen, combinedPct: pct(combinedYes, combinedDen),

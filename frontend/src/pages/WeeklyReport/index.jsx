@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Card, Col, Row, Select, Typography, Empty, Spin, Table, Tag, Space, Statistic, Button, App,
@@ -7,7 +7,7 @@ import {
 import {
   FileTextOutlined, ReloadOutlined, EditOutlined, SaveOutlined, PlusOutlined, DeleteOutlined,
   CheckCircleOutlined, SyncOutlined, ClockCircleOutlined, DatabaseOutlined, ClusterOutlined, StopOutlined,
-  NotificationOutlined, SendOutlined, SettingOutlined,
+  NotificationOutlined, SendOutlined, SettingOutlined, TableOutlined,
 } from '@ant-design/icons';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -16,6 +16,7 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 import PivotSettingsPanel from './PivotSettings.jsx';
+import PivotBuilder from './PivotBuilder.jsx';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -82,6 +83,7 @@ function AssetInventorySection({ data, onlyLocations = false }) {
         <li><strong>{(data.nameConflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
       </ul>
       </>)}
+      {(onlyLocations || data.locationTable?.enabled !== false) && (<>
       <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>{data.locationTable?.title || 'Location-wise endpoint count:'}</Text>
       <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
@@ -105,11 +107,15 @@ function AssetInventorySection({ data, onlyLocations = false }) {
           }}
         />
       </div>
+      </>)}
     </>
   );
 }
 
 function NessusSection({ data }) {
+  if (data.tableConfig?.enabled === false) {
+    return <Text type="secondary">This table is turned off in Table Settings.</Text>;
+  }
   const rows = [
     { key: 'applicable', slNo: 1, description: 'Nessus Applicable', ...data.applicable, count: data.applicable?.total ?? 0 },
     { key: 'not_applicable', slNo: 2, description: 'Nessus Not Applicable', ...data.notApplicable, count: data.notApplicable?.total ?? 0 },
@@ -211,7 +217,10 @@ function BreakdownTable({ breakdown, groupLabel }) {
 }
 
 function PatchManagementSection({ data, only = null }) {
-  const show = (k) => !only || only === k;
+  // Table Settings: disabled tables are skipped and the rest follow the saved order.
+  // A preview (`only`) always shows the table being edited.
+  const show = (k) => (only ? only === k : (data.tableConfig?.[k]?.enabled !== false));
+  const orderOf = (k) => data.tableConfig?.[k]?.order ?? 0;
   const tc = data.tableConfig || {};
   const meHidden = tc.me?.hiddenColumns || [];
   const meLab = tc.me?.labels || {};
@@ -224,23 +233,27 @@ function PatchManagementSection({ data, only = null }) {
       </Space>
       )}
 
-      {show('location') && (<>
+      {[
+        ['location', (
+        <Fragment key="location">
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.location?.title || 'Location-wise Auto/Manual patching status:'}</Text>
       {tc.location?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.location.hint}</Text>}
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.locationPatching} groupLabel={tc.location?.groupLabel || 'Location'} />
       </Card>
-      </>)}
-
-      {show('department') && (<>
+        </Fragment>
+        )],
+        ['department', (
+        <Fragment key="department">
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.department?.title || 'Departments Patching Onboarding Status:'}</Text>
       {tc.department?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.department.hint}</Text>}
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.departmentPatching} groupLabel={tc.department?.groupLabel || 'Department'} />
       </Card>
-      </>)}
-
-      {show('me') && (<>
+        </Fragment>
+        )],
+        ['me', (
+        <Fragment key="me">
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.me?.title || 'Auto Patching Group Count Status'}:</Text>
       <Paragraph>
         <strong>ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
@@ -262,7 +275,9 @@ function PatchManagementSection({ data, only = null }) {
           ].filter(c => !meHidden.includes(c.key))}
         />
       </Card>
-      </>)}
+        </Fragment>
+        )],
+      ].filter(([k]) => show(k)).sort((x, y) => orderOf(x[0]) - orderOf(y[0])).map(([, node]) => node)}
     </>
   );
 }
@@ -893,11 +908,12 @@ export default function WeeklyReport() {
         items={[
           { key: 'report', label: 'Report', children: reportTab },
           { key: 'inputs', label: <span><EditOutlined /> Manage Inputs</span>, children: <ManageInputsPanel /> },
-          ...(isAdmin ? [{
+          { key: 'pivot', label: <span><TableOutlined /> Pivot &amp; Export</span>, children: <PivotBuilder /> },
+          {
             key: 'table-settings',
             label: <span><SettingOutlined /> Table Settings</span>,
             children: <PivotSettingsPanel renderPreview={renderTablePreview} />,
-          }] : []),
+          },
           ...(isAdmin ? [{
             key: 'webhook',
             label: <span><NotificationOutlined /> Teams Notification</span>,

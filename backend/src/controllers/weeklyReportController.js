@@ -2,7 +2,6 @@ const svc = require('../services/weeklyReportService');
 const manualSvc = require('../services/weeklyReportManualService');
 const scheduleSvc = require('../services/weeklyReportScheduleService');
 const scheduler = require('../services/weeklyReportScheduler');
-const pivotSvc = require('../services/weeklyPivotConfigService');
 
 async function getCurrent(req, res, next) {
   try { res.json(await svc.buildCurrentReport()); } catch (e) { next(e); }
@@ -79,37 +78,79 @@ async function deleteManualSection(req, res, next) {
   } catch (e) { next(e); }
 }
 
-async function getPivotConfig(req, res, next) {
+const tablesSvc = require('../services/weeklyReportTablesService');
+const audit = require('../services/auditService');
+
+// ── Table Settings (WEEKLY_REPORT_CONFIG.md) ──────────────────────────────
+// Readable by anyone who can open the report; only admins can save.
+async function getTableConfig(req, res, next) {
+  try { res.json(await tablesSvc.getAll()); } catch (e) { next(e); }
+}
+
+async function saveTableConfig(req, res, next) {
   try {
-    const [cfg, meta] = [await pivotSvc.getConfig(), pivotSvc.getMeta()];
-    res.json({ config: cfg, meta });
+    const out = await tablesSvc.saveAll(req.body || {}, req.user?.id);
+    await audit.log({ user: req.user, action: 'UPDATE', entityType: 'weekly_report_tables',
+      entityId: 'config', details: { tables: (req.body?.tables || []).map(t => t.table_key) }, ipAddress: req.ip });
+    res.json(out);
   } catch (e) { next(e); }
 }
 
-async function savePivotConfig(req, res, next) {
-  try {
-    if (!req.body || typeof req.body !== 'object' || typeof req.body.tables !== 'object') {
-      return res.status(400).json({ error: 'tables object is required' });
-    }
-    res.json({ config: await pivotSvc.saveConfig(req.body, req.user?.id) });
-  } catch (e) { next(e); }
-}
-
-// Builds the three pivot-driven sections from an unsaved draft so an admin can
-// see the result before saving. Read-only: nothing is written.
+// Builds the report sections from an unsaved draft so an admin can see the
+// result before saving. Read-only: nothing is written.
 async function previewPivotConfig(req, res, next) {
   try {
-    if (!req.body || typeof req.body.tables !== 'object') {
-      return res.status(400).json({ error: 'tables object is required' });
-    }
+    const draft = req.body?.tables;
+    if (!Array.isArray(draft)) return res.status(400).json({ error: 'tables array is required' });
+    const rules = {};
+    for (const t of draft) if (t?.config?.rules) rules[t.table_key] = t.config.rules;
     const auto = await require('../services/weeklyReportAutoService')
-      .buildAutoSections({ pivotOverride: req.body.tables, skipMigration: true });
-    res.json({ sections: auto });
+      .buildAutoSections({ pivotOverride: rules, skipMigration: true });
+    res.json({ sections: auto, detail: await tablesSvc.previewDetail(draft) });
+  } catch (e) { next(e); }
+}
+
+async function getDetailTables(req, res, next) {
+  try { res.json({ tables: await tablesSvc.getDetailTables() }); } catch (e) { next(e); }
+}
+
+async function getPivotData(req, res, next) {
+  try { res.json(await tablesSvc.getPivotData(req.query.includeDecom === 'true')); } catch (e) { next(e); }
+}
+
+async function exportReport(req, res, next) {
+  try {
+    const q = req.query;
+    const pivot = q.rows ? { rows: q.rows, cols: q.cols || '', value: q.value, includeDecom: q.includeDecom === 'true' } : null;
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (q.format === 'xlsx') {
+      const buf = await tablesSvc.exportXlsx({ pivot });
+      res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="weekly-report-${stamp}.xlsx"` });
+      return res.send(Buffer.from(buf));
+    }
+    res.set({ 'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="weekly-report-${stamp}.csv"` });
+    res.send('\uFEFF' + await tablesSvc.exportCsv({ pivot }));
+  } catch (e) { next(e); }
+}
+
+async function listViews(req, res, next) {
+  try { res.json(await tablesSvc.listViews(req.user.id)); } catch (e) { next(e); }
+}
+async function saveView(req, res, next) {
+  try { res.status(201).json(await tablesSvc.saveView(req.user.id, req.body?.name, req.body?.view_config)); } catch (e) { next(e); }
+}
+async function deleteView(req, res, next) {
+  try {
+    if (!(await tablesSvc.deleteView(req.user.id, req.params.id))) return res.status(404).json({ error: 'View not found' });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 }
 
 module.exports = {
-  getPivotConfig, savePivotConfig, previewPivotConfig,
+  getTableConfig, saveTableConfig, previewPivotConfig, getDetailTables, getPivotData,
+  exportReport, listViews, saveView, deleteView,
   getCurrent, listSnapshots, getSnapshot, generateNow, deleteSnapshot,
   listManualSections, updateManualSection, createManualSection, deleteManualSection,
   getSchedule, saveSchedule,

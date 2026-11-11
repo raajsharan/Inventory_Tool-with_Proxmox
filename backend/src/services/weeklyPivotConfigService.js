@@ -311,11 +311,18 @@ function mergeWithDefaults(stored) {
 }
 
 async function getConfig() {
+  // Settings now live in weekly_report_tables (weeklyReportTablesService);
+  // `layout` carries each table's enabled flag / order for the Report tab.
   try {
-    const { rows } = await db.query('SELECT config FROM weekly_pivot_config WHERE id = 1');
-    return { tables: mergeWithDefaults(rows[0]?.config?.tables) };
+    const eng = await require('./weeklyReportTablesService').getEngineConfig();
+    return { tables: mergeWithDefaults(eng.tables), layout: eng.layout };
   } catch {
-    return { tables: mergeWithDefaults(null) };   // table not created yet → defaults
+    try {
+      const { rows } = await db.query('SELECT config FROM weekly_pivot_config WHERE id = 1');
+      return { tables: mergeWithDefaults(rows[0]?.config?.tables), layout: {} };
+    } catch {
+      return { tables: mergeWithDefaults(null), layout: {} };   // nothing created yet → defaults
+    }
   }
 }
 

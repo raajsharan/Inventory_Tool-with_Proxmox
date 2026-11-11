@@ -15,11 +15,17 @@ router.get('/snapshots/:id',      ...viewGuard,  ctrl.getSnapshot);
 router.post('/generate-now',      ...adminGuard, ctrl.generateNow);
 router.delete('/snapshots/:id',   ...configGuard, ctrl.deleteSnapshot);
 
-// Table / pivot settings live in the Weekly Report page's own admin tab, so
-// they use the report's page key rather than the separate admin-page one.
-router.get('/pivot-config', ...adminGuard, ctrl.getPivotConfig);
-router.put('/pivot-config', ...adminGuard, ctrl.savePivotConfig);
+// Table Settings (WEEKLY_REPORT_CONFIG.md). Everyone who can open the report
+// can read the settings and use the pivot/export; only admins can change them.
+router.get('/table-config',  ...viewGuard,  ctrl.getTableConfig);
+router.put('/table-config',  ...adminGuard, ctrl.saveTableConfig);
 router.post('/pivot-preview', ...adminGuard, ctrl.previewPivotConfig);
+router.get('/detail-tables', ...viewGuard,  ctrl.getDetailTables);
+router.get('/pivot-data',    ...viewGuard,  ctrl.getPivotData);
+router.get('/export',        ...viewGuard,  ctrl.exportReport);
+router.get('/views',         ...viewGuard,  ctrl.listViews);
+router.post('/views',        ...viewGuard,  ctrl.saveView);
+router.delete('/views/:id',  ...viewGuard,  ctrl.deleteView);
 
 router.get('/schedule', ...configGuard, ctrl.getSchedule);
 router.put('/schedule', ...configGuard, ctrl.saveSchedule);
