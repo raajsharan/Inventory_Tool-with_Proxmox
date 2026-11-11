@@ -1058,11 +1058,16 @@ const STATEMENTS = [
       updated_by     UUID REFERENCES users(id) ON DELETE SET NULL,
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
-  // Widen the pivot field list for installs still on the original default
-  // (updated_by IS NULL = no admin has saved their own choice).
+  // One-time: widen the pivot field list for installs still on the original
+  // four fields, including ones where an admin has pressed Save since (that
+  // save just stored the old default). migrated_v2 makes this run only once.
+  `ALTER TABLE weekly_report_pivot_options ADD COLUMN IF NOT EXISTS migrated_v2 BOOLEAN NOT NULL DEFAULT FALSE`,
   `UPDATE weekly_report_pivot_options
-      SET row_fields = '{department,server_status,os_type,location,patching_type,eol_status,asset_type,source}'
-    WHERE row_fields = '{department,server_status,os_type,location}' AND updated_by IS NULL`,
+      SET row_fields = CASE WHEN row_fields = '{department,server_status,os_type,location}'
+                            THEN '{department,server_status,os_type,location,patching_type,eol_status,asset_type,source}'::text[]
+                            ELSE row_fields END,
+          migrated_v2 = TRUE
+    WHERE migrated_v2 = FALSE`,
   `CREATE TABLE IF NOT EXISTS weekly_report_views (
       id          SERIAL PRIMARY KEY,
       user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
