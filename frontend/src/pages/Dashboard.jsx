@@ -1326,7 +1326,7 @@ const BREAKDOWN_METRICS = [
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
 
-function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'], pctFormula = null }) {
+function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns = [], pctExclude = ['alive_powered_off', 'eol'], pctFormula = null, columnLabels = {} }) {
   // Single accent colour + dimmed dash — same scheme as the Auto Patching
   // Group Count table (MEComplianceTable) for visual consistency across
   // Weekly Report breakdown tables.
@@ -1377,7 +1377,7 @@ function WeeklyBreakdownTable({ rows, groupLabel, linkFor, isDark, hiddenColumns
           : <strong>{v}</strong>;
       } },
     ...activeMetrics.map(m => ({
-      title: m.title, dataIndex: m.key, align: 'center', width: numColW, render: numCell,
+      title: columnLabels[m.key] || m.title, dataIndex: m.key, align: 'center', width: numColW, render: numCell,
     })),
     { title: 'Total',      dataIndex: 'total', align: 'center', width: numColW,
       render: v => <strong>{Number(v ?? 0).toLocaleString()}</strong> },
@@ -1580,22 +1580,41 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   const REPORT_TITLE   = compCfg.weekly?.report_title    || 'Weekly Infrastructure Report';
   const REPORT_SUB     = compCfg.weekly?.report_subtitle || 'Patch & Agent Compliance';
 
-  const pctExclLabels = BREAKDOWN_METRICS.filter(m => PCT_EXCL.includes(m.key)).map(m => m.title);
-  const BREAKDOWN_HINT = `(*Total excludes Proxmox / VMware ESXi hosts, Not Applicable and Alive But Powered Off assets. `
-    + `Percentage = (Total${pctExclLabels.map(t => ` − ${t}`).join('')}) ÷ Total)`;
-
-  const LOCATION_PCT_FORMULA = {
-    num: ['auto_patching', 'manual_patching'],
-    den: ['auto_patching', 'manual_patching', 'onboard_pending', 'on_hold'],
+  // Per-table settings from Weekly Report -> Table Settings. A table without
+  // its own value inherits the Compliance Config one (hidden columns, excluded
+  // groups, percentage exclusions), so nothing changes until an admin edits it.
+  const PIVOT_GROUP_LABELS = { location: 'Location', department: 'Department', os_type: 'OS Type', asset_type: 'Asset Type',
+    server_status: 'Server Status', patching_type: 'Patching Type', eol_status: 'EOL Status' };
+  const metricTitle = (tc, k) => (tc.column_labels?.[k]) || BREAKDOWN_METRICS.find(m => m.key === k)?.title || k;
+  const describeTable = (tc, ruleHint) => {
+    const f = tc.pct?.mode === 'formula' && tc.pct.num?.length && tc.pct.den?.length ? tc.pct : null;
+    const pctText = f
+      ? `Percentage = (${f.num.map(k => metricTitle(tc, k)).join(' + ')}) ÷ (${f.den.map(k => metricTitle(tc, k)).join(' + ')})`
+      : `Percentage = (Total${(tc.pct?.exclude ?? PCT_EXCL).map(k => ` − ${metricTitle(tc, k)}`).join('')}) ÷ Total`;
+    return tc.hint || `${ruleHint}${pctText})`;
   };
-  const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
-    + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
-    + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
-    + 'EOL / Exception / Onboard Pending / On Hold show assets left out by these rules; Total = sum of all columns. '
-    + 'Percentage = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending + On Hold))';
+  const pivotTables = data.weeklyPivotConfig || {};
+  const locTc  = pivotTables.location_patching   || { title: 'Location wise auto/Manual-patching status:', group_by: 'location', mode: 'legacy', pct: { mode: 'exclude' } };
+  const deptTc = pivotTables.department_patching || { title: 'Departments Patching Onboarding Status:', group_by: 'department', mode: 'legacy', pct: { mode: 'exclude' } };
+  const tableProps = (tc) => ({
+    hiddenColumns: tc.hidden_columns ?? HIDDEN_COLS,
+    pctExclude: tc.pct?.mode === 'exclude' && tc.pct.exclude ? tc.pct.exclude : PCT_EXCL,
+    pctFormula: tc.pct?.mode === 'formula' && tc.pct.num?.length && tc.pct.den?.length ? tc.pct : null,
+    columnLabels: tc.column_labels || {},
+    groupLabel: PIVOT_GROUP_LABELS[tc.group_by] || 'Location',
+  });
+  const FILTERED_RULES = '(*Counts only assets passing the row filters set in Table Settings. '
+    + 'EOL / Exception / Onboard Pending / On Hold show assets left out by those rules; Total = sum of all columns. ';
+  const LEGACY_RULES = '(*Total excludes Proxmox / VMware ESXi hosts, Not Applicable and Alive But Powered Off assets. ';
+  const LOCATION_HINT = describeTable(locTc, locTc.mode === 'filtered' ? FILTERED_RULES : LEGACY_RULES);
+  const DEPT_HINT     = describeTable(deptTc, deptTc.mode === 'filtered' ? FILTERED_RULES : LEGACY_RULES);
+  const EXCL_LOCS_EFF  = locTc.excluded_groups  ?? EXCL_LOCS;
+  const EXCL_DEPTS_EFF = deptTc.excluded_groups ?? EXCL_DEPTS;
+  const groupLink = (tc) => (tc.group_by === 'location' ? (v) => `/assets?loc=${encodeURIComponent(v)}`
+    : tc.group_by === 'department' ? (v) => `/assets?q=${encodeURIComponent(v)}` : undefined);
 
-  const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
-  const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));
+  const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS_EFF.includes(r.bucket));
+  const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS_EFF.includes(r.bucket));
 
   const meMslIncl = meMslRows.filter((r) => !MSL_EXCL.includes(r.bucket));
   const meExtIncl = meExtRows.filter((r) => !EXT_EXCL.includes(r.bucket));
@@ -1784,25 +1803,23 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 
       <Wgt tab="weekly" k="location_patching"><div style={{ marginTop: 24 }}>
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8 }}>
-          <WTitle tab="weekly" k="location_patching" d="Location wise auto/Manual-patching status:" />
+          <WTitle tab="weekly" k="location_patching" d={locTc.title} />
         </Typography.Text>
         <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{LOCATION_HINT}</Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
-          <WeeklyBreakdownTable rows={filteredLocRows} groupLabel="Location" isDark={isDark}
-            linkFor={(loc) => `/assets?loc=${encodeURIComponent(loc)}`}
-            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} pctFormula={LOCATION_PCT_FORMULA} />
+          <WeeklyBreakdownTable rows={filteredLocRows} isDark={isDark}
+            linkFor={groupLink(locTc)} {...tableProps(locTc)} />
         </Card>
       </div></Wgt>
 
       <Wgt tab="weekly" k="department_patching"><div style={{ marginTop: 24 }}>
         <Typography.Text underline strong style={{ display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          <WTitle tab="weekly" k="department_patching" d="Departments Patching Onboarding Status:" />
+          <WTitle tab="weekly" k="department_patching" d={deptTc.title} />
         </Typography.Text>
-        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{BREAKDOWN_HINT}</Typography.Text>
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>{DEPT_HINT}</Typography.Text>
         <Card bodyStyle={{ padding: 0 }} className="weekly-breakdown-card">
-          <WeeklyBreakdownTable rows={filteredDeptRows} groupLabel="Department" isDark={isDark}
-            linkFor={(dept) => `/assets?q=${encodeURIComponent(dept)}`}
-            hiddenColumns={HIDDEN_COLS} pctExclude={PCT_EXCL} />
+          <WeeklyBreakdownTable rows={filteredDeptRows} isDark={isDark}
+            linkFor={groupLink(deptTc)} {...tableProps(deptTc)} />
         </Card>
       </div></Wgt>
 

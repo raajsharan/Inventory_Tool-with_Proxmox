@@ -15,6 +15,11 @@ router.get('/snapshots/:id',      ...viewGuard,  ctrl.getSnapshot);
 router.post('/generate-now',      ...adminGuard, ctrl.generateNow);
 router.delete('/snapshots/:id',   ...configGuard, ctrl.deleteSnapshot);
 
+// Table / pivot settings live in the Weekly Report page's own admin tab, so
+// they use the report's page key rather than the separate admin-page one.
+router.get('/pivot-config', ...adminGuard, ctrl.getPivotConfig);
+router.put('/pivot-config', ...adminGuard, ctrl.savePivotConfig);
+
 router.get('/schedule', ...configGuard, ctrl.getSchedule);
 router.put('/schedule', ...configGuard, ctrl.saveSchedule);
 

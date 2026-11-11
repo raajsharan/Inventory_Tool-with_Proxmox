@@ -2,6 +2,7 @@ const svc = require('../services/weeklyReportService');
 const manualSvc = require('../services/weeklyReportManualService');
 const scheduleSvc = require('../services/weeklyReportScheduleService');
 const scheduler = require('../services/weeklyReportScheduler');
+const pivotSvc = require('../services/weeklyPivotConfigService');
 
 async function getCurrent(req, res, next) {
   try { res.json(await svc.buildCurrentReport()); } catch (e) { next(e); }
@@ -78,7 +79,24 @@ async function deleteManualSection(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function getPivotConfig(req, res, next) {
+  try {
+    const [cfg, meta] = [await pivotSvc.getConfig(), pivotSvc.getMeta()];
+    res.json({ config: cfg, meta });
+  } catch (e) { next(e); }
+}
+
+async function savePivotConfig(req, res, next) {
+  try {
+    if (!req.body || typeof req.body !== 'object' || typeof req.body.tables !== 'object') {
+      return res.status(400).json({ error: 'tables object is required' });
+    }
+    res.json({ config: await pivotSvc.saveConfig(req.body, req.user?.id) });
+  } catch (e) { next(e); }
+}
+
 module.exports = {
+  getPivotConfig, savePivotConfig,
   getCurrent, listSnapshots, getSnapshot, generateNow, deleteSnapshot,
   listManualSections, updateManualSection, createManualSection, deleteManualSection,
   getSchedule, saveSchedule,

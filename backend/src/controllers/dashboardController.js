@@ -4,6 +4,7 @@ const vmwareDb  = require('../services/vmwareDbService');
 const proxmoxDb = require('../services/proxmoxDbService');
 const hypervDb  = require('../services/hypervDbService');
 const auditService = require('../services/auditService');
+const weeklyPivot = require('../services/weeklyPivotConfigService');
 
 // Fields allowed in name-conflict cross-table JOINs (whitelist, never interpolate user input).
 const VALID_CONFLICT_FIELDS = new Set(['vm_name', 'os_hostname', 'asset_name', 'ip_address', 'mac_address']);
@@ -20,6 +21,9 @@ async function summary(req, res, next) {
     } catch (_) {
       compCfg = COMPLIANCE_DEFAULTS;
     }
+    // Admin-editable settings for the Weekly Report tables (Weekly Report -> Table Settings).
+    const pivotCfg = await weeklyPivot.getConfig();
+    const pivotRun = (q) => (q ? db.query(q.text, q.values) : Promise.resolve({ rows: [] }));
     const mslInclStatuses = compCfg.msl?.include_server_statuses || COMPLIANCE_DEFAULTS.msl.include_server_statuses;
     const mslExclEol      = compCfg.msl?.exclude_eol_statuses    || COMPLIANCE_DEFAULTS.msl.exclude_eol_statuses;
     const conflictFlds    = (compCfg.ext?.name_conflict_fields    || COMPLIANCE_DEFAULTS.ext.name_conflict_fields)
@@ -270,7 +274,8 @@ async function summary(req, res, next) {
     // beijingRaw.total). Rows with no location value are bucketed under
     // "Unassigned" rather than dropped, so nothing silently vanishes from
     // the total.
-    const assetExtLocationCountQ = db.query(`
+    const lcTc = pivotCfg.tables.location_count;
+    const assetExtLocationCountQ = lcTc.mode === 'filtered' ? pivotRun(weeklyPivot.buildCountPivot(lcTc)) : db.query(`
       WITH inv AS (
         SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
         UNION ALL SELECT location, server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
@@ -545,25 +550,13 @@ async function summary(req, res, next) {
       classified AS (
         SELECT source, COALESCE(tenable_installed, false) AS tenable_installed,
           server_status,
-          (os_type ILIKE '%windows%') AS is_windows,
+          (os_type ILIKE ANY($1::text[])) AS is_windows,
+          (os_type ILIKE ANY($2::text[])) AS is_linux,
+          -- excluded even when combined with a Linux-sounding os_type; the
+          -- normalized form also catches "EVE-NG" / "EVE NG" style spellings
           (
-            os_type ILIKE '%linux%'        OR os_type ILIKE '%ubuntu%'
-            OR os_type ILIKE '%centos%'    OR os_type ILIKE '%rhel%'
-            OR os_type ILIKE '%red hat%'   OR os_type ILIKE '%redhat%'
-            OR os_type ILIKE '%debian%'    OR os_type ILIKE '%suse%'
-            OR os_type ILIKE '%fedora%'    OR os_type ILIKE '%rocky%'
-            OR os_type ILIKE '%alma%'      OR os_type ILIKE '%oracle linux%'
-            OR os_type ILIKE '%amazon linux%'
-          ) AS is_linux,
-          -- excluded even when combined with a Linux-sounding os_type
-          (
-            os_type ILIKE '%centos%'
-            OR os_type ILIKE '%proxmox%'
-            OR os_type ILIKE '%vcenter%'  OR os_type ILIKE '%vmware%' OR os_type ILIKE '%esxi%'
-            OR os_type ILIKE '%appliance%'
-            OR os_type ILIKE '%cisco%'
-            OR os_type ILIKE '%mac%'
-            OR REPLACE(REPLACE(os_type, '-', ''), ' ', '') ILIKE '%eveng%'
+            os_type ILIKE ANY($3::text[])
+            OR REPLACE(REPLACE(os_type, '-', ''), ' ', '') ILIKE ANY($3::text[])
           ) AS is_not_applicable_override
         FROM pop
       )
@@ -587,7 +580,11 @@ async function summary(req, res, next) {
         COUNT(*) FILTER (WHERE server_status ILIKE '%power%off%')::int AS alive_powered_off
       FROM classified
       GROUP BY 1, 2
-    `);
+    `, [
+      weeklyPivot.likeContains(pivotCfg.tables.nessus.os_windows),
+      weeklyPivot.likeContains(pivotCfg.tables.nessus.os_linux),
+      weeklyPivot.likeContains(pivotCfg.tables.nessus.os_not_applicable),
+    ]);
 
     // ---------------------------------------------------------------
     // Weekly Report extras: location-wise + department-wise patching
@@ -644,84 +641,18 @@ async function summary(req, res, next) {
       GROUP BY 1
       ORDER BY total DESC, 1
     `;
-    // Location-wise table uses stricter per-inventory rules (Alive only, OS and
-    // patching-type exclusions). Physical & ESXi hosts are not in scope here.
-    // Auto / Manual count rows that pass every rule (in_total). EOL / Exception /
-    // Onboard Pending / On Hold count assets that pass the OS / location / not-Not-Applicable
-    // rules but carry that flag (any status). Total is the sum of those five
-    // columns, so the row always adds up; Alive assets with a blank/other
-    // patching type have no column and are not counted.
-    const weeklyLocationPatchingQ = db.query(`
-      WITH base AS (
-        -- Beijing: Alive, Windows or Linux, patching type not Not Applicable
-        SELECT location, patching_type, eol_status, server_status,
-               (os_type ILIKE '%windows%' OR os_type ILIKE '%linux%') AS os_ok,
-               (COALESCE(patching_type,'') ILIKE 'Not Applicable%' OR COALESCE(patching_type,'') IN ('NA','N/A')) AS na,
-               FALSE AS rule_excl
-          FROM beijing_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL
-        -- Assets: not Appliance/Cisco IOS/MacOS/Storage/ESXi/Proxmox; not
-        -- Not Applicable / EOL / Powered Off / Exception
-        SELECT location, patching_type, eol_status, server_status,
-               (COALESCE(os_type,'') NOT ILIKE '%appliance%' AND COALESCE(os_type,'') NOT ILIKE '%cisco%'
-                AND COALESCE(os_type,'') NOT ILIKE '%mac%'   AND COALESCE(os_type,'') NOT ILIKE '%storage%'
-                AND COALESCE(os_type,'') NOT ILIKE '%esxi%'  AND COALESCE(os_type,'') NOT ILIKE '%proxmox%') AS os_ok,
-               (COALESCE(patching_type,'') ILIKE 'Not Applicable%' OR COALESCE(patching_type,'') IN ('NA','N/A')) AS na,
-               (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(patching_type,'') ILIKE '%power%off%'
-                OR COALESCE(patching_type,'') ILIKE 'Exception%' OR COALESCE(eol_status,'') = 'EOL') AS rule_excl
-          FROM assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL
-        -- Extended: not ESXi/Appliances, not Beijing location; not EOL /
-        -- Exception / Not Applicable
-        SELECT location, patching_type, eol_status, server_status,
-               (COALESCE(os_type,'') NOT ILIKE '%esxi%' AND COALESCE(os_type,'') NOT ILIKE '%appliance%'
-                AND COALESCE(location,'') NOT ILIKE '%beijing%') AS os_ok,
-               (COALESCE(patching_type,'') ILIKE 'Not Applicable%' OR COALESCE(patching_type,'') IN ('NA','N/A')) AS na,
-               (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(patching_type,'') ILIKE 'Exception%'
-                OR COALESCE(eol_status,'') = 'EOL') AS rule_excl
-          FROM ext_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-      ),
-      flagged AS (
-        SELECT *,
-               (os_ok AND NOT na AND NOT rule_excl
-                AND LOWER(TRIM(COALESCE(server_status,''))) = 'alive') AS in_total,
-               (os_ok AND NOT na AND (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(eol_status,'') = 'EOL')) AS is_eol,
-               (os_ok AND NOT na AND COALESCE(patching_type,'') ILIKE 'Exception%'
-                AND NOT (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(eol_status,'') = 'EOL')) AS is_exc,
-               (os_ok AND NOT na
-                AND (COALESCE(server_status,'') ILIKE 'Onboard%' OR COALESCE(server_status,'') ILIKE 'Pending%'
-                     OR COALESCE(patching_type,'') ILIKE 'Onboard%')
-                AND NOT (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(eol_status,'') = 'EOL')
-                AND NOT COALESCE(patching_type,'') ILIKE 'Exception%'
-                AND NOT COALESCE(server_status,'') ILIKE 'On Hold%') AS is_onb,
-               (os_ok AND NOT na AND COALESCE(server_status,'') ILIKE 'On Hold%'
-                AND NOT (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(eol_status,'') = 'EOL')
-                AND NOT COALESCE(patching_type,'') ILIKE 'Exception%') AS is_hold
-          FROM base
-      )
-      SELECT bucket, auto_patching, manual_patching, eol, exception, onboard_pending,
-             on_hold, alive_powered_off, not_applicable,
-             (auto_patching + manual_patching + eol + exception + onboard_pending + on_hold)::int AS total
-        FROM (
-          SELECT
-            COALESCE(NULLIF(TRIM(location), ''), 'Unassigned')                                   AS bucket,
-            COUNT(*) FILTER (WHERE in_total AND patching_type ILIKE 'Auto%')::int                 AS auto_patching,
-            COUNT(*) FILTER (WHERE in_total AND patching_type ILIKE 'Manual%')::int               AS manual_patching,
-            COUNT(*) FILTER (WHERE is_eol)::int                                                   AS eol,
-            COUNT(*) FILTER (WHERE is_exc)::int                                                   AS exception,
-            COUNT(*) FILTER (WHERE is_onb)::int                                                   AS onboard_pending,
-            COUNT(*) FILTER (WHERE is_hold)::int                                                  AS on_hold,
-            0 AS alive_powered_off, 0 AS not_applicable
-          FROM flagged
-          GROUP BY 1
-        ) t
-       WHERE auto_patching + manual_patching + eol + exception + onboard_pending + on_hold > 0
-       ORDER BY total DESC, bucket
-    `);
-    const weeklyDepartmentPatchingQ = db.query(buildWeeklyBreakdown('department'));
+    // Both patching pivots are driven by Weekly Report -> Table Settings:
+    // 'filtered' mode builds SQL from the per-inventory row filters
+    // (weeklyPivotConfigService.buildPatchingPivot); 'legacy' keeps the
+    // built-in rules above. Defaults reproduce the previous behaviour.
+    const locTc  = pivotCfg.tables.location_patching;
+    const deptTc = pivotCfg.tables.department_patching;
+    const weeklyLocationPatchingQ = locTc.mode === 'filtered'
+      ? pivotRun(weeklyPivot.buildPatchingPivot(locTc))
+      : db.query(buildWeeklyBreakdown(locTc.group_by));
+    const weeklyDepartmentPatchingQ = deptTc.mode === 'filtered'
+      ? pivotRun(weeklyPivot.buildPatchingPivot(deptTc))
+      : db.query(buildWeeklyBreakdown(deptTc.group_by));
 
     // ---------------------------------------------------------------
     // ME Compliance breakdown: patching-type bucket × ME installed
@@ -979,6 +910,8 @@ async function summary(req, res, next) {
         currentCompliancePct: compliancePct,
       },
 
+      weeklyPivotConfig: pivotCfg.tables,
+
       mslCompliance: {
         mslNumerator:   mslRow.rows[0].msl_numerator,
         mslDenominator: mslRow.rows[0].msl_denominator,
@@ -987,7 +920,7 @@ async function summary(req, res, next) {
         combinedNumerator:   mslRow.rows[0].msl_numerator + extComp.rows[0].with_password + beijingRaw.rows[0].with_password,
         combinedDenominator: mslRow.rows[0].msl_denominator + extComp.rows[0].total + beijingRaw.rows[0].total,
         locations: locationCount.rows,
-        assetExtLocations: assetExtLocationCount.rows,
+        assetExtLocations: assetExtLocationCount.rows.filter(r => !lcTc.excluded_groups.includes(r.location)),
       },
 
       extEndpointCompliance: {

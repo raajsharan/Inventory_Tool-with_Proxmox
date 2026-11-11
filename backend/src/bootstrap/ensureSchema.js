@@ -1024,6 +1024,16 @@ const STATEMENTS = [
    )`,
   `INSERT INTO weekly_report_schedule_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
 
+  // Admin-editable pivot/table settings for the Weekly Report's Report tab
+  // (weeklyPivotConfigService.js). Kept apart from compliance_config.
+  `CREATE TABLE IF NOT EXISTS weekly_pivot_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `INSERT INTO weekly_pivot_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+
   // Custom Topology Builder — manually designed diagrams (free-form nodes +
   // edges, independent of any discovery data). nodes/edges store React
   // Flow's own JSON shape directly.

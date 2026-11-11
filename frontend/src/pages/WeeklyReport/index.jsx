@@ -15,6 +15,7 @@ import DOMPurify from 'dompurify';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
+import PivotSettingsPanel from './PivotSettings.jsx';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -79,7 +80,7 @@ function AssetInventorySection({ data }) {
         <li><strong>{(data.noHostedIp ?? 0).toLocaleString()}</strong> active assets are missing hosted/hypervisor details.</li>
         <li><strong>{(data.nameConflicts ?? 0).toLocaleString()}</strong> endpoints currently have name conflicts from OS Hostname.</li>
       </ul>
-      <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>Location-wise endpoint count:</Text>
+      <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>{data.locationTable?.title || 'Location-wise endpoint count:'}</Text>
       <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="location"
@@ -87,8 +88,8 @@ function AssetInventorySection({ data }) {
           dataSource={data.locations || []}
           pagination={false}
           columns={[
-            { title: 'Location', dataIndex: 'location' },
-            { title: 'Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+            { title: data.locationTable?.groupLabel || 'Location', dataIndex: 'location' },
+            { title: data.locationTable?.countLabel || 'Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
           ]}
           summary={(rows) => {
             if (!rows.length) return null;
@@ -131,16 +132,22 @@ function NessusSection({ data }) {
           dataSource={rows}
           pagination={false}
           scroll={{ x: 'max-content' }}
-          columns={[
-            { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
-            { title: 'Description', dataIndex: 'description',
-              render: (v, r) => (r.subset ? <Text type="secondary" italic>{v}</Text> : v) },
-            { title: 'Assets Inventory', dataIndex: 'mslAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
-            { title: 'Ext. Inventory', dataIndex: 'extAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
-            { title: 'Beijing Inventory', dataIndex: 'beijingAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
-            { title: 'Physical & ESXi Inventory', dataIndex: 'physicalEsxi', align: 'right', render: v => (v ?? 0).toLocaleString() },
-            { title: 'Total Count', dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
-          ]}
+          columns={(() => {
+            const hid = data.tableConfig?.hiddenColumns || [];
+            const lab = data.tableConfig?.labels || {};
+            const t = (k, d) => lab[k] || d;
+            const cols = [
+              { title: 'Sl. No', dataIndex: 'slNo', width: 60 },
+              { title: 'Description', dataIndex: 'description',
+                render: (v, r) => (r.subset ? <Text type="secondary" italic>{v}</Text> : v) },
+              { key: 'mslAssets', title: t('mslAssets', 'Assets Inventory'), dataIndex: 'mslAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
+              { key: 'extAssets', title: t('extAssets', 'Ext. Inventory'), dataIndex: 'extAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
+              { key: 'beijingAssets', title: t('beijingAssets', 'Beijing Inventory'), dataIndex: 'beijingAssets', align: 'right', render: v => (v ?? 0).toLocaleString() },
+              { key: 'physicalEsxi', title: t('physicalEsxi', 'Physical & ESXi Inventory'), dataIndex: 'physicalEsxi', align: 'right', render: v => (v ?? 0).toLocaleString() },
+              { key: 'count', title: t('count', 'Total Count'), dataIndex: 'count', align: 'right', render: v => <strong>{(v ?? 0).toLocaleString()}</strong> },
+            ];
+            return cols.filter(c => !hid.includes(c.key));
+          })()}
           summary={(tableRows) => {
             if (!tableRows.length) return null;
             // Subset rows are already counted in the buckets above, so they
@@ -150,11 +157,11 @@ function NessusSection({ data }) {
             return (
               <Table.Summary.Row style={{ fontWeight: 700 }}>
                 <Table.Summary.Cell index={0} colSpan={2}><strong>Total</strong></Table.Summary.Cell>
-                <Table.Summary.Cell index={2} align="right"><strong>{sum('mslAssets').toLocaleString()}</strong></Table.Summary.Cell>
-                <Table.Summary.Cell index={3} align="right"><strong>{sum('extAssets').toLocaleString()}</strong></Table.Summary.Cell>
-                <Table.Summary.Cell index={4} align="right"><strong>{sum('beijingAssets').toLocaleString()}</strong></Table.Summary.Cell>
-                <Table.Summary.Cell index={5} align="right"><strong>{sum('physicalEsxi').toLocaleString()}</strong></Table.Summary.Cell>
-                <Table.Summary.Cell index={6} align="right"><strong>{sum('count').toLocaleString()}</strong></Table.Summary.Cell>
+                {['mslAssets', 'extAssets', 'beijingAssets', 'physicalEsxi', 'count']
+                  .filter(k => !(data.tableConfig?.hiddenColumns || []).includes(k))
+                  .map((k, i) => (
+                    <Table.Summary.Cell key={k} index={i + 2} align="right"><strong>{sum(k).toLocaleString()}</strong></Table.Summary.Cell>
+                  ))}
               </Table.Summary.Row>
             );
           }}
@@ -202,6 +209,9 @@ function BreakdownTable({ breakdown, groupLabel }) {
 }
 
 function PatchManagementSection({ data }) {
+  const tc = data.tableConfig || {};
+  const meHidden = tc.me?.hiddenColumns || [];
+  const meLab = tc.me?.labels || {};
   return (
     <>
       <Space size={24} wrap style={{ marginBottom: 16 }}>
@@ -209,17 +219,19 @@ function PatchManagementSection({ data }) {
         <Statistic title="Waiting computers" value={data.waitingComputers} valueStyle={{ color: '#fa8c16' }} />
       </Space>
 
-      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Location-wise Auto/Manual patching status:</Text>
+      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.location?.title || 'Location-wise Auto/Manual patching status:'}</Text>
+      {tc.location?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.location.hint}</Text>}
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
-        <BreakdownTable breakdown={data.locationPatching} groupLabel="Location" />
+        <BreakdownTable breakdown={data.locationPatching} groupLabel={tc.location?.groupLabel || 'Location'} />
       </Card>
 
-      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Departments Patching Onboarding Status:</Text>
+      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.department?.title || 'Departments Patching Onboarding Status:'}</Text>
+      {tc.department?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.department.hint}</Text>}
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
-        <BreakdownTable breakdown={data.departmentPatching} groupLabel="Department" />
+        <BreakdownTable breakdown={data.departmentPatching} groupLabel={tc.department?.groupLabel || 'Department'} />
       </Card>
 
-      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>Auto Patching Group Count Status:</Text>
+      <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.me?.title || 'Auto Patching Group Count Status'}:</Text>
       <Paragraph>
         <strong>ManageEngine Compliance (MSL + Extended Inventory):</strong>{' '}
         {pctText(data.meCompliance?.combinedYes, data.meCompliance?.combinedDen, data.meCompliance?.combinedPct)}
@@ -233,11 +245,11 @@ function PatchManagementSection({ data }) {
           pagination={false}
           scroll={{ x: 'max-content' }}
           columns={[
-            { title: 'Patching Type', dataIndex: 'bucket' },
-            { title: 'No', dataIndex: 'no_me', align: 'center' },
-            { title: 'Yes', dataIndex: 'yes_me', align: 'center' },
-            { title: 'Total', dataIndex: 'total', align: 'center', render: v => <strong>{v}</strong> },
-          ]}
+            { key: 'bucket', title: meLab.bucket || 'Patching Type', dataIndex: 'bucket' },
+            { key: 'no_me', title: meLab.no_me || 'No', dataIndex: 'no_me', align: 'center' },
+            { key: 'yes_me', title: meLab.yes_me || 'Yes', dataIndex: 'yes_me', align: 'center' },
+            { key: 'total', title: meLab.total || 'Total', dataIndex: 'total', align: 'center', render: v => <strong>{v}</strong> },
+          ].filter(c => !meHidden.includes(c.key))}
         />
       </Card>
     </>
@@ -856,6 +868,11 @@ export default function WeeklyReport() {
         items={[
           { key: 'report', label: 'Report', children: reportTab },
           { key: 'inputs', label: <span><EditOutlined /> Manage Inputs</span>, children: <ManageInputsPanel /> },
+          ...(isAdmin ? [{
+            key: 'table-settings',
+            label: <span><SettingOutlined /> Table Settings</span>,
+            children: <PivotSettingsPanel />,
+          }] : []),
           ...(isAdmin ? [{
             key: 'webhook',
             label: <span><NotificationOutlined /> Teams Notification</span>,

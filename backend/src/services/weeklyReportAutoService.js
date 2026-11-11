@@ -15,6 +15,7 @@ const dashboardController = require('../controllers/dashboardController');
 const { DEFAULT_CONFIG: COMPLIANCE_DEFAULTS } = require('../controllers/complianceConfigController');
 const endpointCentralService = require('./endpointCentralService');
 const migrationService = require('./migrationService');
+const weeklyPivot = require('./weeklyPivotConfigService');
 
 // Calls an Express-style controller function (req, res, next) directly, in
 // this same process, and resolves with whatever it passed to res.json(). The
@@ -37,12 +38,6 @@ async function getComplianceConfig() {
   }
 }
 
-// Location table: (Auto + Manual) / (Auto + Manual + Onboard Pending + On Hold).
-const LOCATION_PCT_FORMULA = {
-  num: ['auto_patching', 'manual_patching'],
-  den: ['auto_patching', 'manual_patching', 'onboard_pending', 'on_hold'],
-};
-
 const pct = (n, d) => (d ? Math.round((n / d) * 10000) / 100 : 0);
 
 // All possible patching-type columns — mirrors BREAKDOWN_METRICS in
@@ -57,29 +52,34 @@ const BREAKDOWN_METRICS = [
   { key: 'onboard_pending',   title: 'Onboard Pending' },
 ];
 
-// Percentage = (Total - out-of-scope types) / Total, using pctExclude — same
-// formula as WeeklyBreakdownTable in Dashboard.jsx.
-function enrichBreakdownRows(rows, excludedBuckets, pctExclude, formula = null) {
+// Percentage: either a custom formula (sum of num columns / sum of den
+// columns) or, in "exclude" mode, (Total - excluded types) / Total — both set
+// per table in Weekly Report -> Table Settings.
+function enrichBreakdownRows(rows, excludedBuckets, pctExclude, tc = {}) {
+  const formula = tc.pct?.mode === 'formula' && tc.pct.num?.length && tc.pct.den?.length ? tc.pct : null;
+  const exclKeys = (tc.pct?.mode === 'exclude' && tc.pct.exclude) ? tc.pct.exclude : pctExclude;
+  const hidden = tc.hidden_columns || [];
+  const labels = tc.column_labels || {};
   const filtered = (rows || []).filter(r => !excludedBuckets.includes(r.bucket));
+  const ratio = (r, f) => {
+    const num = f.num.reduce((x, k) => x + Number(r[k] || 0), 0);
+    const den = f.den.reduce((x, k) => x + Number(r[k] || 0), 0);
+    return den ? Math.round((num / den) * 10000) / 100 : 0;
+  };
   const enriched = filtered.map(r => {
     const total = Number(r.total || 0);
-    const excluded = pctExclude.reduce((s, k) => s + Number(r[k] || 0), 0);
-    const inScope = total - excluded;
-    if (formula) {
-      const f = formula;
-      const num = f.num.reduce((x, k) => x + Number(r[k] || 0), 0);
-      const den = f.den.reduce((x, k) => x + Number(r[k] || 0), 0);
-      return { ...r, pct: den ? Math.round((num / den) * 10000) / 100 : 0 };
-    }
-    return { ...r, pct: total ? Math.round((inScope / total) * 10000) / 100 : 0 };
+    if (formula) return { ...r, pct: ratio(r, formula) };
+    const excluded = exclKeys.reduce((s, k) => s + Number(r[k] || 0), 0);
+    return { ...r, pct: total ? Math.round(((total - excluded) / total) * 10000) / 100 : 0 };
   });
   const sumKey = (key) => enriched.reduce((s, r) => s + Number(r[key] || 0), 0);
   const totalSum = sumKey('total');
-  const inScopeSum = totalSum - pctExclude.reduce((s, k) => s + sumKey(k), 0);
-  const sumOf = (keys) => keys.reduce((x, k) => x + sumKey(k), 0);
-  const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0);
+  const sumRow = Object.fromEntries(['auto_patching', 'eol', 'exception', 'manual_patching', 'on_hold', 'onboard_pending']
+    .map(k => [k, sumKey(k)]));
+  const inScopeSum = totalSum - exclKeys.reduce((s, k) => s + sumKey(k), 0);
+  const activeMetrics = BREAKDOWN_METRICS.filter(m => sumKey(m.key) > 0 && !hidden.includes(m.key));
   return {
-    columns: activeMetrics.map(m => m.title),
+    columns: activeMetrics.map(m => labels[m.key] || m.title),
     rows: enriched.map(r => ({
       bucket: r.bucket,
       values: activeMetrics.map(m => Number(r[m.key] || 0)),
@@ -89,9 +89,7 @@ function enrichBreakdownRows(rows, excludedBuckets, pctExclude, formula = null) 
     totals: {
       values: activeMetrics.map(m => sumKey(m.key)),
       total: totalSum,
-      pct: formula
-        ? (sumOf(formula.den) ? Math.round((sumOf(formula.num) / sumOf(formula.den)) * 10000) / 100 : 0)
-        : (totalSum ? Math.round((inScopeSum / totalSum) * 10000) / 100 : 0),
+      pct: formula ? ratio(sumRow, formula) : (totalSum ? Math.round((inScopeSum / totalSum) * 10000) / 100 : 0),
     },
   };
 }
@@ -114,6 +112,11 @@ async function getAssetInventorySection(dashboardData) {
       noHostedIp: vmGaps.no_hosted_ip ?? 0,
       nameConflicts: vmGaps.name_conflicts ?? 0,
       locations: msl.assetExtLocations || [],
+      locationTable: {
+        title: data.weeklyPivotConfig?.location_count?.title || 'Location-wise endpoint count:',
+        groupLabel: data.weeklyPivotConfig?.location_count?.group_label || 'Location',
+        countLabel: data.weeklyPivotConfig?.location_count?.count_label || 'Count',
+      },
     },
   };
 }
@@ -125,10 +128,15 @@ async function getNessusSection(dashboardData) {
   const notApplicable = na.not_applicable || { total: 0, installed: 0 };
   return {
     section_key: 'nessus_agent',
-    title: 'Nessus Agent Install',
+    title: data.weeklyPivotConfig?.nessus?.title || 'Nessus Agent Install',
     kind: 'auto',
     sort_order: 50,
     data: {
+      tableConfig: {
+        title: data.weeklyPivotConfig?.nessus?.title || 'Nessus Agent Install',
+        hiddenColumns: data.weeklyPivotConfig?.nessus?.hidden_columns || [],
+        labels: data.weeklyPivotConfig?.nessus?.column_labels || {},
+      },
       applicable,
       notApplicable,
       // Already counted within the two buckets above — an "of which" line,
@@ -148,8 +156,12 @@ async function getPatchManagementSection(dashboardData) {
   ]);
 
   const weeklyCfg = compCfg.weekly || COMPLIANCE_DEFAULTS.weekly;
-  const mslExcl = weeklyCfg.me_msl_exclude_buckets ?? COMPLIANCE_DEFAULTS.weekly.me_msl_exclude_buckets;
-  const extExcl = weeklyCfg.me_ext_exclude_buckets ?? COMPLIANCE_DEFAULTS.weekly.me_ext_exclude_buckets;
+  const pivotTables = data.weeklyPivotConfig || weeklyPivot.DEFAULTS;
+  const locTc  = pivotTables.location_patching   || weeklyPivot.DEFAULTS.location_patching;
+  const deptTc = pivotTables.department_patching || weeklyPivot.DEFAULTS.department_patching;
+  const meTc   = pivotTables.me_compliance       || weeklyPivot.DEFAULTS.me_compliance;
+  const mslExcl = meTc.msl_exclude_buckets ?? weeklyCfg.me_msl_exclude_buckets ?? COMPLIANCE_DEFAULTS.weekly.me_msl_exclude_buckets;
+  const extExcl = meTc.ext_exclude_buckets ?? weeklyCfg.me_ext_exclude_buckets ?? COMPLIANCE_DEFAULTS.weekly.me_ext_exclude_buckets;
   const mslFootnote = weeklyCfg.me_msl_footnote || COMPLIANCE_DEFAULTS.weekly.me_msl_footnote
     || '(*Excludes Bomgar & Beijing Team Managed count, esxi hosts and not applicable vms, powered off VMs EOL VMs)';
   const extFootnote = weeklyCfg.me_ext_footnote || COMPLIANCE_DEFAULTS.weekly.me_ext_footnote
@@ -161,11 +173,14 @@ async function getPatchManagementSection(dashboardData) {
     'onboard_pending',
     'exception',
   ])].filter(k => k !== 'alive_powered_off' && k !== 'not_applicable');
-  const exclLocs = weeklyCfg.breakdown_excluded_locations ?? [];
-  const exclDepts = weeklyCfg.breakdown_excluded_departments ?? [];
+  const exclLocs = locTc.excluded_groups ?? weeklyCfg.breakdown_excluded_locations ?? [];
+  const exclDepts = deptTc.excluded_groups ?? weeklyCfg.breakdown_excluded_departments ?? [];
+  // A table without its own hidden-columns setting inherits Compliance Config's.
+  const withHidden = (tc) => ({ ...tc, hidden_columns: tc.hidden_columns ?? weeklyCfg.breakdown_hidden_columns ?? [] });
 
-  const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude, LOCATION_PCT_FORMULA);
-  const departmentPatching = enrichBreakdownRows(data.weeklyDepartmentPatching, exclDepts, pctExclude);
+  const locationPatching = enrichBreakdownRows(data.weeklyLocationPatching, exclLocs, pctExclude, withHidden(locTc));
+  const departmentPatching = enrichBreakdownRows(data.weeklyDepartmentPatching, exclDepts, pctExclude, withHidden(deptTc));
+  const groupLabelOf = (tc) => (weeklyPivot.getMeta().group_fields.find(g => g.key === tc.group_by)?.label) || 'Location';
 
   const meMslRows = data.meMslBreakdown || [];
   const meExtRows = data.meExtBreakdown || [];
@@ -203,10 +218,15 @@ async function getPatchManagementSection(dashboardData) {
       totalEndpoints: agents.length,
       locationPatching,
       departmentPatching,
+      tableConfig: {
+        location:   { title: locTc.title,  hint: locTc.hint,  groupLabel: groupLabelOf(locTc) },
+        department: { title: deptTc.title, hint: deptTc.hint, groupLabel: groupLabelOf(deptTc) },
+        me: { title: meTc.title, hiddenColumns: meTc.hidden_columns || [], labels: meTc.column_labels || {} },
+      },
       meCompliance: {
         combinedYes, combinedDen, combinedPct: pct(combinedYes, combinedDen),
         rows: Array.from(mergedMap.values()),
-        footnote: `${mslFootnote} ${extFootnote}`,
+        footnote: meTc.footnote || `${mslFootnote} ${extFootnote}`,
       },
     },
   };
