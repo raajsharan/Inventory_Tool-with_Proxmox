@@ -647,7 +647,7 @@ async function summary(req, res, next) {
     // Location-wise table uses stricter per-inventory rules (Alive only, OS and
     // patching-type exclusions). Physical & ESXi hosts are not in scope here.
     // Auto / Manual count rows that pass every rule (in_total). EOL / Exception /
-    // Onboard Pending count assets that pass the OS / location / not-Not-Applicable
+    // Onboard Pending / On Hold count assets that pass the OS / location / not-Not-Applicable
     // rules but carry that flag (any status). Total is the sum of those five
     // columns, so the row always adds up; Alive assets with a blank/other
     // patching type have no column and are not counted.
@@ -695,12 +695,16 @@ async function summary(req, res, next) {
                 AND (COALESCE(server_status,'') ILIKE 'Onboard%' OR COALESCE(server_status,'') ILIKE 'Pending%'
                      OR COALESCE(patching_type,'') ILIKE 'Onboard%')
                 AND NOT (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(eol_status,'') = 'EOL')
-                AND NOT COALESCE(patching_type,'') ILIKE 'Exception%') AS is_onb
+                AND NOT COALESCE(patching_type,'') ILIKE 'Exception%'
+                AND NOT COALESCE(server_status,'') ILIKE 'On Hold%') AS is_onb,
+               (os_ok AND NOT na AND COALESCE(server_status,'') ILIKE 'On Hold%'
+                AND NOT (COALESCE(patching_type,'') ILIKE 'EOL%' OR COALESCE(eol_status,'') = 'EOL')
+                AND NOT COALESCE(patching_type,'') ILIKE 'Exception%') AS is_hold
           FROM base
       )
       SELECT bucket, auto_patching, manual_patching, eol, exception, onboard_pending,
              on_hold, alive_powered_off, not_applicable,
-             (auto_patching + manual_patching + eol + exception + onboard_pending)::int AS total
+             (auto_patching + manual_patching + eol + exception + onboard_pending + on_hold)::int AS total
         FROM (
           SELECT
             COALESCE(NULLIF(TRIM(location), ''), 'Unassigned')                                   AS bucket,
@@ -709,11 +713,12 @@ async function summary(req, res, next) {
             COUNT(*) FILTER (WHERE is_eol)::int                                                   AS eol,
             COUNT(*) FILTER (WHERE is_exc)::int                                                   AS exception,
             COUNT(*) FILTER (WHERE is_onb)::int                                                   AS onboard_pending,
-            0 AS on_hold, 0 AS alive_powered_off, 0 AS not_applicable
+            COUNT(*) FILTER (WHERE is_hold)::int                                                  AS on_hold,
+            0 AS alive_powered_off, 0 AS not_applicable
           FROM flagged
           GROUP BY 1
         ) t
-       WHERE auto_patching + manual_patching + eol + exception + onboard_pending > 0
+       WHERE auto_patching + manual_patching + eol + exception + onboard_pending + on_hold > 0
        ORDER BY total DESC, bucket
     `);
     const weeklyDepartmentPatchingQ = db.query(buildWeeklyBreakdown('department'));

@@ -1586,13 +1586,13 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
 
   const LOCATION_PCT_FORMULA = {
     num: ['auto_patching', 'manual_patching'],
-    den: ['auto_patching', 'manual_patching', 'onboard_pending', 'eol', 'exception'],
+    den: ['auto_patching', 'manual_patching', 'onboard_pending', 'on_hold'],
   };
   const LOCATION_HINT = '(*Only Alive assets are counted. Beijing: Windows/Linux, not Not Applicable. '
     + 'Assets: excludes Appliance / Cisco IOS / MacOS / Storage / ESXi / Proxmox and Not Applicable / EOL / Powered Off / Exception. '
     + 'Extended: excludes ESXi / Appliances, Beijing location, and EOL / Exception / Not Applicable. '
-    + 'EOL / Exception / Onboard Pending show assets left out by these rules; Total = Auto + Manual + EOL + Exception + Onboard Pending. '
-    + 'Percentage = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending + EOL - No Patches + Exception))';
+    + 'EOL / Exception / Onboard Pending / On Hold show assets left out by these rules; Total = sum of all columns. '
+    + 'Percentage = (Auto + Manual) ÷ (Auto + Manual + Onboard Pending + On Hold))';
 
   const filteredLocRows  = locRows.filter(r  => !EXCL_LOCS.includes(r.bucket));
   const filteredDeptRows = deptRows.filter(r => !EXCL_DEPTS.includes(r.bucket));

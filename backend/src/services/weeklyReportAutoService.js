@@ -37,10 +37,10 @@ async function getComplianceConfig() {
   }
 }
 
-// Location table: (Auto + Manual) / (Auto + Manual + Onboard Pending + EOL + Exception).
+// Location table: (Auto + Manual) / (Auto + Manual + Onboard Pending + On Hold).
 const LOCATION_PCT_FORMULA = {
   num: ['auto_patching', 'manual_patching'],
-  den: ['auto_patching', 'manual_patching', 'onboard_pending', 'eol', 'exception'],
+  den: ['auto_patching', 'manual_patching', 'onboard_pending', 'on_hold'],
 };
 
 const pct = (n, d) => (d ? Math.round((n / d) * 10000) / 100 : 0);
