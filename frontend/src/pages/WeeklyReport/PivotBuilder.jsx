@@ -90,6 +90,7 @@ export default function PivotBuilder() {
   const [colKey, setColKey] = useState('');
   const [value, setValue] = useState('count');
   const [includeDecom, setIncludeDecom] = useState(false);
+  const [filters, setFilters] = useState([]);   // [{ field, values }]
   const [viewName, setViewName] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -106,19 +107,29 @@ export default function PivotBuilder() {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line
 
+  // Filters: keep only assets whose value is among the chosen ones (AND across fields).
+  const blank = (v) => (v === null || v === undefined || String(v).trim() === '' ? '(blank)' : String(v));
+  const activeFilters = filters.filter(f => f.values.length);
+  const shown = useMemo(
+    () => (activeFilters.length ? rows.filter(r => activeFilters.every(f => f.values.includes(blank(r[f.field])))) : rows),
+    [rows, filters], // eslint-disable-line
+  );
+  const valuesFor = (field) => [...new Set(rows.map(r => blank(r[field])))].sort();
+  const setFilter = (field, values) => setFilters(fs => fs.map(f => (f.field === field ? { ...f, values } : f)));
+
   const fieldOpts = (opts?.row_fields || []).map(k => ({ value: k, label: FIELD_LABELS[k] || k }));
   // Rows and Columns on the same field make no sense — Columns falls back to None.
   const pickRows = (k) => { setRowKey(k); if (k === colKey) setColKey(''); };
   const pickCols = (k) => setColKey(k === rowKey ? '' : (k || ''));
   const swap = () => { if (!colKey) return; setRowKey(colKey); setColKey(rowKey); };
-  const reset = () => { setRowKey(opts.default_rows); setColKey(opts.default_cols || ''); setValue('count'); toggleDecom(false); };
+  const reset = () => { setRowKey(opts.default_rows); setColKey(opts.default_cols || ''); setValue('count'); setFilters([]); toggleDecom(false); };
 
   const toggleDecom = (v) => { setIncludeDecom(v); loadData(v).catch(() => message.error('Failed to reload')); };
 
   const exportFile = async (format) => {
     setBusy(true);
     try {
-      const params = { format, ...(opts.allow_pivot ? { rows: rowKey, cols: colKey, value, includeDecom } : {}) };
+      const params = { format, ...(opts.allow_pivot ? { rows: rowKey, cols: colKey, value, includeDecom, filters: JSON.stringify(activeFilters) } : {}) };
       const res = await api.get('/weekly-report/export', { params, responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
@@ -130,7 +141,7 @@ export default function PivotBuilder() {
   const saveView = async () => {
     try {
       const { data } = await api.post('/weekly-report/views', {
-        name: viewName, view_config: { rows: rowKey, cols: colKey, value, includeDecom } });
+        name: viewName, view_config: { rows: rowKey, cols: colKey, value, includeDecom, filters } });
       setViews(v => [...v.filter(x => x.name !== data.name), data].sort((a, b) => a.name.localeCompare(b.name)));
       setViewName(''); message.success('View saved');
     } catch (e) { message.error(e.response?.data?.error || 'Could not save view'); }
@@ -141,6 +152,7 @@ export default function PivotBuilder() {
     if (v.rows && opts.row_fields.includes(v.rows)) setRowKey(v.rows);
     setColKey(v.cols && opts.row_fields.includes(v.cols) && v.cols !== v.rows ? v.cols : '');
     if (opts.value_options.includes(v.value)) setValue(v.value);
+    setFilters((v.filters || []).filter(f => opts.row_fields.includes(f.field)));
     toggleDecom(!!v.includeDecom);
   };
   const removeView = async (id) => {
@@ -176,10 +188,29 @@ export default function PivotBuilder() {
               <Checkbox checked={includeDecom} onChange={e => toggleDecom(e.target.checked)}>Include decommissioned</Checkbox>
               <Button icon={<ReloadOutlined />} onClick={reset}>Reset</Button>
             </Space>
+            <Space wrap align="start">
+              <Select style={{ width: 200 }} placeholder="+ Add filter" value={null}
+                options={fieldOpts.filter(o => !filters.some(f => f.field === o.value))}
+                onChange={(field) => setFilters(fs => [...fs, { field, values: [] }])} />
+              {filters.map(f => (
+                <Space.Compact key={f.field}>
+                  <Button disabled style={{ cursor: 'default' }}>{FIELD_LABELS[f.field] || f.field}</Button>
+                  <Select
+                    mode="multiple" maxTagCount="responsive" style={{ minWidth: 220, maxWidth: 360 }}
+                    placeholder="Show only…" value={f.values} onChange={v => setFilter(f.field, v)}
+                    options={valuesFor(f.field).map(v => ({ value: v, label: v }))}
+                  />
+                  <Button icon={<DeleteOutlined />} onClick={() => setFilters(fs => fs.filter(x => x.field !== f.field))} />
+                </Space.Compact>
+              ))}
+              {activeFilters.length > 0 && (
+                <Text type="secondary">{shown.length.toLocaleString()} of {rows.length.toLocaleString()} assets</Text>
+              )}
+            </Space>
             <Space wrap>
               <Select style={{ width: 220 }} placeholder="My saved views" value={null}
                 options={views.map(v => ({ value: v.id, label: v.name }))} onChange={applyView}
- />
+              />
               <Input style={{ width: 180 }} placeholder="Name this view" maxLength={80} value={viewName} onChange={e => setViewName(e.target.value)} />
               <Button icon={<SaveOutlined />} disabled={!viewName.trim()} onClick={saveView}>Save this view</Button>
               {views.map(v => (
@@ -188,7 +219,7 @@ export default function PivotBuilder() {
                 </Popconfirm>
               ))}
             </Space>
-            <Pivot rows={rows} rowKey={rowKey} colKey={colKey} value={value} />
+            <Pivot rows={shown} rowKey={rowKey} colKey={colKey} value={value} />
             <Text type="secondary" style={{ fontSize: 12 }}>
               Assets with status NA or Not in Scope are never counted. Export matches what you see above.
             </Text>

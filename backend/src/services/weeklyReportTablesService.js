@@ -296,15 +296,32 @@ function unionSql({ source, fields, includeDecom }) {
   return parts.join(' UNION ALL ');
 }
 
-async function fetchRows({ source = 'all', fields, excludeStatuses = [], includeDecom = false, limit = 20000 }) {
-  const safe = [...new Set(fields)].filter(f => FIELD_KEYS.has(f));
+// filters: [{ field, values[] }] — AND between fields, OR within a field's
+// values; '(blank)' matches empty. Field keys are whitelisted before use.
+function cleanFilters(filters) {
+  return (Array.isArray(filters) ? filters : [])
+    .filter(f => f && FIELD_KEYS.has(f.field))
+    .map(f => ({ field: f.field, values: strList(f.values, 200) }))
+    .filter(f => f.values.length)
+    .slice(0, 10);
+}
+
+async function fetchRows({ source = 'all', fields, excludeStatuses = [], includeDecom = false, limit = 20000, filters = [] }) {
+  const fl = cleanFilters(filters);
+  const safe = [...new Set([...fields, ...fl.map(f => f.field)])].filter(f => FIELD_KEYS.has(f));
   if (!safe.length) return [];
   const statusCol = safe.includes('server_status') ? '"server_status"' : '"__status"';
   const excl = [...new Set([...ALWAYS_EXCLUDED, ...strList(excludeStatuses).map(s => s.toLowerCase())])];
+  const params = [excl];
+  const where = [`LOWER(TRIM(COALESCE(${statusCol}, ''))) <> ALL($1::text[])`];
+  for (const f of fl) {
+    params.push(f.values);
+    where.push(`COALESCE(NULLIF(TRIM("${f.field}"), ''), '(blank)') = ANY($${params.length}::text[])`);
+  }
   const sql = `SELECT * FROM (${unionSql({ source, fields: safe, includeDecom })}) u
-                WHERE LOWER(TRIM(COALESCE(${statusCol}, ''))) <> ALL($1::text[])
+                WHERE ${where.join(' AND ')}
                 ORDER BY 1 LIMIT ${Math.min(Math.max(Number(limit) || 0, 1), 50000)}`;
-  const { rows } = await db.query(sql, [excl]);
+  const { rows } = await db.query(sql, params);
   return rows.map(r => { delete r.__status; return r; });
 }
 
@@ -382,7 +399,8 @@ async function buildExportSheets({ pivot }) {
     const opts = await getOptions();
     if (opts.allow_pivot && opts.row_fields.includes(pivot.rows)
         && (!pivot.cols || (opts.row_fields.includes(pivot.cols) && pivot.cols !== pivot.rows))) {
-      const data = await fetchRows({ fields: [pivot.rows, ...(pivot.cols ? [pivot.cols] : [])], includeDecom: !!pivot.includeDecom });
+      const filters = cleanFilters(pivot.filters).filter(f => opts.row_fields.includes(f.field));
+      const data = await fetchRows({ fields: [pivot.rows, ...(pivot.cols ? [pivot.cols] : [])], includeDecom: !!pivot.includeDecom, filters });
       const g = pivotGrid(data, pivot.rows, pivot.cols || null);
       const label = (k) => FIELDS.find(f => f.key === k)?.label || k;
       const val = (n, base) => (pivot.value === 'pct' ? `${((n / (g.grand || 1)) * 100).toFixed(1)}%`
@@ -429,6 +447,7 @@ const cleanView = (v = {}) => ({
   cols: FIELD_KEYS.has(v.cols) ? v.cols : null,
   value: ['count', 'pct', 'rowpct'].includes(v.value) ? v.value : 'count',
   includeDecom: !!v.includeDecom,
+  filters: cleanFilters(v.filters),
 });
 const listViews = async (userId) =>
   (await db.query('SELECT id, name, view_config FROM weekly_report_views WHERE user_id = $1 ORDER BY name', [userId])).rows;
