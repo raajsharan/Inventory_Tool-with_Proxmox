@@ -29,8 +29,14 @@ function pivot(rows, rowKey, colKey) {
   };
 }
 
-function Pivot({ rows, rowKey, colKey, value }) {
-  const g = useMemo(() => pivot(rows, rowKey, colKey), [rows, rowKey, colKey]);
+// (sum of the num columns) ÷ (sum of the den columns) × 100, for one row or the total.
+function calcPct(cells, pctCalc) {
+  const sum = (cols) => cols.reduce((s, c) => s + (cells[c] || 0), 0);
+  const d = sum(pctCalc.den);
+  return d ? `${((sum(pctCalc.num) / d) * 100).toFixed(2)}%` : '—';
+}
+
+function Pivot({ g, rowKey, value, pctCalc }) {
   const max = useMemo(() => Math.max(1, ...Object.values(g.grid)), [g]);
   const show = (n, base) => (value === 'pct' ? `${((n / (g.grand || 1)) * 100).toFixed(1)}%`
     : value === 'rowpct' ? `${((n / (base || 1)) * 100).toFixed(1)}%` : n.toLocaleString());
@@ -47,6 +53,10 @@ function Pivot({ rows, rowKey, colKey, value }) {
       render: (_, r) => { const n = g.grid[`${r.k}||${b}`] || 0; return n ? show(n, g.rowTot[r.k]) : ''; },
     })),
     { title: 'Total', key: '__t', align: 'center', render: (_, r) => <strong>{g.rowTot[r.k].toLocaleString()}</strong> },
+    ...(pctCalc ? [{
+      title: 'Percentage', key: '__pct', align: 'center',
+      render: (_, r) => <strong>{calcPct(Object.fromEntries(g.colVals.map(b => [b, g.grid[`${r.k}||${b}`] || 0])), pctCalc)}</strong>,
+    }] : []),
   ];
   return (
     <Table
@@ -57,6 +67,7 @@ function Pivot({ rows, rowKey, colKey, value }) {
           <Table.Summary.Cell index={0}>Total</Table.Summary.Cell>
           {g.colVals.map((b, i) => <Table.Summary.Cell key={b} index={i + 1} align="center">{g.colTot[b].toLocaleString()}</Table.Summary.Cell>)}
           <Table.Summary.Cell index={g.colVals.length + 1} align="center">{g.grand.toLocaleString()}</Table.Summary.Cell>
+          {pctCalc && <Table.Summary.Cell index={g.colVals.length + 2} align="center">{calcPct(g.colTot, pctCalc)}</Table.Summary.Cell>}
         </Table.Summary.Row>
       )}
     />
@@ -114,6 +125,15 @@ export default function PivotBuilder() {
     () => (activeFilters.length ? rows.filter(r => activeFilters.every(f => f.values.includes(blank(r[f.field])))) : rows),
     [rows, filters], // eslint-disable-line
   );
+  const g = useMemo(() => pivot(shown, rowKey, colKey), [shown, rowKey, colKey]);
+
+  // Percentage of selected columns: (num columns) ÷ (den columns). Picks that no
+  // longer exist (Columns field changed, filter removed) are ignored.
+  const [pct, setPct] = useState({ num: [], den: [] });
+  const pctNum = pct.num.filter(c => g.colVals.includes(c));
+  const pctDen = pct.den.filter(c => g.colVals.includes(c));
+  const pctCalc = colKey && pctNum.length && pctDen.length ? { num: pctNum, den: pctDen } : null;
+
   const valuesFor = (field) => [...new Set(rows.map(r => blank(r[field])))].sort();
   const setFilter = (field, values) => setFilters(fs => fs.map(f => (f.field === field ? { ...f, values } : f)));
 
@@ -122,14 +142,14 @@ export default function PivotBuilder() {
   const pickRows = (k) => { setRowKey(k); if (k === colKey) setColKey(''); };
   const pickCols = (k) => setColKey(k === rowKey ? '' : (k || ''));
   const swap = () => { if (!colKey) return; setRowKey(colKey); setColKey(rowKey); };
-  const reset = () => { setRowKey(opts.default_rows); setColKey(opts.default_cols || ''); setValue('count'); setFilters([]); toggleDecom(false); };
+  const reset = () => { setRowKey(opts.default_rows); setColKey(opts.default_cols || ''); setValue('count'); setFilters([]); setPct({ num: [], den: [] }); toggleDecom(false); };
 
   const toggleDecom = (v) => { setIncludeDecom(v); loadData(v).catch(() => message.error('Failed to reload')); };
 
   const exportFile = async (format) => {
     setBusy(true);
     try {
-      const params = { format, ...(opts.allow_pivot ? { rows: rowKey, cols: colKey, value, includeDecom, filters: JSON.stringify(activeFilters) } : {}) };
+      const params = { format, ...(opts.allow_pivot ? { rows: rowKey, cols: colKey, value, includeDecom, filters: JSON.stringify(activeFilters), ...(pctCalc ? { pct: JSON.stringify(pctCalc) } : {}) } : {}) };
       const res = await api.get('/weekly-report/export', { params, responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
@@ -141,7 +161,7 @@ export default function PivotBuilder() {
   const saveView = async () => {
     try {
       const { data } = await api.post('/weekly-report/views', {
-        name: viewName, view_config: { rows: rowKey, cols: colKey, value, includeDecom, filters } });
+        name: viewName, view_config: { rows: rowKey, cols: colKey, value, includeDecom, filters, pct } });
       setViews(v => [...v.filter(x => x.name !== data.name), data].sort((a, b) => a.name.localeCompare(b.name)));
       setViewName(''); message.success('View saved');
     } catch (e) { message.error(e.response?.data?.error || 'Could not save view'); }
@@ -153,6 +173,7 @@ export default function PivotBuilder() {
     setColKey(v.cols && opts.row_fields.includes(v.cols) && v.cols !== v.rows ? v.cols : '');
     if (opts.value_options.includes(v.value)) setValue(v.value);
     setFilters((v.filters || []).filter(f => opts.row_fields.includes(f.field)));
+    setPct({ num: v.pct?.num || [], den: v.pct?.den || [] });
     toggleDecom(!!v.includeDecom);
   };
   const removeView = async (id) => {
@@ -219,7 +240,24 @@ export default function PivotBuilder() {
                 </Popconfirm>
               ))}
             </Space>
-            <Pivot rows={shown} rowKey={rowKey} colKey={colKey} value={value} />
+            {colKey && (
+              <Space wrap align="start">
+                <Text>Percentage =</Text>
+                <Select mode="multiple" maxTagCount="responsive" style={{ minWidth: 220, maxWidth: 360 }}
+                  placeholder="these columns added up…" value={pctNum}
+                  options={g.colVals.map(c => ({ value: c, label: c }))}
+                  onChange={v => setPct(p => ({ ...p, num: v }))} />
+                <Text>÷</Text>
+                <Select mode="multiple" maxTagCount="responsive" style={{ minWidth: 220, maxWidth: 360 }}
+                  placeholder="…divided by these added up" value={pctDen}
+                  options={g.colVals.map(c => ({ value: c, label: c }))}
+                  onChange={v => setPct(p => ({ ...p, den: v }))} />
+                {(pct.num.length > 0 || pct.den.length > 0) && (
+                  <Button onClick={() => setPct({ num: [], den: [] })}>Clear</Button>
+                )}
+              </Space>
+            )}
+            <Pivot g={g} rowKey={rowKey} value={value} pctCalc={pctCalc} />
             <Text type="secondary" style={{ fontSize: 12 }}>
               Assets with status NA or Not in Scope are never counted. Export matches what you see above.
             </Text>

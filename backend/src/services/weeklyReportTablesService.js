@@ -372,6 +372,13 @@ const csvCell = (v) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+// Percentage columns picked by the user; only values that exist as pivot columns count.
+function cleanPct(p, colVals) {
+  const keep = (v) => (Array.isArray(v) ? v : []).map(String).filter(c => !colVals || colVals.includes(c));
+  const num = keep(p?.num); const den = keep(p?.den);
+  return num.length && den.length ? { num, den } : null;
+}
+
 function pivotGrid(rows, rowKey, colKey) {
   const grid = {}; const rowTot = {}; const colTot = {}; let grand = 0;
   for (const r of rows) {
@@ -405,12 +412,20 @@ async function buildExportSheets({ pivot }) {
       const label = (k) => FIELDS.find(f => f.key === k)?.label || k;
       const val = (n, base) => (pivot.value === 'pct' ? `${((n / (g.grand || 1)) * 100).toFixed(1)}%`
         : pivot.value === 'rowpct' ? `${((n / (base || 1)) * 100).toFixed(1)}%` : n);
+      // Optional percentage column: (sum of num columns) / (sum of den columns).
+      const pc = cleanPct(pivot.pct, g.colVals);
+      const pctOf = (cells) => {
+        const sum = (cols) => cols.reduce((t, c) => t + (cells[c] || 0), 0);
+        const d = sum(pc.den);
+        return d ? `${((sum(pc.num) / d) * 100).toFixed(2)}%` : '';
+      };
       sheets.push({
         name: `Pivot ${label(pivot.rows)}${pivot.cols ? ` x ${label(pivot.cols)}` : ''}`,
-        header: [label(pivot.rows), ...g.colVals, 'Total'],
+        header: [label(pivot.rows), ...g.colVals, 'Total', ...(pc && pivot.cols ? ['Percentage'] : [])],
         rows: [
-          ...g.rowVals.map(a => [a, ...g.colVals.map(b => val(g.grid[`${a}||${b}`] || 0, g.rowTot[a])), g.rowTot[a]]),
-          ['Total', ...g.colVals.map(b => g.colTot[b]), g.grand],
+          ...g.rowVals.map(a => [a, ...g.colVals.map(b => val(g.grid[`${a}||${b}`] || 0, g.rowTot[a])), g.rowTot[a],
+            ...(pc && pivot.cols ? [pctOf(Object.fromEntries(g.colVals.map(b => [b, g.grid[`${a}||${b}`] || 0])))] : [])]),
+          ['Total', ...g.colVals.map(b => g.colTot[b]), g.grand, ...(pc && pivot.cols ? [pctOf(g.colTot)] : [])],
         ],
       });
     }
@@ -448,6 +463,7 @@ const cleanView = (v = {}) => ({
   value: ['count', 'pct', 'rowpct'].includes(v.value) ? v.value : 'count',
   includeDecom: !!v.includeDecom,
   filters: cleanFilters(v.filters),
+  pct: cleanPct(v.pct, null) || { num: [], den: [] },
 });
 const listViews = async (userId) =>
   (await db.query('SELECT id, name, view_config FROM weekly_report_views WHERE user_id = $1 ORDER BY name', [userId])).rows;

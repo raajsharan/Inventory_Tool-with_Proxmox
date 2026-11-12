@@ -118,6 +118,10 @@ async function getPivotData(req, res, next) {
   try { res.json(await tablesSvc.getPivotData(req.query.includeDecom === 'true')); } catch (e) { next(e); }
 }
 
+function parseJson(raw, fallback) {
+  try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+}
+
 function parseFilters(raw) {
   try { const v = JSON.parse(raw || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
@@ -125,7 +129,7 @@ function parseFilters(raw) {
 async function exportReport(req, res, next) {
   try {
     const q = req.query;
-    const pivot = q.rows ? { rows: q.rows, cols: q.cols || '', value: q.value, includeDecom: q.includeDecom === 'true', filters: parseFilters(q.filters) } : null;
+    const pivot = q.rows ? { rows: q.rows, cols: q.cols || '', value: q.value, includeDecom: q.includeDecom === 'true', filters: parseFilters(q.filters), pct: parseJson(q.pct, null) } : null;
     const stamp = new Date().toISOString().slice(0, 10);
     if (q.format === 'xlsx') {
       const buf = await tablesSvc.exportXlsx({ pivot });
