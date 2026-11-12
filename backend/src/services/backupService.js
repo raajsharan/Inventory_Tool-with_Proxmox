@@ -262,7 +262,12 @@ function encryptPasswordColumnsForRestore(row) {
 async function fetchTableRows(table) {
   const safe = INVENTORY_TABLES.includes(table) ? table : null;
   if (!safe) throw new ApiError(400, `CSV export not allowed for table: ${table}`);
-  const { rows: rawRows } = await db.query(`SELECT * FROM ${safe} ORDER BY created_at`);
+  // Decommissioned assets are left out of exports (same rule as the Report
+  // Builder and Weekly Report). The PostgreSQL backup is unaffected.
+  const { rows: rawRows } = await db.query(
+    `SELECT * FROM ${safe}
+      WHERE decommissioned_at IS NULL AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
+      ORDER BY created_at`);
   return rawRows.map(decryptPasswordColumns);
 }
 
