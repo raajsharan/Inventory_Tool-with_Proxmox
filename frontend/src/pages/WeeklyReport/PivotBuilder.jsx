@@ -136,6 +136,9 @@ export default function PivotBuilder() {
 
   const valuesFor = (field) => [...new Set(rows.map(r => blank(r[field])))].sort();
   const setFilter = (field, values) => setFilters(fs => fs.map(f => (f.field === field ? { ...f, values } : f)));
+  // Inventory selector = the 'source' filter (Assets / Beijing / Ext. / Physical & ESXi).
+  const sourceSel = filters.find(f => f.field === 'source')?.values || [];
+  const setSources = (values) => setFilters(fs => [...fs.filter(f => f.field !== 'source'), ...(values.length ? [{ field: 'source', values }] : [])]);
 
   const fieldOpts = (opts?.row_fields || []).map(k => ({ value: k, label: FIELD_LABELS[k] || k }));
   // Rows and Columns on the same field make no sense — Columns falls back to None.
@@ -172,7 +175,7 @@ export default function PivotBuilder() {
     if (v.rows && opts.row_fields.includes(v.rows)) setRowKey(v.rows);
     setColKey(v.cols && opts.row_fields.includes(v.cols) && v.cols !== v.rows ? v.cols : '');
     if (opts.value_options.includes(v.value)) setValue(v.value);
-    setFilters((v.filters || []).filter(f => opts.row_fields.includes(f.field)));
+    setFilters((v.filters || []).filter(f => f.field === 'source' || opts.row_fields.includes(f.field)));
     setPct({ num: v.pct?.num || [], den: v.pct?.den || [] });
     toggleDecom(!!v.includeDecom);
   };
@@ -210,10 +213,15 @@ export default function PivotBuilder() {
               <Button icon={<ReloadOutlined />} onClick={reset}>Reset</Button>
             </Space>
             <Space wrap align="start">
+              <Text>Inventory</Text>
+              <Select mode="multiple" allowClear maxTagCount="responsive" style={{ minWidth: 260, maxWidth: 420 }}
+                placeholder="All inventories (Assets, Beijing, Ext., Physical & ESXi)"
+                value={sourceSel} onChange={setSources}
+                options={['Assets', 'Beijing Assets', 'Ext. Assets', 'Physical & ESXi'].map(v => ({ value: v, label: v }))} />
               <Select style={{ width: 200 }} placeholder="+ Add filter" value={null}
-                options={fieldOpts.filter(o => !filters.some(f => f.field === o.value))}
+                options={fieldOpts.filter(o => o.value !== 'source' && !filters.some(f => f.field === o.value))}
                 onChange={(field) => setFilters(fs => [...fs, { field, values: [] }])} />
-              {filters.map(f => (
+              {filters.filter(f => f.field !== 'source').map(f => (
                 <Space.Compact key={f.field}>
                   <Button disabled style={{ cursor: 'default' }}>{FIELD_LABELS[f.field] || f.field}</Button>
                   <Select

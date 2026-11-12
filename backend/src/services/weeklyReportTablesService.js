@@ -361,7 +361,8 @@ async function previewDetail(draftTables) {
 async function getPivotData(includeDecom) {
   const opts = await getOptions();
   if (!opts.allow_pivot) return { options: opts, rows: [] };
-  const rows = await fetchRows({ fields: opts.row_fields, includeDecom });
+  // 'source' is always carried: the Pivot tab's Inventory selector filters on it.
+  const rows = await fetchRows({ fields: [...new Set([...opts.row_fields, 'source'])], includeDecom });
   return { options: opts, rows };
 }
 
