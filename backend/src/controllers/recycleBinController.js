@@ -52,4 +52,19 @@ async function emptyAll(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { list, restore, purge, emptyAll };
+async function purgeByLocation(req, res, next) {
+  try {
+    if (req.user.role !== 'superadmin') {
+      throw new ApiError(403, 'Only the superadmin can permanently delete items.');
+    }
+    await verifyCurrentPassword(req.user.id, req.body?.password);
+    const counts = await svc.purgeByLocation({ types: req.body?.types, location: req.body?.location });
+    await audit.log({
+      user: req.user, action: 'PURGE',
+      entityType: 'recycle_bin', details: { location: req.body?.location, counts }, ipAddress: req.ip,
+    });
+    res.json({ ok: true, counts });
+  } catch (e) { next(e); }
+}
+
+module.exports = { list, restore, purge, emptyAll, purgeByLocation };

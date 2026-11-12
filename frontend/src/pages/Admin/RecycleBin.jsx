@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Card, Table, Tabs, Tag, Space, Button, Input, App, Typography, Tooltip, Popconfirm, Empty, Alert,
+  Card, Table, Tabs, Tag, Space, Button, Input, App, Typography, Tooltip, Popconfirm, Empty, Alert, Modal, Select,
 } from 'antd';
 import {
   DeleteOutlined, RollbackOutlined, ReloadOutlined, SearchOutlined,
@@ -29,6 +29,9 @@ export default function RecycleBin() {
   const [activeTab, setActiveTab] = useState('all');
   const [purgeTarget, setPurgeTarget] = useState(null);
   const [emptyAllOpen, setEmptyAllOpen] = useState(false);
+  const [locPickOpen, setLocPickOpen] = useState(false);
+  const [locChoice, setLocChoice] = useState(null);
+  const [locConfirmOpen, setLocConfirmOpen] = useState(false);
 
   const isSuper = user?.role === 'superadmin';
 
@@ -72,6 +75,29 @@ export default function RecycleBin() {
     const total = Object.values(data.counts || {}).reduce((s, n) => s + n, 0);
     message.success(`Recycle bin emptied — ${total} item(s) permanently deleted`);
     setEmptyAllOpen(false);
+    load();
+  }
+
+  // Delete by location works on the inventory tab you are on ("All" = every
+  // inventory). Custom records have no location, so they are never included.
+  const INV = ['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'];
+  const scopeTypes = activeTab === 'all' ? INV : INV.filter(t => t === activeTab);
+  const locationCounts = useMemo(() => {
+    const m = {};
+    for (const i of items) {
+      if (!scopeTypes.includes(i.type)) continue;
+      const k = (i.location || '').trim() || '(blank)';
+      m[k] = (m[k] || 0) + 1;
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [items, activeTab]); // eslint-disable-line
+  const locChoiceCount = locationCounts.find(([k]) => k === locChoice)?.[1] || 0;
+
+  async function onLocationPurgeConfirmed(password) {
+    const { data } = await api.post('/recycle-bin/purge-location', { password, location: locChoice, types: scopeTypes });
+    const total = Object.values(data.counts || {}).reduce((s, n) => s + n, 0);
+    message.success(`${total} item(s) in "${locChoice}" permanently deleted`);
+    setLocConfirmOpen(false); setLocChoice(null);
     load();
   }
 
@@ -172,6 +198,14 @@ export default function RecycleBin() {
           />
           <Tooltip title="Reload the recycle bin"><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Tooltip>
           {isSuper && (
+            <Tooltip title="Permanently delete every recycle-bin item of one location">
+              <Button danger icon={<DeleteOutlined />} onClick={() => { setLocChoice(null); setLocPickOpen(true); }}
+                disabled={!items.length}>
+                Delete by Location
+              </Button>
+            </Tooltip>
+          )}
+          {isSuper && (
             <Tooltip title="Permanently delete every item in the recycle bin">
               <Button danger icon={<DeleteFilled />} onClick={() => setEmptyAllOpen(true)} disabled={!items.length}>
                 Empty Bin
@@ -205,6 +239,35 @@ export default function RecycleBin() {
         locale={{ emptyText: <Empty description="Recycle bin is empty" /> }}
       />
 
+      <Modal
+        open={locPickOpen}
+        title="Delete by location"
+        okText="Continue"
+        okButtonProps={{ danger: true, disabled: !locChoice }}
+        onCancel={() => setLocPickOpen(false)}
+        onOk={() => { setLocPickOpen(false); setLocConfirmOpen(true); }}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            Choose a location. Every recycle-bin item of that location in{' '}
+            {activeTab === 'all' ? 'all inventories' : TYPE_META[activeTab]?.label} will be permanently deleted.
+          </Typography.Text>
+          <Select
+            showSearch style={{ width: '100%' }} placeholder="Select location" value={locChoice}
+            onChange={setLocChoice}
+            options={locationCounts.map(([k, n]) => ({ value: k, label: `${k} (${n})` }))}
+            notFoundContent="No items with a location on this tab"
+          />
+        </Space>
+      </Modal>
+      <PasswordConfirmModal
+        open={locConfirmOpen}
+        title={`Permanently delete all "${locChoice}" items?`}
+        message={`${locChoiceCount} item${locChoiceCount === 1 ? '' : 's'} in ${activeTab === 'all' ? 'all inventories' : TYPE_META[activeTab]?.label} will be removed from the database. This cannot be undone.`}
+        okText="Delete forever"
+        onCancel={() => setLocConfirmOpen(false)}
+        onConfirm={onLocationPurgeConfirmed}
+      />
       <PasswordConfirmModal
         open={!!purgeTarget}
         title={`Permanently delete "${purgeTarget?.name || 'item'}"?`}

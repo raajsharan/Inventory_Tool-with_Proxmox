@@ -8,6 +8,7 @@ const adminOrAbove = authorize('admin');
 router.get('/',                    adminOrAbove, ctrl.list);
 router.post('/:type/:id/restore',  adminOrAbove, ctrl.restore);
 router.delete('/:type/:id',        adminOrAbove, ctrl.purge);     // additional super-only check inside
+router.post('/purge-location',     adminOrAbove, ctrl.purgeByLocation); // additional super-only check inside
 router.post('/empty',              adminOrAbove, ctrl.emptyAll);  // additional super-only check inside
 
 module.exports = router;

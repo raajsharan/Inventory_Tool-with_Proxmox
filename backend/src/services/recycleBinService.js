@@ -27,7 +27,7 @@ async function list({ type, search } = {}) {
   for (const t of invTypes) {
     if (type && type !== t) continue;
     const { rows } = await db.query(
-      `SELECT a.id, a.vm_name AS name, a.ip_address AS ip, a.asset_tag AS tag,
+      `SELECT a.id, a.vm_name AS name, a.ip_address AS ip, a.asset_tag AS tag, a.location,
               a.deleted_at, u.full_name AS deleted_by_name
          FROM ${t} a
          LEFT JOIN users u ON u.id = a.deleted_by
@@ -41,6 +41,7 @@ async function list({ type, search } = {}) {
         name: r.name,
         ip: r.ip,
         tag: r.tag,
+        location: r.location,
         deleted_at: r.deleted_at,
         deleted_by_name: r.deleted_by_name,
       });
@@ -138,4 +139,28 @@ async function emptyAll() {
   return counts;
 }
 
-module.exports = { list, restore, purge, emptyAll, TABLE_BY_TYPE };
+// Permanently deletes every recycle-bin row whose location matches, within the
+// given inventory types (custom page records have no location, so they are never
+// included). '(blank)' targets rows with an empty location. Only rows already in
+// the bin (deleted_at IS NOT NULL) can be touched.
+async function purgeByLocation({ types, location }) {
+  const inv = ['assets', 'beijing_assets', 'ext_assets', 'physical_esxi_servers'];
+  const list = (Array.isArray(types) && types.length ? types : inv).filter(t => inv.includes(t));
+  if (!list.length) throw new ApiError(400, 'No valid inventory selected');
+  const loc = String(location ?? '').trim();
+  if (!loc) throw new ApiError(400, 'Location is required');
+  const blank = loc === '(blank)';
+  const counts = {};
+  for (const t of list) {
+    const { rowCount } = await db.query(
+      blank
+        ? `DELETE FROM ${TABLE_BY_TYPE[t]} WHERE deleted_at IS NOT NULL AND COALESCE(TRIM(location), '') = ''`
+        : `DELETE FROM ${TABLE_BY_TYPE[t]} WHERE deleted_at IS NOT NULL AND location = $1`,
+      blank ? [] : [loc]
+    );
+    counts[t] = rowCount;
+  }
+  return counts;
+}
+
+module.exports = { list, restore, purge, emptyAll, purgeByLocation, TABLE_BY_TYPE };
