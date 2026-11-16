@@ -691,6 +691,9 @@ async function summary(req, res, next) {
       cat AS (
         SELECT
           CASE
+            -- An explicit Patching Type of Onboard Pending always wins, so this
+            -- bucket matches the Patching Type = Onboard Pending pivot/filter.
+            WHEN patching_type ILIKE 'Onboard%'                                                      THEN 'Onboard Pending'
             WHEN server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'             THEN 'Alive But Powered Off'
             WHEN eol_status = 'EOL'                                                                  THEN 'EOL - No Patches'
             WHEN eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A')
@@ -735,6 +738,7 @@ async function summary(req, res, next) {
       WITH cat AS (
         SELECT
           CASE
+            WHEN patching_type ILIKE 'Onboard%'                                                      THEN 'Onboard Pending'
             WHEN server_status ILIKE 'Powered Off%' OR server_status ILIKE 'Power Off%'             THEN 'Alive But Powered Off'
             WHEN eol_status = 'EOL'                                                                  THEN 'EOL - No Patches'
             WHEN eol_status ILIKE 'Not Applicable%' OR eol_status IN ('NA','N/A')
