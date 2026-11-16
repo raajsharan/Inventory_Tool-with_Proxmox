@@ -27,6 +27,14 @@ async function summary(req, res, next) {
     const pivotCfg = req?.pivotConfigOverride
       ? { tables: weeklyPivot.sanitizeAll(req.pivotConfigOverride) }
       : await weeklyPivot.getConfig();
+    // Viewer-chosen asset scope per table (Report tab selector): { table_key: [source keys] }.
+    // Only in-process callers set it (weeklyReportService); keys are checked against
+    // the configured tables and values go through sanitizeScope.
+    if (req?.pivotScopeOverride && typeof req.pivotScopeOverride === 'object') {
+      for (const [k, v] of Object.entries(req.pivotScopeOverride)) {
+        if (Object.prototype.hasOwnProperty.call(pivotCfg.tables, k)) pivotCfg.tables[k].asset_scope = weeklyPivot.sanitizeScope(v);
+      }
+    }
     const pivotRun = (q) => (q ? db.query(q.text, q.values) : Promise.resolve({ rows: [] }));
     const mslInclStatuses = compCfg.msl?.include_server_statuses || COMPLIANCE_DEFAULTS.msl.include_server_statuses;
     const mslExclEol      = compCfg.msl?.exclude_eol_statuses    || COMPLIANCE_DEFAULTS.msl.exclude_eol_statuses;
@@ -281,8 +289,8 @@ async function summary(req, res, next) {
     const lcTc = pivotCfg.tables.location_count;
     const assetExtLocationCountQ = lcTc.mode === 'filtered' ? pivotRun(weeklyPivot.buildCountPivot(lcTc)) : db.query(`
       WITH inv AS (
-        SELECT location, server_status, eol_status FROM assets WHERE deleted_at IS NULL AND decommissioned_at IS NULL
-        UNION ALL SELECT location, server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        SELECT location, server_status, eol_status FROM assets WHERE 'assets' = ANY($3::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
+        UNION ALL SELECT location, server_status, NULL::text AS eol_status FROM physical_esxi_servers WHERE 'physical_esxi_servers' = ANY($3::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
       ),
       inv_f AS (
         SELECT location FROM inv
@@ -299,7 +307,8 @@ async function summary(req, res, next) {
       ext_f AS (
         SELECT location
           FROM ext_assets
-         WHERE deleted_at IS NULL
+         WHERE 'ext_assets' = ANY($3::text[])
+           AND deleted_at IS NULL
            AND decommissioned_at IS NULL
            AND (server_status IS NULL OR (
                  server_status NOT ILIKE 'Decom%'
@@ -310,7 +319,8 @@ async function summary(req, res, next) {
       ),
       beijing_f AS (
         SELECT location FROM beijing_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         WHERE 'beijing_assets' = ANY($3::text[])
+           AND deleted_at IS NULL AND decommissioned_at IS NULL
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
            AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       )
@@ -318,7 +328,7 @@ async function summary(req, res, next) {
         FROM (SELECT location FROM inv_f UNION ALL SELECT location FROM ext_f UNION ALL SELECT location FROM beijing_f) x
        GROUP BY 1
        ORDER BY 2 DESC;
-    `, [mslInclStatuses, mslExclEol]);
+    `, [mslInclStatuses, mslExclEol, lcTc.asset_scope]);
 
     // ---------------------------------------------------------------
     // Asset Inventory Active Status (Windows/Linux only, excluding VMware).
@@ -527,17 +537,17 @@ async function summary(req, res, next) {
       WITH pop AS (
         SELECT server_status, os_type, tenable_installed, 'MSL Assets'::text AS source
           FROM assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         WHERE 'assets' = ANY($4::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
         SELECT server_status, os_type, false AS tenable_installed, 'Physical Servers'
           FROM physical_esxi_servers
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         WHERE 'physical_esxi_servers' = ANY($4::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
         UNION ALL
         SELECT server_status, os_type, tenable_installed, 'Ext. Assets'
           FROM ext_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         WHERE 'ext_assets' = ANY($4::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
            AND (server_status IS NULL OR (
                  server_status NOT ILIKE 'Decom%'
              AND server_status NOT ILIKE 'Not Applic%'
@@ -547,7 +557,7 @@ async function summary(req, res, next) {
         UNION ALL
         SELECT server_status, os_type, tenable_installed, 'Beijing Assets'
           FROM beijing_assets
-         WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+         WHERE 'beijing_assets' = ANY($4::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
            AND COALESCE(server_status,'') NOT ILIKE 'Decom%'
            AND LOWER(TRIM(COALESCE(asset_type, ''))) = 'vm'
       ),
@@ -588,6 +598,7 @@ async function summary(req, res, next) {
       weeklyPivot.likeContains(pivotCfg.tables.nessus.os_windows),
       weeklyPivot.likeContains(pivotCfg.tables.nessus.os_linux),
       weeklyPivot.likeContains(pivotCfg.tables.nessus.os_not_applicable),
+      pivotCfg.tables.nessus.asset_scope,
     ]);
 
     // ---------------------------------------------------------------
@@ -621,7 +632,8 @@ async function summary(req, res, next) {
                       OR asset_type ILIKE '%router%'  OR asset_type ILIKE '%firewall%'))) AS is_na,
                (server_status ILIKE '%power%off%')                                       AS is_off
           FROM inv
-         WHERE COALESCE(os_type, '') NOT ILIKE '%proxmox%'
+         WHERE source = ANY($1::text[])
+           AND COALESCE(os_type, '') NOT ILIKE '%proxmox%'
            AND COALESCE(os_type, '') NOT ILIKE '%vmware%'
            AND COALESCE(os_type, '') NOT ILIKE '%esxi%'
       )
@@ -653,10 +665,10 @@ async function summary(req, res, next) {
     const deptTc = pivotCfg.tables.department_patching;
     const weeklyLocationPatchingQ = locTc.mode === 'filtered'
       ? pivotRun(weeklyPivot.buildPatchingPivot(locTc))
-      : db.query(buildWeeklyBreakdown(locTc.group_by));
+      : db.query(buildWeeklyBreakdown(locTc.group_by), [locTc.asset_scope]);
     const weeklyDepartmentPatchingQ = deptTc.mode === 'filtered'
       ? pivotRun(weeklyPivot.buildPatchingPivot(deptTc))
-      : db.query(buildWeeklyBreakdown(deptTc.group_by));
+      : db.query(buildWeeklyBreakdown(deptTc.group_by), [deptTc.asset_scope]);
 
     // ---------------------------------------------------------------
     // ME Compliance breakdown: patching-type bucket × ME installed
@@ -666,15 +678,15 @@ async function summary(req, res, next) {
       WITH inv AS (
         SELECT 'assets'::text AS src, server_status, patching_type, eol_status,
                COALESCE(manage_engine_installed, false) AS me
-          FROM assets WHERE deleted_at IS NULL
+          FROM assets WHERE 'assets' = ANY($1::text[]) AND deleted_at IS NULL
         UNION ALL
         SELECT 'beijing_assets', server_status, patching_type, eol_status,
                COALESCE(manage_engine_installed, false)
-          FROM beijing_assets WHERE deleted_at IS NULL
+          FROM beijing_assets WHERE 'beijing_assets' = ANY($1::text[]) AND deleted_at IS NULL
         UNION ALL
         SELECT 'physical_esxi_servers', server_status, NULL::text AS patching_type, NULL::text AS eol_status,
                false
-          FROM physical_esxi_servers WHERE deleted_at IS NULL
+          FROM physical_esxi_servers WHERE 'physical_esxi_servers' = ANY($1::text[]) AND deleted_at IS NULL
       ),
       cat AS (
         SELECT
@@ -714,7 +726,7 @@ async function summary(req, res, next) {
       FROM cat
       GROUP BY 1
       ORDER BY sort_order;
-    `);
+    `, [pivotCfg.tables.me_compliance.asset_scope]);
 
     // ---------------------------------------------------------------
     // ME Compliance breakdown: Extended Inventory (ext_assets)
@@ -739,7 +751,7 @@ async function summary(req, res, next) {
           END AS bucket,
           COALESCE(manage_engine_installed, false) AS me
         FROM ext_assets
-        WHERE deleted_at IS NULL AND decommissioned_at IS NULL
+        WHERE 'ext_assets' = ANY($1::text[]) AND deleted_at IS NULL AND decommissioned_at IS NULL
           AND (server_status IS NULL
            OR (server_status <> 'Decommissioned' AND server_status NOT ILIKE 'Decom%'))
       )
@@ -763,7 +775,7 @@ async function summary(req, res, next) {
       FROM cat
       GROUP BY 1
       ORDER BY sort_order;
-    `);
+    `, [pivotCfg.tables.me_compliance.asset_scope]);
 
     const extPatchingStatusQ = db.query(`
       SELECT

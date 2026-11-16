@@ -117,6 +117,7 @@ async function getAssetInventorySection(dashboardData) {
         groupLabel: data.weeklyPivotConfig?.location_count?.group_label || 'Location',
         countLabel: data.weeklyPivotConfig?.location_count?.count_label || 'Count',
         enabled: data.weeklyPivotLayout?.location_count?.enabled !== false,
+        scope: data.weeklyPivotConfig?.location_count?.asset_scope || weeklyPivot.SOURCE_KEYS,
       },
     },
   };
@@ -138,6 +139,7 @@ async function getNessusSection(dashboardData) {
         hiddenColumns: data.weeklyPivotConfig?.nessus?.hidden_columns || [],
         labels: data.weeklyPivotConfig?.nessus?.column_labels || {},
         enabled: data.weeklyPivotLayout?.nessus?.enabled !== false,
+        scope: data.weeklyPivotConfig?.nessus?.asset_scope || weeklyPivot.SOURCE_KEYS,
       },
       applicable,
       notApplicable,
@@ -222,9 +224,9 @@ async function getPatchManagementSection(dashboardData) {
       locationPatching,
       departmentPatching,
       tableConfig: {
-        location:   { title: locTc.title,  hint: locTc.hint,  groupLabel: groupLabelOf(locTc), ...layoutOf('location_patching') },
-        department: { title: deptTc.title, hint: deptTc.hint, groupLabel: groupLabelOf(deptTc), ...layoutOf('department_patching') },
-        me: { title: meTc.title, hiddenColumns: meTc.hidden_columns || [], labels: meTc.column_labels || {}, ...layoutOf('me_compliance') },
+        location:   { title: locTc.title,  hint: locTc.hint,  groupLabel: groupLabelOf(locTc), scope: locTc.asset_scope || weeklyPivot.SOURCE_KEYS, ...layoutOf('location_patching') },
+        department: { title: deptTc.title, hint: deptTc.hint, groupLabel: groupLabelOf(deptTc), scope: deptTc.asset_scope || weeklyPivot.SOURCE_KEYS, ...layoutOf('department_patching') },
+        me: { title: meTc.title, hiddenColumns: meTc.hidden_columns || [], labels: meTc.column_labels || {}, scope: meTc.asset_scope || weeklyPivot.SOURCE_KEYS, ...layoutOf('me_compliance') },
       },
       meCompliance: {
         combinedYes, combinedDen, combinedPct: pct(combinedYes, combinedDen),
@@ -248,12 +250,15 @@ async function getMigrationSection() {
   };
 }
 
-async function buildAutoSections({ pivotOverride = null, skipMigration = false } = {}) {
+async function buildAutoSections({ pivotOverride = null, scopeOverride = null, skipMigration = false } = {}) {
   // dashboardController.summary() runs ~25 queries — fetch it exactly once
   // and share it across the three sections that need it, rather than each
   // triggering its own independent, redundant call. pivotOverride builds
   // them from an unsaved Table Settings draft (preview only).
-  const dashboardData = await callController(dashboardController.summary, pivotOverride ? { pivotConfigOverride: pivotOverride } : {});
+  const dashboardData = await callController(dashboardController.summary, {
+    ...(pivotOverride ? { pivotConfigOverride: pivotOverride } : {}),
+    ...(scopeOverride ? { pivotScopeOverride: scopeOverride } : {}),
+  });
   const [assetInventory, patchManagement, nessus, migration] = await Promise.all([
     getAssetInventorySection(dashboardData),
     getPatchManagementSection(dashboardData),

@@ -4,7 +4,18 @@ const scheduleSvc = require('../services/weeklyReportScheduleService');
 const scheduler = require('../services/weeklyReportScheduler');
 
 async function getCurrent(req, res, next) {
-  try { res.json(await svc.buildCurrentReport()); } catch (e) { next(e); }
+  try {
+    // Optional viewer scope per table: ?scopes={"nessus":["assets","ext_assets"]}.
+    // Display-only: never saved; the controller validates keys and values.
+    let scopes = null;
+    if (req.query.scopes) {
+      try {
+        const p = JSON.parse(String(req.query.scopes));
+        if (p && typeof p === 'object' && !Array.isArray(p)) scopes = p;
+      } catch { /* ignore a malformed value */ }
+    }
+    res.json(await svc.buildCurrentReport(scopes));
+  } catch (e) { next(e); }
 }
 
 async function listSnapshots(req, res, next) {

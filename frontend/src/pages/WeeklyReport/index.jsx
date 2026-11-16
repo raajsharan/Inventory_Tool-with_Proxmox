@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Card, Col, Row, Select, Typography, Empty, Spin, Table, Tag, Space, Statistic, Button, App,
@@ -17,8 +17,27 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { DASH_CSS } from '../../components/DashboardStatCard.jsx';
 import PivotSettingsPanel from './PivotSettings.jsx';
 import PivotBuilder from './PivotBuilder.jsx';
+import AssetScopePicker, { SCOPE_OPTIONS, isAllScope, scopeOrAll } from './AssetScope.jsx';
 
 const { Title, Text, Paragraph } = Typography;
+
+// Lets a viewer narrow a table to some inventories on the live report. `onChange`
+// is null for snapshots and previews, which are read-only.
+const ScopeContext = createContext({ onChange: null });
+
+function ScopeBar({ tableKey, scope }) {
+  const { onChange } = useContext(ScopeContext);
+  if (!onChange) {
+    if (isAllScope(scope)) return null;
+    const names = scopeOrAll(scope).map(k => SCOPE_OPTIONS.find(o => o.value === k)?.label || k).join(', ');
+    return <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Assets: {names}</Text>;
+  }
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <AssetScopePicker compact value={scope} onChange={v => onChange(tableKey, v)} />
+    </div>
+  );
+}
 
 const QUILL_MODULES = {
   toolbar: [
@@ -85,6 +104,7 @@ function AssetInventorySection({ data, onlyLocations = false }) {
       </>)}
       {(onlyLocations || data.locationTable?.enabled !== false) && (<>
       <Text underline strong style={{ display: 'block', marginTop: 12, marginBottom: 8 }}>{data.locationTable?.title || 'Location-wise endpoint count:'}</Text>
+      <ScopeBar tableKey="location_count" scope={data.locationTable?.scope} />
       <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="location"
@@ -133,6 +153,7 @@ function NessusSection({ data }) {
   ];
   return (
     <>
+      <ScopeBar tableKey="nessus" scope={data.tableConfig?.scope} />
       <div className="weekly-breakdown-card" style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="key"
@@ -238,6 +259,7 @@ function PatchManagementSection({ data, only = null }) {
         <Fragment key="location">
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.location?.title || 'Location-wise Auto/Manual patching status:'}</Text>
       {tc.location?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.location.hint}</Text>}
+      <ScopeBar tableKey="location_patching" scope={tc.location?.scope} />
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.locationPatching} groupLabel={tc.location?.groupLabel || 'Location'} />
       </Card>
@@ -247,6 +269,7 @@ function PatchManagementSection({ data, only = null }) {
         <Fragment key="department">
       <Text underline strong style={{ display: 'block', marginBottom: 8 }}>{tc.department?.title || 'Departments Patching Onboarding Status:'}</Text>
       {tc.department?.hint && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{tc.department.hint}</Text>}
+      <ScopeBar tableKey="department_patching" scope={tc.department?.scope} />
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ marginBottom: 20, width: 'fit-content', maxWidth: '100%' }}>
         <BreakdownTable breakdown={data.departmentPatching} groupLabel={tc.department?.groupLabel || 'Department'} />
       </Card>
@@ -260,6 +283,7 @@ function PatchManagementSection({ data, only = null }) {
         {pctText(data.meCompliance?.combinedYes, data.meCompliance?.combinedDen, data.meCompliance?.combinedPct)}
       </Paragraph>
       <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{data.meCompliance?.footnote}</Text>
+      <ScopeBar tableKey="me_compliance" scope={tc.me?.scope} />
       <Card size="small" className="weekly-breakdown-card" bodyStyle={{ padding: 0 }} style={{ width: 'fit-content', maxWidth: '100%' }}>
         <Table
           rowKey="bucket"
@@ -839,16 +863,27 @@ export default function WeeklyReport() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // Viewer's per-table asset scope on the live report: { table_key: [inventory keys] }.
+  const [scopes, setScopes] = useState({});
 
   const loadSnapshots = () => api.get('/weekly-report/snapshots').then(r => setSnapshots(r.data || [])).catch(() => setSnapshots([]));
 
-  const loadReport = (id) => {
-    setLoading(true);
-    const req = id === 'current' ? api.get('/weekly-report/current') : api.get(`/weekly-report/snapshots/${id}`);
+  // `silent` refreshes in place (no spinner) so the page does not jump when a scope changes.
+  const loadReport = (id, sc = scopes, silent = false) => {
+    if (!silent) setLoading(true);
+    const req = id === 'current'
+      ? api.get('/weekly-report/current', { params: Object.keys(sc).length ? { scopes: JSON.stringify(sc) } : {} })
+      : api.get(`/weekly-report/snapshots/${id}`);
     req
       .then(r => setReport(id === 'current' ? r.data : { reportDate: r.data.report_date, sections: r.data.sections }))
-      .catch(() => setReport(null))
+      .catch(() => { if (!silent) setReport(null); else message.error('Could not update the table'); })
       .finally(() => setLoading(false));
+  };
+
+  const changeScope = (tableKey, keys) => {
+    const next = { ...scopes, [tableKey]: keys };
+    setScopes(next);
+    loadReport('current', next, true);
   };
 
   useEffect(() => { loadSnapshots(); }, []);
@@ -890,7 +925,9 @@ export default function WeeklyReport() {
           )}
         </Space>
       </div>
-      <ReportPanel report={report} loading={loading} />
+      <ScopeContext.Provider value={{ onChange: selectedId === 'current' ? changeScope : null }}>
+        <ReportPanel report={report} loading={loading} />
+      </ScopeContext.Provider>
     </div>
   );
 
@@ -912,7 +949,7 @@ export default function WeeklyReport() {
           {
             key: 'table-settings',
             label: <span><SettingOutlined /> Table Settings</span>,
-            children: <PivotSettingsPanel renderPreview={renderTablePreview} onSaved={() => { setSelectedId('current'); loadReport('current'); }} />,
+            children: <PivotSettingsPanel renderPreview={renderTablePreview} onSaved={() => { setScopes({}); setSelectedId('current'); loadReport('current', {}); }} />,
           },
           ...(isAdmin ? [{
             key: 'webhook',

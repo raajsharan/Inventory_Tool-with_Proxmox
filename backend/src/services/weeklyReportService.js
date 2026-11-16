@@ -26,9 +26,9 @@ function todayLocalDate() {
 // sections, seeded/migrated by ensureSchema.js) — merging by that single
 // number instead of a hardcoded key list means a row a user adds or removes
 // via the Manage Inputs tab is reflected here with no code change.
-async function buildCurrentReport() {
+async function buildCurrentReport(scopeOverride = null) {
   const [auto, manualRows] = await Promise.all([
-    autoSvc.buildAutoSections(),
+    autoSvc.buildAutoSections({ scopeOverride }),
     manualSvc.listManualSections(),
   ]);
 

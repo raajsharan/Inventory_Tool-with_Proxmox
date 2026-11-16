@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext.jsx';
+import AssetScopePicker from './AssetScope.jsx';
 
 const { Text } = Typography;
 
@@ -121,6 +122,9 @@ function RulesEditor({ reg, rules, cols, sources, onChange, onReset, disabled })
           />
         </Form.Item>
       )}
+      <Form.Item label="Asset scope" extra="Which inventories this table counts. Report viewers can narrow it further on the Report tab.">
+        <AssetScopePicker label="" value={rules.asset_scope} onChange={v => onChange('asset_scope', v)} disabled={disabled} />
+      </Form.Item>
       {sup.mode && (
         <Form.Item label="Which assets are counted">
           <Radio.Group value={rules.mode} onChange={e => onChange('mode', e.target.value)}>

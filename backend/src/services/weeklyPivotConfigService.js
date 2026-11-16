@@ -24,6 +24,15 @@ const SOURCES = [
 ];
 const SOURCE_KEYS = SOURCES.map(s => s.key);
 
+// Asset scope: which inventories (Assets / Ext. Assets / Beijing Assets /
+// Physical Assets) a table may count. Every table has one; the default is all
+// four, so numbers are unchanged until an admin (or a viewer) narrows it.
+// Unknown keys are dropped and an empty/invalid list falls back to all four.
+function sanitizeScope(v) {
+  const keys = (Array.isArray(v) ? v : []).filter((k, i, a) => SOURCE_KEYS.includes(k) && a.indexOf(k) === i);
+  return keys.length ? SOURCE_KEYS.filter(k => keys.includes(k)) : [...SOURCE_KEYS];
+}
+
 // Whitelist — group_by is interpolated into SQL, never taken from input as-is.
 const GROUP_FIELDS = [
   { key: 'location',      label: 'Location' },
@@ -156,6 +165,8 @@ const DEFAULTS = {
   },
 };
 
+for (const d of Object.values(DEFAULTS)) d.asset_scope = [...SOURCE_KEYS];
+
 // What the settings tab renders for each table. `supports` flags decide which
 // editor sections appear, so a new table only needs an entry here.
 const TABLE_REGISTRY = [
@@ -245,6 +256,7 @@ function sanitizeTable(key, t = {}) {
         hint: str(t.hint, 600),
         group_by: groupBy,
         mode,
+        asset_scope: sanitizeScope(t.asset_scope),
         sources: sanitizeSources(t.sources),
         hidden_columns: nullableList(t.hidden_columns, metricList),
         column_labels: sanitizeLabels(t.column_labels, METRIC_KEYS),
@@ -265,6 +277,7 @@ function sanitizeTable(key, t = {}) {
         title: str(t.title) || d.title,
         group_by: groupBy,
         mode,
+        asset_scope: sanitizeScope(t.asset_scope),
         sources: sanitizeSources(t.sources),
         group_label: str(t.group_label, 60) || d.group_label,
         count_label: str(t.count_label, 60) || d.count_label,
@@ -275,6 +288,7 @@ function sanitizeTable(key, t = {}) {
       return {
         title: str(t.title) || d.title,
         footnote: str(t.footnote, 600),
+        asset_scope: sanitizeScope(t.asset_scope),
         msl_exclude_buckets: nullableList(t.msl_exclude_buckets, (x) => strList(x).filter(b => ME_BUCKETS.includes(b))),
         ext_exclude_buckets: nullableList(t.ext_exclude_buckets, (x) => strList(x).filter(b => ME_BUCKETS.includes(b))),
         hidden_columns: strList(t.hidden_columns).filter(k => ME_COLUMNS.some(c => c.key === k)),
@@ -283,6 +297,7 @@ function sanitizeTable(key, t = {}) {
     case 'nessus':
       return {
         title: str(t.title) || d.title,
+        asset_scope: sanitizeScope(t.asset_scope),
         os_windows: strList(t.os_windows).length ? strList(t.os_windows) : d.os_windows,
         os_linux: strList(t.os_linux).length ? strList(t.os_linux) : d.os_linux,
         os_not_applicable: strList(t.os_not_applicable),
@@ -357,9 +372,10 @@ function buildFlaggedCte(tc) {
   const ilikeAny = (col, arr) => `${col} ILIKE ANY(${p(arr)}::text[])`;
 
   const selects = [];
+  const scope = sanitizeScope(tc.asset_scope);
   for (const src of SOURCES) {
     const c = tc.sources?.[src.key];
-    if (!c || !c.enabled) continue;
+    if (!c || !c.enabled || !scope.includes(src.key)) continue;
     const physical = src.key === 'physical_esxi_servers';
     const g = GROUP_KEYS.includes(tc.group_by) ? tc.group_by : 'location';
     const grpExpr = physical && PHYSICAL_NULL_FIELDS.has(g) ? 'NULL::text' : g;
@@ -458,7 +474,7 @@ function buildCountPivot(tc) {
 const likeContains = (arr) => arr.map(x => `%${x}%`);
 
 module.exports = {
-  getConfig, saveConfig, getMeta, sanitizeAll, DEFAULTS, TABLE_KEYS, METRIC_KEYS, PATCHING_METRICS,
+  getConfig, saveConfig, getMeta, sanitizeAll, sanitizeScope, SOURCE_KEYS, DEFAULTS, TABLE_KEYS, METRIC_KEYS, PATCHING_METRICS,
   buildPatchingPivot, buildCountPivot, likeContains,
   ME_COLUMNS, NESSUS_COLUMNS,
 };
