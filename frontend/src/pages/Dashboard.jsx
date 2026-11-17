@@ -1584,7 +1584,10 @@ function WeeklyReportTab({ data, isDark, compCfg = {} }) {
   // its own value inherits the Compliance Config one (hidden columns, excluded
   // groups, percentage exclusions), so nothing changes until an admin edits it.
   const PIVOT_GROUP_LABELS = { location: 'Location', department: 'Department', os_type: 'OS Type', asset_type: 'Asset Type',
-    server_status: 'Server Status', patching_type: 'Patching Type', eol_status: 'EOL Status' };
+    server_status: 'Server Status', patching_type: 'Patching Type', eol_status: 'EOL Status',
+    os_version: 'OS Version', business_purpose: 'Business Purpose', server_patch_type: 'Server Patch Type',
+    patching_schedule: 'Patching Schedule', ome_status: 'OME Status', idrac_enabled: 'iDRAC Enabled',
+    manage_engine_installed: 'ManageEngine Installed', tenable_installed: 'Tenable Installed', team: 'Team', tier: 'Tier' };
   const metricTitle = (tc, k) => (tc.column_labels?.[k]) || BREAKDOWN_METRICS.find(m => m.key === k)?.title || k;
   const describeTable = (tc, ruleHint) => {
     const f = tc.pct?.mode === 'formula' && tc.pct.num?.length && tc.pct.den?.length ? tc.pct : null;

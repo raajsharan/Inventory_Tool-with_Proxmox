@@ -42,10 +42,21 @@ const GROUP_FIELDS = [
   { key: 'server_status', label: 'Server Status' },
   { key: 'patching_type', label: 'Patching Type' },
   { key: 'eol_status',    label: 'EOL Status' },
+  { key: 'os_version',    label: 'OS Version' },
+  { key: 'business_purpose', label: 'Business Purpose' },
+  { key: 'server_patch_type', label: 'Server Patch Type' },
+  { key: 'patching_schedule', label: 'Patching Schedule' },
+  { key: 'ome_status',    label: 'OME Status' },
+  { key: 'idrac_enabled', label: 'iDRAC Enabled' },
+  { key: 'manage_engine_installed', label: 'ManageEngine Installed' },
+  { key: 'tenable_installed', label: 'Tenable Installed' },
+  { key: 'team',          label: 'Team' },
+  { key: 'tier',          label: 'Tier' },
 ];
 const GROUP_KEYS = GROUP_FIELDS.map(g => g.key);
-// physical_esxi_servers has no patching/EOL columns.
-const PHYSICAL_NULL_FIELDS = new Set(['patching_type', 'eol_status']);
+// physical_esxi_servers has no patching/EOL/agent columns.
+const PHYSICAL_NULL_FIELDS = new Set(['patching_type', 'eol_status', 'server_patch_type', 'patching_schedule',
+  'manage_engine_installed', 'tenable_installed']);
 
 const PATCHING_METRICS = [
   { key: 'auto_patching',   label: 'Auto' },
@@ -378,7 +389,7 @@ function buildFlaggedCte(tc) {
     if (!c || !c.enabled || !scope.includes(src.key)) continue;
     const physical = src.key === 'physical_esxi_servers';
     const g = GROUP_KEYS.includes(tc.group_by) ? tc.group_by : 'location';
-    const grpExpr = physical && PHYSICAL_NULL_FIELDS.has(g) ? 'NULL::text' : g;
+    const grpExpr = physical && PHYSICAL_NULL_FIELDS.has(g) ? 'NULL::text' : `${g}::text`;
     const patching = physical ? 'NULL::text' : 'patching_type';
     const eol = physical ? 'NULL::text' : 'eol_status';
 
