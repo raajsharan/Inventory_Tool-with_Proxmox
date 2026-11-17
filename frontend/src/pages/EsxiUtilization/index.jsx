@@ -67,6 +67,7 @@ export default function EsxiUtilization() {
 
   const allHosts = useMemo(() => (data?.hosts || []).filter(h => h.hasStats), [data]);
   const withoutStats = (data?.hosts || []).length - allHosts.length;
+  const unmapped = allHosts.filter(h => !h.mapped).length;
   const locations = useMemo(() => [...new Set(allHosts.map(h => h.location))].sort(), [allHosts]);
   const hosts = useMemo(() => allHosts.filter(h => loc === 'all' || h.location === loc), [allHosts, loc]);
 
@@ -99,7 +100,8 @@ export default function EsxiUtilization() {
   const depts = useMemo(() => deptNames.map(n => {
     const list = hosts.filter(h => h.department === n);
     const t = aggregate(list);
-    return { name: n, hosts: list.length, vms: t.vms, t };
+    const owners = [...new Set(list.map(h => h.owner).filter(Boolean))].sort();
+    return { name: n, hosts: list.length, vms: t.vms, t, owners };
   }), [deptNames, hosts]);
 
   const rows = useMemo(() => {
@@ -109,9 +111,9 @@ export default function EsxiUtilization() {
   }, [hosts, dept, sortKey]);
 
   const exportCsv = () => {
-    const head = ['Host', 'IP', 'vCenter', 'Department', 'Location', 'VMs', 'CPU cores', 'CPU used %', 'RAM GB', 'RAM used %', 'Storage TB', 'Storage used %'];
+    const head = ['Host', 'IP', 'vCenter', 'Model', 'Department', 'Owner', 'Location', 'VMs', 'CPU cores', 'CPU used %', 'RAM GB', 'RAM used %', 'Storage TB', 'Storage used %'];
     const esc = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@]/.test(s)) s = `'${s}`; return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const body = rows.map(h => [h.name, h.ip, h.vcenter, h.department, h.location, h.vms, h.cpuCores, h.cpuPct, h.ramGb, h.ramPct, h.storageTb, h.storagePct]);
+    const body = rows.map(h => [h.name, h.ip, h.vcenter || 'Standalone ESXi', h.model, h.department, h.owner, h.location, h.vms, h.cpuCores, h.cpuPct, h.ramGb, h.ramPct, h.storageTb, h.storagePct]);
     const csv = [head, ...body].map(r => r.map(esc).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
@@ -172,7 +174,12 @@ export default function EsxiUtilization() {
 
   const columns = [
     { title: sortBtn('name', 'Host'), dataIndex: 'name', render: (v, h) => (<div><div style={{ fontWeight: 600 }}>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{h.ip}</Text></div>) },
-    { title: 'Department', dataIndex: 'department' },
+    { title: 'Model', dataIndex: 'model', render: v => v || <Text type="secondary">—</Text> },
+    {
+      title: 'Department', dataIndex: 'department',
+      render: (v, h) => (h.mapped ? v : <Tag>Not in Physical &amp; ESXi</Tag>),
+    },
+    { title: 'Owner', dataIndex: 'owner', render: v => v || <Text type="secondary">—</Text> },
     { title: 'Location', dataIndex: 'location' },
     { title: sortBtn('cpu', 'CPU'), key: 'cpu', render: (_, h) => cellFor(h, 'cpu') },
     { title: sortBtn('ram', 'RAM'), key: 'ram', render: (_, h) => cellFor(h, 'ram') },
@@ -199,6 +206,11 @@ export default function EsxiUtilization() {
       {withoutStats > 0 && (
         <Alert type="info" showIcon
           message={`${withoutStats} ESXi host${withoutStats === 1 ? ' has' : 's have'} no usage data yet and ${withoutStats === 1 ? 'is' : 'are'} not counted.`} />
+      )}
+
+      {unmapped > 0 && (
+        <Alert type="warning" showIcon
+          message={`${unmapped} of ${allHosts.length} ESXi hosts are not in Physical & ESXi Servers (matched by IP or hostname), so they are listed under Unassigned with no owner.`} />
       )}
 
       <div style={{ ...card, padding: '14px 16px', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16 }}>
@@ -275,6 +287,9 @@ export default function EsxiUtilization() {
                   <Text strong style={{ fontSize: 15 }}>{d.name}</Text>
                   <Text type="secondary" style={{ fontSize: 12 }}>{d.hosts} hosts · {d.vms} VMs</Text>
                 </div>
+                <Text type="secondary" style={{ fontSize: 12, marginTop: -8 }}>
+                  Owner{d.owners.length === 1 ? '' : 's'}: {d.owners.length ? d.owners.join(', ') : '—'}
+                </Text>
                 {metricsOf(d.t).map(m => (
                   <div key={m.key} style={{ display: 'flex', flexDirection: 'column', gap: 5, width: '100%' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -344,11 +359,12 @@ export default function EsxiUtilization() {
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>Each cell: used % / free %. Click a column heading to sort by highest usage.</Text>
         </div>
-        <Table size="small" rowKey={(h) => `${h.vcenter}|${h.name}|${h.ip}`} columns={columns} dataSource={rows}
+        <Table size="small" rowKey={(h) => `${h.vcenter || 'standalone'}|${h.name}|${h.ip}`} columns={columns} dataSource={rows}
           pagination={rows.length > 25 ? { pageSize: 25, showSizeChanger: false } : false} scroll={{ x: 'max-content' }} />
         <div style={{ padding: '10px 4px 12px', fontSize: 11, color: token.colorTextSecondary }}>
-          Capacity and usage come from the latest VMware discovery. CPU is shown in cores (usage % × core count). Department and Location are taken from the matching
-          Physical &amp; ESXi Server record (by IP); hosts without one appear under <Tag style={{ margin: 0 }}>Unassigned</Tag>. Decommissioned servers are ignored.
+          Capacity and usage are the figures on VMware Discovery → Hosts &amp; Credentials (standalone ESXi connections and the hosts managed by each vCenter). CPU is shown in cores
+          (usage % × core count). Department, Owner and Location come from the matching Physical &amp; ESXi Server record (by IP, then hostname); hosts without one appear under
+          <Tag style={{ margin: '0 4px' }}>Unassigned</Tag>. Decommissioned servers are ignored.
         </div>
       </div>
     </Space>
