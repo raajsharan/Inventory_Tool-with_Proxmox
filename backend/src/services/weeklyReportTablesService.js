@@ -59,7 +59,8 @@ const FIELD_KEYS = new Set(FIELDS.map(f => f.key));
 const FORMATS = ['text', 'tag', 'date', 'boolean'];
 // Not offered to end users as pivot dimensions (too many distinct values).
 const HIGH_CARDINALITY = new Set(['vm_name', 'os_hostname', 'ip_address', 'asset_tag', 'serial_number', 'assigned_user', 'hosted_ip']);
-const PHYSICAL_NULL = new Set(['patching_type', 'eol_status', 'manage_engine_installed', 'tenable_installed']);
+const PHYSICAL_NULL = new Set(['patching_type', 'eol_status', 'manage_engine_installed', 'tenable_installed',
+  'server_patch_type', 'patching_schedule']);
 const ALWAYS_EXCLUDED = ['na', 'not in scope'];
 
 const LIMITS = { tables: 20, columns: 30, minWidth: 60, maxWidth: 600, label: 60 };
