@@ -433,7 +433,56 @@ function MigrationSection({ data }) {
   );
 }
 
+// Pivots saved in Pivot & Export (shared) and switched on for the Report.
+function CustomPivotsSection({ data }) {
+  const tables = data?.tables || [];
+  if (!tables.length) return <Text type="secondary" italic>No saved pivot tables are switched on.</Text>;
+  const pct1 = (n, d) => `${((n / (d || 1)) * 100).toFixed(1)}%`;
+  return (
+    <Space direction="vertical" size={20} style={{ width: '100%' }}>
+      {tables.map((t) => {
+        const cell = (n, rowTotal) => {
+          if (!n) return '';
+          if (t.value === 'pct') return pct1(n, t.grand);
+          if (t.value === 'rowpct') return pct1(n, rowTotal);
+          return n.toLocaleString();
+        };
+        const hasCols = !!t.colLabel;
+        const columns = [
+          { title: t.rowLabel, dataIndex: 'k', render: v => <strong>{v}</strong> },
+          ...(hasCols ? t.colVals.map(b => ({
+            title: b, key: b, align: 'center', render: (_, r) => cell(r.cells[b], r.total),
+          })) : []),
+          { title: 'Total', dataIndex: 'total', align: 'center', render: v => <strong>{v.toLocaleString()}</strong> },
+          ...(t.pctLabel ? [{ title: 'Percentage', dataIndex: 'pct', align: 'center', render: v => <strong>{v}</strong> }] : []),
+        ];
+        return (
+          <div key={t.title}>
+            <Text strong style={{ display: 'block', marginBottom: 6 }}>{t.title}</Text>
+            <Table
+              size="small" rowKey="k" pagination={false} columns={columns} dataSource={t.rows}
+              scroll={{ x: 'max-content' }}
+              summary={() => (
+                <Table.Summary.Row style={{ fontWeight: 700 }}>
+                  <Table.Summary.Cell index={0}>Total</Table.Summary.Cell>
+                  {hasCols && t.colVals.map((b, i) => (
+                    <Table.Summary.Cell key={b} index={i + 1} align="center">{(t.colTot[b] || 0).toLocaleString()}</Table.Summary.Cell>
+                  ))}
+                  <Table.Summary.Cell index={t.colVals.length + 1} align="center">{t.grand.toLocaleString()}</Table.Summary.Cell>
+                  {t.pctLabel && <Table.Summary.Cell index={t.colVals.length + 2} align="center">{t.pctTotal}</Table.Summary.Cell>}
+                </Table.Summary.Row>
+              )}
+            />
+            {t.pctLabel && <Text type="secondary" style={{ fontSize: 12 }}>{t.pctLabel}</Text>}
+          </div>
+        );
+      })}
+    </Space>
+  );
+}
+
 const AUTO_RENDERERS = {
+  custom_pivots: CustomPivotsSection,
   asset_inventory: AssetInventorySection,
   nessus_agent: NessusSection,
   patch_management: PatchManagementSection,

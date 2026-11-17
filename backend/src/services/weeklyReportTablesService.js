@@ -124,6 +124,8 @@ function sanitizeColumns(cols, { fixedKeys } = {}) {
     .map((c, i) => ({ ...c, order: i + 1 }));
 }
 
+const isCustomKey = (k) => /^pv_/.test(String(k || ''));
+
 function sanitizeTable(t, prev) {
   const key = str(t.table_key, 64).replace(/[^a-z0-9_]/gi, '_').toLowerCase();
   if (!key) throw new Error('table_key is required');
@@ -135,6 +137,14 @@ function sanitizeTable(t, prev) {
     enabled: t.enabled !== false,
     sort_order: Number.isFinite(Number(t.sort_order)) ? Number(t.sort_order) : 0,
   };
+  // Saved pivot tables (created in Pivot & Export) are shared. Table Settings may
+  // retitle, reorder or hide them, but never rewrites their pivot definition, so
+  // a stale copy in an admin's browser cannot overwrite someone else's edit.
+  if (isCustomKey(key) || cfg.kind === 'custom_pivot') {
+    const keep = prev?.config?.kind === 'custom_pivot' ? prev.config : null;
+    if (!keep) return null;
+    return { ...base, config: keep };
+  }
   if (builtin) {
     // Rules go through the engine's own sanitizer; columns can only be the
     // table's fixed columns, and visible/label feed back into the rules.
@@ -182,7 +192,7 @@ function sanitizeOptions(o = {}) {
 // First read creates the rows: built-in tables are seeded from the legacy
 // weekly_pivot_config row when one exists, so saved settings carry over.
 async function seedIfEmpty() {
-  const { rows } = await db.query('SELECT COUNT(*)::int AS n FROM weekly_report_tables');
+  const { rows } = await db.query("SELECT COUNT(*)::int AS n FROM weekly_report_tables WHERE table_key NOT LIKE 'pv\\_%'");
   if (rows[0].n > 0) return;
   let legacy = null;
   try {
@@ -232,13 +242,16 @@ function getMeta() {
 
 async function saveAll({ tables, options }, userId) {
   if (!Array.isArray(tables)) throw Object.assign(new Error('tables array is required'), { status: 400 });
-  if (tables.length > LIMITS.tables) {
+  if (tables.filter(t => !isCustomKey(t?.table_key)).length > LIMITS.tables) {
     throw Object.assign(new Error(`At most ${LIMITS.tables} tables`), { status: 400 });
   }
   const existing = Object.fromEntries((await listTables()).map(r => [r.table_key, r]));
   const clean = [];
   for (const [i, t] of tables.entries()) {
-    try { clean.push({ ...sanitizeTable({ ...t, sort_order: i + 1 }, existing[t?.table_key]) }); }
+    try {
+      const c = sanitizeTable({ ...t, sort_order: i + 1 }, existing[t?.table_key]);
+      if (c) clean.push({ ...c });
+    }
     catch (e) { throw Object.assign(e, { status: 400 }); }
   }
   const keys = clean.map(t => t.table_key);
@@ -251,7 +264,8 @@ async function saveAll({ tables, options }, userId) {
   const run = client ? client.query.bind(client) : db.query.bind(db);
   try {
     if (client) await run('BEGIN');
-    await run('DELETE FROM weekly_report_tables WHERE NOT (table_key = ANY($1::text[]))', [keys]);
+    // Saved pivots are removed from Pivot & Export, never implicitly here.
+    await run("DELETE FROM weekly_report_tables WHERE NOT (table_key = ANY($1::text[])) AND table_key NOT LIKE 'pv\\_%'", [keys]);
     for (const t of clean) {
       await run(
         `INSERT INTO weekly_report_tables (table_key, title, enabled, sort_order, config, updated_by, updated_at)
@@ -471,7 +485,10 @@ async function exportXlsx(args) {
   return wb.xlsx.writeBuffer();
 }
 
-// ── personal views ─────────────────────────────────────────────────────────
+// ── shared saved pivot tables ──────────────────────────────────────────────
+// Saved in Pivot & Export, stored as weekly_report_tables rows (kind
+// 'custom_pivot') so every signed-in user sees the same list, the Report page
+// can show them, and Table Settings lists them next to the built-in tables.
 const cleanView = (v = {}) => ({
   rows: FIELD_KEYS.has(v.rows) ? v.rows : null,
   cols: FIELD_KEYS.has(v.cols) ? v.cols : null,
@@ -480,22 +497,89 @@ const cleanView = (v = {}) => ({
   filters: cleanFilters(v.filters),
   pct: cleanPct(v.pct, null) || { num: [], den: [] },
 });
-const listViews = async (userId) =>
-  (await db.query('SELECT id, name, view_config FROM weekly_report_views WHERE user_id = $1 ORDER BY name', [userId])).rows;
-async function saveView(userId, name, view) {
+const viewRow = (r) => ({
+  id: r.table_key, name: r.title, show_on_report: r.enabled,
+  view_config: cleanView(r.config), updated_at: r.updated_at,
+});
+const CUSTOM_WHERE = "config->>'kind' = 'custom_pivot'";
+
+async function listViews() {
+  await seedIfEmpty();
+  const { rows } = await db.query(`SELECT * FROM weekly_report_tables WHERE ${CUSTOM_WHERE} ORDER BY sort_order, title`);
+  return rows.map(viewRow);
+}
+async function saveView(userId, name, view, showOnReport) {
   const n = str(name, 80);
   if (!n) throw Object.assign(new Error('Name is required'), { status: 400 });
+  const v = cleanView(view);
+  if (!v.rows) throw Object.assign(new Error('Choose a Rows field first'), { status: 400 });
+  const config = JSON.stringify({ kind: 'custom_pivot', ...v });
+  const found = (await db.query(
+    `SELECT table_key FROM weekly_report_tables WHERE ${CUSTOM_WHERE} AND LOWER(title) = LOWER($1)`, [n])).rows[0];
+  if (found) {
+    const { rows } = await db.query(
+      `UPDATE weekly_report_tables SET title = $2, config = $3, enabled = COALESCE($4, enabled),
+              updated_by = $5, updated_at = NOW() WHERE table_key = $1 RETURNING *`,
+      [found.table_key, n, config, typeof showOnReport === 'boolean' ? showOnReport : null, userId || null]);
+    return viewRow(rows[0]);
+  }
+  const key = `pv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const { rows } = await db.query(
-    `INSERT INTO weekly_report_views (user_id, name, view_config) VALUES ($1,$2,$3)
-     ON CONFLICT (user_id, name) DO UPDATE SET view_config = EXCLUDED.view_config
-     RETURNING id, name, view_config`, [userId, n, JSON.stringify(cleanView(view))]);
-  return rows[0];
+    `INSERT INTO weekly_report_tables (table_key, title, enabled, sort_order, config, updated_by, updated_at)
+     VALUES ($1,$2,$3,(SELECT COALESCE(MAX(sort_order),0)+1 FROM weekly_report_tables),$4,$5,NOW()) RETURNING *`,
+    [key, n, showOnReport !== false, config, userId || null]);
+  return viewRow(rows[0]);
 }
 const deleteView = async (userId, id) =>
-  (await db.query('DELETE FROM weekly_report_views WHERE id = $1 AND user_id = $2', [Number(id) || 0, userId])).rowCount > 0;
+  (await db.query(`DELETE FROM weekly_report_tables WHERE table_key = $1 AND ${CUSTOM_WHERE}`, [String(id)])).rowCount > 0;
+async function setViewVisibility(userId, id, show) {
+  const { rows } = await db.query(
+    `UPDATE weekly_report_tables SET enabled = $2, updated_by = $3, updated_at = NOW()
+      WHERE table_key = $1 AND ${CUSTOM_WHERE} RETURNING *`, [String(id), !!show, userId || null]);
+  return rows[0] ? viewRow(rows[0]) : null;
+}
+
+// One computed pivot, shaped for the Report page (and snapshots).
+async function pivotTableData(title, view) {
+  const v = cleanView(view);
+  if (!v.rows) return null;
+  const data = await fetchRows({ fields: [v.rows, ...(v.cols ? [v.cols] : [])], includeDecom: v.includeDecom, filters: v.filters });
+  const g = pivotGrid(data, v.rows, v.cols || null);
+  const pc = v.cols ? cleanPct(v.pct, g.colVals) : null;
+  const pctOf = (cells) => {
+    const sum = (cols) => cols.reduce((t, c) => t + (cells[c] || 0), 0);
+    const d = sum(pc.den);
+    return d ? `${((sum(pc.num) / d) * 100).toFixed(2)}%` : '';
+  };
+  const label = (k) => FIELDS.find(f => f.key === k)?.label || k;
+  return {
+    title, rowLabel: label(v.rows), colLabel: v.cols ? label(v.cols) : '', value: v.value,
+    colVals: g.colVals, grand: g.grand, colTot: g.colTot,
+    pctLabel: pc ? `Percentage = (${pc.num.join(' + ')}) ÷ (${pc.den.join(' + ')})` : '',
+    pctTotal: pc ? pctOf(g.colTot) : '',
+    rows: g.rowVals.slice(0, 300).map(k => {
+      const cells = Object.fromEntries(g.colVals.map(b => [b, g.grid[`${k}||${b}`] || 0]));
+      return { k, cells, total: g.rowTot[k], pct: pc ? pctOf(cells) : '' };
+    }),
+  };
+}
+
+// Report-page section: every saved pivot switched on, in Table Settings order.
+async function getCustomPivotSection() {
+  await seedIfEmpty();
+  const { rows } = await db.query(
+    `SELECT * FROM weekly_report_tables WHERE ${CUSTOM_WHERE} AND enabled ORDER BY sort_order, title`);
+  const tables = [];
+  for (const r of rows) {
+    try { const t = await pivotTableData(r.title, r.config); if (t) tables.push(t); }
+    catch (e) { console.warn('[weekly-report] saved pivot failed:', r.title, e.message); }
+  }
+  if (!tables.length) return null;
+  return { section_key: 'custom_pivots', title: 'Saved Pivot Tables', kind: 'auto', sort_order: 105, data: { tables } };
+}
 
 module.exports = {
   getAll, getMeta, saveAll, getEngineConfig, getOptions,
   getDetailTables, previewDetail, getPivotData, exportCsv, exportXlsx,
-  listViews, saveView, deleteView,
+  listViews, saveView, deleteView, setViewVisibility, getCustomPivotSection,
 };

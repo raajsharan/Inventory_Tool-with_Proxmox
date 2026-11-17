@@ -1083,6 +1083,20 @@ const STATEMENTS = [
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (user_id, name)
    )`,
+  // One-time: personal saved views become shared saved pivot tables (hidden from
+  // the Report until someone switches them on). The marker table stops a re-run
+  // from bringing back views that were later deleted.
+  `CREATE TABLE IF NOT EXISTS weekly_report_views_migrated (done BOOLEAN)`,
+  `INSERT INTO weekly_report_tables (table_key, title, enabled, sort_order, config)
+     SELECT 'pv_mig' || v.id, v.name, FALSE, 1000 + v.id,
+            jsonb_build_object('kind','custom_pivot') || v.view_config
+       FROM (SELECT DISTINCT ON (LOWER(name)) id, name, view_config
+               FROM weekly_report_views ORDER BY LOWER(name), id DESC) v
+      WHERE NOT EXISTS (SELECT 1 FROM weekly_report_views_migrated)
+        AND NOT EXISTS (SELECT 1 FROM weekly_report_tables t
+                         WHERE t.config->>'kind' = 'custom_pivot' AND LOWER(t.title) = LOWER(v.name))
+     ON CONFLICT (table_key) DO NOTHING`,
+  `INSERT INTO weekly_report_views_migrated SELECT TRUE WHERE NOT EXISTS (SELECT 1 FROM weekly_report_views_migrated)`,
 
   // Custom Topology Builder — manually designed diagrams (free-form nodes +
   // edges, independent of any discovery data). nodes/edges store React

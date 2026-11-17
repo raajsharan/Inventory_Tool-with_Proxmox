@@ -265,9 +265,16 @@ async function buildAutoSections({ pivotOverride = null, scopeOverride = null, s
     getNessusSection(dashboardData),
     skipMigration ? Promise.resolve(null) : getMigrationSection(),
   ]);
+  // Pivots saved in Pivot & Export (shared) follow Nessus; omitted when none are switched on.
+  let customPivots = null;
+  try { customPivots = await require('./weeklyReportTablesService').getCustomPivotSection(); }
+  catch (e) { console.warn('[weekly-report] saved pivots skipped:', e.message); }
   // Screenshot row order: Asset Inventory, Patch Management, Nessus, then
   // Migration further down alongside the manual sections.
-  return skipMigration ? { assetInventory, patchManagement, nessus } : { assetInventory, patchManagement, nessus, migration };
+  const out = { assetInventory, patchManagement, nessus };
+  if (customPivots) out.customPivots = customPivots;
+  if (!skipMigration) out.migration = migration;
+  return out;
 }
 
 module.exports = {

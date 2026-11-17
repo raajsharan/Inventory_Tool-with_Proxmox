@@ -426,6 +426,7 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
   if (loading || !meta || !tables || !row) return <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>;
 
   const isPivot = row.config.kind === 'pivot';
+  const isCustom = row.config.kind === 'custom_pivot';
   const reg = isPivot ? meta.builtin.find(t => t.key === row.table_key) : null;
   const rules = row.config.rules;
   const setRule = (path, value) => patchRow(row.table_key, t => {
@@ -434,6 +435,7 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
   });
   const setCfg = (p) => patchRow(row.table_key, t => ({ ...t, config: { ...t.config, ...p } }));
 
+  const fieldLabel = (k) => meta.fields.find(f => f.key === k)?.label || k || '—';
   const previewNode = !preview ? null : isPivot
     ? (renderPreview ? renderPreview(row.table_key, preview.sections) : null)
     : <DetailPreview detail={preview.detail?.find(d => d.key === row.table_key)} />;
@@ -469,7 +471,7 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
                   </Space>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{t.config.kind === 'pivot' ? 'Built-in' : 'Detail list'}</Text>
+                    <Text type="secondary" style={{ fontSize: 11 }}>{t.config.kind === 'pivot' ? 'Built-in' : t.config.kind === 'custom_pivot' ? 'Saved pivot (shared)' : 'Detail list'}</Text>
                   </div>
                   <Switch size="small" checked={t.enabled} disabled={ro}
                     onClick={(v, e) => { e.stopPropagation(); patchRow(t.table_key, x => ({ ...x, enabled: v })); }} />
@@ -486,14 +488,14 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
           <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Card
               size="small" title={row.title}
-              extra={!ro && !isPivot && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeDetail(row.table_key)}>Delete</Button>}
+              extra={!ro && !isPivot && !isCustom && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeDetail(row.table_key)}>Delete</Button>}
             >
               <Form layout="vertical" size="small" disabled={ro}>
                 <Form.Item label="Table title">
                   <Input maxLength={120} value={isPivot ? rules.title : row.title}
                     onChange={e => (isPivot ? setRule('title', e.target.value) : patchRow(row.table_key, t => ({ ...t, title: e.target.value })))} />
                 </Form.Item>
-                {!isPivot && (
+                {!isPivot && !isCustom && (
                   <Space wrap align="start">
                     <Form.Item label="Data source">
                       <Select style={{ width: 200 }} value={row.config.source} options={meta.sources.map(s => ({ value: s.key, label: s.label }))}
@@ -512,9 +514,28 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
               </Form>
             </Card>
 
-            <Card size="small" title="Columns">
-              <ColumnEditor row={row} meta={meta} disabled={ro} onChange={(columns) => setCfg({ columns })} />
-            </Card>
+            {isCustom && (
+              <Card size="small" title="Saved pivot (shared with everyone)">
+                <Space direction="vertical" size={4}>
+                  <Text>Rows: <strong>{fieldLabel(row.config.rows)}</strong>
+                    {row.config.cols ? <> &nbsp;·&nbsp; Columns: <strong>{fieldLabel(row.config.cols)}</strong></> : null}
+                    &nbsp;·&nbsp; Values: <strong>{{ count: 'Count', pct: '% of all', rowpct: '% of row' }[row.config.value] || 'Count'}</strong></Text>
+                  {(row.config.filters || []).map(f => (
+                    <Text key={f.field} type="secondary">Filter {fieldLabel(f.field)}: {(f.values || []).join(', ')}</Text>
+                  ))}
+                  <Text type="secondary">
+                    Title, order and the switch decide how it appears on the Report. To change what it counts,
+                    open Pivot &amp; Export, load it, adjust and press "Update this table" — anyone with access to this page can do that.
+                  </Text>
+                </Space>
+              </Card>
+            )}
+
+            {!isCustom && (
+              <Card size="small" title="Columns">
+                <ColumnEditor row={row} meta={meta} disabled={ro} onChange={(columns) => setCfg({ columns })} />
+              </Card>
+            )}
 
             {isPivot && (
               <Card size="small" title="Calculation rules">
@@ -530,7 +551,7 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
                 onChange={(o) => { setOptions(o); touch(); }} />
             </Card>
 
-            {!ro && (
+            {!ro && !isCustom && (
               <Card
                 size="small"
                 title={<Space>Preview <Tag>not saved</Tag>{preview && previewStale && <Tag color="orange">out of date — press Preview</Tag>}</Space>}

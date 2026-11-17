@@ -155,10 +155,10 @@ async function exportReport(req, res, next) {
 }
 
 async function listViews(req, res, next) {
-  try { res.json(await tablesSvc.listViews(req.user.id)); } catch (e) { next(e); }
+  try { res.json(await tablesSvc.listViews()); } catch (e) { next(e); }
 }
 async function saveView(req, res, next) {
-  try { res.status(201).json(await tablesSvc.saveView(req.user.id, req.body?.name, req.body?.view_config)); } catch (e) { next(e); }
+  try { res.status(201).json(await tablesSvc.saveView(req.user.id, req.body?.name, req.body?.view_config, req.body?.show_on_report)); } catch (e) { next(e); }
 }
 async function deleteView(req, res, next) {
   try {
@@ -167,7 +167,16 @@ async function deleteView(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function setViewVisibility(req, res, next) {
+  try {
+    const v = await tablesSvc.setViewVisibility(req.user.id, req.params.id, !!req.body?.show_on_report);
+    if (!v) return res.status(404).json({ error: 'Table not found' });
+    res.json(v);
+  } catch (e) { next(e); }
+}
+
 module.exports = {
+  setViewVisibility,
   getTableConfig, saveTableConfig, previewPivotConfig, getDetailTables, getPivotData,
   exportReport, listViews, saveView, deleteView,
   getCurrent, listSnapshots, getSnapshot, generateNow, deleteSnapshot,

@@ -17,6 +17,7 @@ router.delete('/snapshots/:id',   ...configGuard, ctrl.deleteSnapshot);
 
 // Table Settings (WEEKLY_REPORT_CONFIG.md). Everyone who can open the report
 // can read the settings and use the pivot/export; only admins can change them.
+// Saved pivot tables (/views) are shared: any report user can add, change or remove them.
 router.get('/table-config',  ...viewGuard,  ctrl.getTableConfig);
 router.put('/table-config',  ...adminGuard, ctrl.saveTableConfig);
 router.post('/pivot-preview', ...adminGuard, ctrl.previewPivotConfig);
@@ -25,6 +26,7 @@ router.get('/pivot-data',    ...viewGuard,  ctrl.getPivotData);
 router.get('/export',        ...viewGuard,  ctrl.exportReport);
 router.get('/views',         ...viewGuard,  ctrl.listViews);
 router.post('/views',        ...viewGuard,  ctrl.saveView);
+router.patch('/views/:id',   ...viewGuard,  ctrl.setViewVisibility);
 router.delete('/views/:id',  ...viewGuard,  ctrl.deleteView);
 
 router.get('/schedule', ...configGuard, ctrl.getSchedule);

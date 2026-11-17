@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, App, Button, Card, Checkbox, Empty, Input, Popconfirm, Segmented, Select, Space, Spin, Table, Tag, Typography } from 'antd';
-import { DeleteOutlined, DownloadOutlined, ReloadOutlined, SaveOutlined, SwapOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EyeInvisibleOutlined, EyeOutlined, ReloadOutlined, SaveOutlined, SwapOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 
 const { Text } = Typography;
@@ -107,6 +107,8 @@ export default function PivotBuilder() {
   const [includeDecom, setIncludeDecom] = useState(false);
   const [filters, setFilters] = useState([]);   // [{ field, values }]
   const [viewName, setViewName] = useState('');
+  const [showOnReport, setShowOnReport] = useState(true);
+  const isUpdate = views.some(v => v.name.toLowerCase() === viewName.trim().toLowerCase());
   const [busy, setBusy] = useState(false);
 
   const loadData = (decom) => api.get('/weekly-report/pivot-data', { params: { includeDecom: decom } })
@@ -168,14 +170,24 @@ export default function PivotBuilder() {
   const saveView = async () => {
     try {
       const { data } = await api.post('/weekly-report/views', {
-        name: viewName, view_config: { rows: rowKey, cols: colKey, value, includeDecom, filters, pct } });
-      setViews(v => [...v.filter(x => x.name !== data.name), data].sort((a, b) => a.name.localeCompare(b.name)));
-      setViewName(''); message.success('View saved');
-    } catch (e) { message.error(e.response?.data?.error || 'Could not save view'); }
+        name: viewName, show_on_report: showOnReport,
+        view_config: { rows: rowKey, cols: colKey, value, includeDecom, filters, pct } });
+      setViews(v => [...v.filter(x => x.id !== data.id), data]);
+      setViewName('');
+      message.success(isUpdate ? 'Table updated for everyone' : 'Table saved and shared with everyone');
+    } catch (e) { message.error(e.response?.data?.error || 'Could not save table'); }
+  };
+  const toggleOnReport = async (v) => {
+    try {
+      const { data } = await api.patch(`/weekly-report/views/${v.id}`, { show_on_report: !v.show_on_report });
+      setViews(vs => vs.map(x => (x.id === data.id ? data : x)));
+    } catch (e) { message.error(e.response?.data?.error || 'Could not update the table'); }
   };
   const applyView = (id) => {
-    const v = views.find(x => x.id === id)?.view_config;
+    const sel = views.find(x => x.id === id);
+    const v = sel?.view_config;
     if (!v) return;
+    setViewName(sel.name); setShowOnReport(sel.show_on_report);
     if (v.rows && opts.row_fields.includes(v.rows)) setRowKey(v.rows);
     setColKey(v.cols && opts.row_fields.includes(v.cols) && v.cols !== v.rows ? v.cols : '');
     if (opts.value_options.includes(v.value)) setValue(v.value);
@@ -241,17 +253,32 @@ export default function PivotBuilder() {
               )}
             </Space>
             <Space wrap>
-              <Select style={{ width: 220 }} placeholder="My saved views" value={null}
+              <Select style={{ width: 240 }} placeholder="Saved tables (shared)" value={null}
                 options={views.map(v => ({ value: v.id, label: v.name }))} onChange={applyView}
               />
-              <Input style={{ width: 180 }} placeholder="Name this view" maxLength={80} value={viewName} onChange={e => setViewName(e.target.value)} />
-              <Button icon={<SaveOutlined />} disabled={!viewName.trim()} onClick={saveView}>Save this view</Button>
-              {views.map(v => (
-                <Popconfirm key={v.id} title={`Delete view “${v.name}”?`} onConfirm={() => removeView(v.id)}>
-                  <Tag closable={false} style={{ cursor: 'pointer' }}>{v.name} <DeleteOutlined /></Tag>
-                </Popconfirm>
-              ))}
+              <Input style={{ width: 200 }} placeholder="Table name" maxLength={80} value={viewName} onChange={e => setViewName(e.target.value)} />
+              <Checkbox checked={showOnReport} onChange={e => setShowOnReport(e.target.checked)}>Show on Report page</Checkbox>
+              <Button icon={<SaveOutlined />} disabled={!viewName.trim()} onClick={saveView}>
+                {isUpdate ? 'Update this table' : 'Save this table'}
+              </Button>
             </Space>
+            {views.length > 0 && (
+              <Space wrap size={[8, 8]}>
+                <Text type="secondary">Shared tables:</Text>
+                {views.map(v => (
+                  <Tag key={v.id} color={v.show_on_report ? 'blue' : undefined} style={{ margin: 0 }}>
+                    <a onClick={() => applyView(v.id)} style={{ color: 'inherit' }}>{v.name}</a>{' '}
+                    <span role="button" title={v.show_on_report ? 'Shown on Report — click to hide' : 'Hidden from Report — click to show'}
+                      style={{ cursor: 'pointer' }} onClick={() => toggleOnReport(v)}>
+                      {v.show_on_report ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                    </span>{' '}
+                    <Popconfirm title={`Delete “${v.name}” for everyone?`} onConfirm={() => removeView(v.id)}>
+                      <DeleteOutlined style={{ cursor: 'pointer' }} />
+                    </Popconfirm>
+                  </Tag>
+                ))}
+              </Space>
+            )}
             {colKey && (
               <Space wrap align="start">
                 <Text>Percentage =</Text>
