@@ -1,6 +1,6 @@
 # Infrastructure Inventory Management Tool — with Proxmox
 
-Enterprise-grade IT asset inventory platform built with React (Ant Design 5), Node.js/Express, and PostgreSQL. Integrates live VMware vSphere and Proxmox VE discovery, Tenable vulnerability data, Nessus Agent status tracking, ManageEngine Endpoint Central, and a full VMware-to-Proxmox migration tracker — all in one unified dashboard.
+Enterprise-grade IT asset inventory platform built with React (Ant Design 5), Node.js/Express, and PostgreSQL. Integrates live VMware vSphere, Proxmox VE and Hyper-V discovery, Tenable vulnerability data, Nessus Agent status tracking, ManageEngine Endpoint Central, and a full VMware-to-Proxmox migration tracker — all in one unified dashboard.
 
 ---
 
@@ -64,13 +64,58 @@ Enterprise-grade IT asset inventory platform built with React (Ant Design 5), No
 - **Proxmox VE** — Discover QEMU VMs and LXC containers across nodes; view topology, snapshots, drift, stale VMs
 - **Add to Inventory** — One-click push of any discovered VM into Ext. Asset Inventory with pre-filled hostname, IP, MAC address, OS, hosted IP
 
+### Hyper-V Discovery
+- **Hyper-V hosts** — Add hosts with credentials, test the connection, run or stop discovery per host; scheduled runs with run history
+- **Pages** — Dashboard, All VMs (with export), Hosts & Credentials, Change Detection (drift, history, activity), Snapshots, Stale VMs, MAC Lookup (upload MAC-to-IP files, export matches), Topology
+- **Collection** — Hosts are queried over WinRM through PowerShell (`pwsh`); an admin-only **Hyper-V Collect Test** page exercises the WMI/DCOM collector (`scripts/hyperv_collect.py`, impacket) with credentials that are never stored
+
+### Connectivity & Monitoring
+- **Ping Monitor** — Scheduled reachability check (ICMP/SSH) for VMware, Proxmox and Hyper-V hosts, each with its own interval, active time window and active days
+- **High-Utilization Monitor** — Admin-set CPU / memory thresholds; live list of hosts over threshold (joined to Physical & ESXi owner and department) plus a log of every discovery tick that crossed them
+- **Alert Bell** — Header bell summarising hosts whose latest discovery failed (bad password, unreachable, timeout) across all three platforms; updates in real time over a JWT-authenticated WebSocket
+- **Connectivity Alerts page** — History of connectivity and discovery failures, grouped by date and by platform
+
+### Topology
+- **Topology of Sites** — VMware, Proxmox and Hyper-V topology views in one page
+- **Custom Topology Builder** — Hand-drawn diagrams (React Flow nodes and edges) per platform, with read-only access for Topology viewers
+
+### Server Provisioning Helpers
+- **Suggested Hostname** — Hostname built as Site + OS + Team + Tier + Tag from an admin-editable pattern
+- **Hostname Rename** — Live OS-level rename of Windows (OpenSSH/PowerShell, auto-reboot) and Linux/Proxmox hosts through Ansible
+- **Agent Install** — ManageEngine and Nessus agents installed or re-installed over SSH/Ansible, with install-config pages, an install log and a verify action; also open to users granted `can_manage_agents`
+
+### Reports & Dashboard
+- **Dashboard** — Tabbed executive overview with admin-configurable tabs and widgets
+- **Report Builder** — Pick one or more inventories, choose columns, filters (equals / not equals / contains / comparisons) and a view: Data Table, Bar, Pie, Doughnut, Line or Pivot Table; export CSV. Decommissioned assets are excluded
+- **Weekly Report** — see *Reports* below
+- **Global Search** — `Ctrl+K` search across all four inventories (decommissioned records included)
+
+### Team Operations
+- **Recurring Activities** — Rotating monthly (advances on the 5th) and weekly (advances every Monday) task owners, shared activities, per-period manual overrides, a "my tasks" view and a Ready Reckoner; the rotation is documented in [Recurring_Activity_Ready_Reckoner.md](Recurring_Activity_Ready_Reckoner.md)
+- **Asset Transfer** — Admin tool to preview and move records between the four inventories (source is soft-deleted; tag, duplicate and decommission rules still apply)
+- **Database Import** — Admin connection to an external database: test, pick columns, preview and apply into an inventory
+- **Custom Pages** — Admins build their own record pages (fields, template, import) with per-page access control
+
 ### Software Services
 - **ManageEngine Endpoint Central** — Agent list, software inventory; API key or credential+TOTP auth
 - **Nessus Agent Status** — Nessus agent install state per asset with Linux curl install support
 - **Tenable Report** — Three-tab report: Matched (in both inventories and Tenable), Not in Tenable, Tenable Only. Stat cards, search, source filter, CSV export; admin import drawer for Tenable Excel files. Covers all 4 inventory sources.
 
 ### Reports
-- **Weekly Report** — Configurable weekly compliance report with inventory totals, status breakdowns, and extended inventory summary; "NA" and "Not in Scope" assets correctly excluded from totals
+- **Weekly Report** — Weekly compliance report with inventory totals, status breakdowns, patch management, Nessus and migration sections; "NA" and "Not in Scope" assets are excluded from totals. A snapshot is saved automatically every Wednesday. Tabs:
+  - **Report** — the live report (or any saved snapshot). Per-table asset scope (Assets / Ext. / Beijing / Physical) can be changed by the viewer. Shared saved pivot tables that are switched on appear as a *Saved Pivot Tables* row after Nessus.
+  - **Manage Inputs** — manual narrative sections, editable by anyone who can open the page.
+  - **Pivot & Export** — build a pivot from any inventory and export CSV/Excel:
+    - **Rows / Columns** — 18 fields: Department, Status, OS Type, Location, Patching Type, EOL Status, Asset Type, Inventory, OS Version, Business Purpose, Server Patch Type, Patching Schedule, OME Status, iDRAC Enabled, ManageEngine Installed, Tenable Installed, Team, Tier. Which fields are offered is set under Table Settings → *End-user pivot options*.
+    - **Values** — Count, % of all, % of row; optional *Percentage = (columns) ÷ (columns)*; *Include decommissioned*.
+    - **Inventory selector and filters** — Assets / Beijing / Ext. / Physical & ESXi, plus any number of value filters.
+    - **Shared saved tables** — *Save this table* stores the pivot for **every** report user. Anyone with access can load it, change it (*Update this table*), delete it, or toggle **Show on Report page** (eye icon). Saving under an existing name updates it.
+  - **Table Settings** — per-table configuration (admins edit, everyone can view):
+    - Built-in tables: Location-wise Auto/Manual patching, Departments Patching Onboarding, Location-wise endpoint count, ManageEngine group count, Nessus Agent Install, plus optional detail-list tables. Each has title, columns/labels, calculation rules (per-inventory filters, Legacy vs Filtered mode), percentage formula, excluded groups, asset scope and live Preview.
+    - **Group rows by** offers the same extended field list as the pivot (Filtered mode; Legacy mode is limited to Location and Department).
+    - Saved pivot tables are listed here as *Saved pivot (shared)* with a live preview. An admin can retitle, reorder or hide them; their definition is only changed from Pivot & Export.
+  - **Teams Notification** — webhook settings (admin).
+  - ManageEngine table: an asset whose Patching Type is *Onboard Pending* is always counted under Onboard Pending, so the figure matches the Patching Type = Onboard Pending pivot.
 
 ### Data Health & Reconciliation
 - **Data Health** — Dashboard surfacing data quality issues: missing IPs, duplicate MACs, missing asset tags, stale records
@@ -89,6 +134,9 @@ Enterprise-grade IT asset inventory platform built with React (Ant Design 5), No
 - **Server Models Catalogue** — Shared library of server manufacturer/model entries referenced by Physical ESXi server records
 - **Department Tag Ranges** — Controlled asset tag allocation per department
 - **Teams Notifications** — Webhook URL and per-event toggle management
+- **Page Access & Field Visibility** — Per-role page access matrix, per-user overrides, per-page field show/hide, and editing of built-in sidebar pages
+- **Weekly Report Admin** — Snapshot schedule (default Wednesday 08:00 server time, applied without a restart) and snapshot history
+- **Recycle Bin** — Admin/superadmin restore; superadmin can permanently delete one item, *Delete by Location*, or empty the bin
 - **Swagger API Docs** — `/api/docs`
 
 ---
@@ -97,11 +145,11 @@ Enterprise-grade IT asset inventory platform built with React (Ant Design 5), No
 
 | Layer      | Technology                                          |
 |------------|-----------------------------------------------------|
-| Frontend   | React 18 + Vite + Ant Design 5 + React Router 6    |
-| Backend    | Node.js 20 + Express 4 + JWT + bcrypt               |
+| Frontend   | React 19 + Vite 8 + Ant Design 6 + React Router 7, React Flow (`@xyflow/react`), Ant Design Plots |
+| Backend    | Node.js 22+ + Express 5 + JWT + bcrypt, node-cron schedulers, `ws` WebSocket |
 | Database   | PostgreSQL 18 (pg driver, JSONB)                    |
 | Files      | ExcelJS (Excel parse/generate), multer (uploads)    |
-| SSH        | node-ssh (remote agent install)                     |
+| SSH / remote | ssh2, Ansible playbooks (`backend/ansible`), PowerShell (`pwsh`) for Hyper-V, impacket (WMI/DCOM test) |
 | Crypto     | AES-256-GCM via Node.js `crypto` module             |
 | Notifications | Node.js built-in `https` → Teams Incoming Webhook |
 | Docs       | swagger-ui-express                                  |
@@ -176,6 +224,13 @@ Inventory_Tool - with Proxmox/
 │           ├── ProxmoxDiscovery/           # PVE list, dashboard, drift, topology, snapshots
 │           ├── TenableReport/              # 3-tab report, import drawer
 │           ├── Decommissioned/             # Decommissioned assets + reactivate
+│           ├── HyperVDiscovery/            # Hyper-V dashboard, VMs, hosts, drift, snapshots
+│           ├── TopologySites/              # VMware / Proxmox / Hyper-V topology tabs
+│           ├── ConnectivityAlerts/         # Connectivity & discovery failure history
+│           ├── Reports/                    # Report Builder (table, charts, pivot)
+│           ├── CustomPages/                # Admin-defined record pages
+│           ├── WeeklyReport/               # index.jsx (Report), PivotBuilder.jsx (Pivot & Export),
+│           │                               # PivotSettings.jsx (Table Settings), AssetScope.jsx
 │           ├── NessusStatus/
 │           ├── SoftwareStatus/
 │           └── Admin/
@@ -193,12 +248,20 @@ Inventory_Tool - with Proxmox/
 │   ├── schema.sql                     # Core tables
 │   ├── vmware_schema.sql              # VMware discovery tables
 │   ├── proxmox_schema.sql             # Proxmox discovery tables
+│   ├── hyperv_schema.sql              # Hyper-V discovery tables
 │   ├── tenable_schema.sql             # tenable_imports + tenable_assets
-│   └── vmware_asset_edits.sql         # VM asset editor audit table
+│   ├── vmware_asset_edits.sql         # VM asset editor audit table
+│   ├── seed.sql                       # Initial data
+│   └── migrations/                    # Historical one-off SQL (ensureSchema.js covers upgrades)
+├── deploy/                            # setup.sh, update.sh, systemd unit, nginx config
+├── backend/ansible/                   # Playbooks: ME / Nessus agent install, verify, hostname rename
+├── backend/scripts/                   # seedUsers, setSuperadmin, hyperv_collect.py, migration template
+├── backend/tests/                     # node --test (npm test)
+├── Recurring_Activity_Ready_Reckoner.md
 └── README.md
 ```
 
-> **Note:** All table/column additions are handled automatically by `ensureSchema.js` on backend startup — no manual SQL migration scripts needed for upgrades.
+> **Note:** All table/column additions are handled automatically by `ensureSchema.js` on backend startup — no manual SQL migration scripts needed for upgrades. This includes the one-time conversion of older per-user Weekly Report saved views into shared saved pivot tables (they start hidden from the Report). Restart the backend after upgrading.
 
 ---
 
@@ -287,8 +350,8 @@ cd ../backend && node server.js  # serves both API and SPA on :4000
 sudo apt update
 sudo apt install -y curl ca-certificates gnupg nginx postgresql
 
-# Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Node.js 22+ (backend package.json requires >=22)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
@@ -427,6 +490,48 @@ Per-user overrides (set in **User Page Control**):
 | GET  | `/api/tenable/report` | Full Tenable report (matched / not-in / tenable-only) |
 | POST | `/api/tenable/import` | Upload Tenable Excel file (admin) |
 
+### Weekly Report
+All routes require access to the Weekly Report page; only *table-config* writes, `pivot-preview`, `generate-now` and the Teams settings need an admin.
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET  | `/api/weekly-report/current` | Live report (optional `scopes` per table) |
+| GET  | `/api/weekly-report/snapshots`, `/snapshots/:id` | Saved weekly snapshots |
+| GET/PUT | `/api/weekly-report/table-config` | Table Settings (PUT: admin) |
+| POST | `/api/weekly-report/pivot-preview` | Preview unsaved Table Settings (admin) |
+| GET  | `/api/weekly-report/pivot-data` | Flat rows for the Pivot & Export tab |
+| GET  | `/api/weekly-report/export` | CSV / XLSX export of the current pivot |
+| GET/POST | `/api/weekly-report/views` | Shared saved pivot tables (POST creates or updates by name) |
+| GET  | `/api/weekly-report/views/:id/preview` | Live data for one saved pivot |
+| PATCH | `/api/weekly-report/views/:id` | Show / hide a saved pivot on the Report |
+| DELETE | `/api/weekly-report/views/:id` | Delete a saved pivot (any report user) |
+
+### Hyper-V, Monitoring & Alerts
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET/POST/PUT/DELETE | `/api/hyperv/hosts` | Hyper-V hosts (+ `/:id/test`, `/:id/run`, `/:id/stop`) |
+| GET  | `/api/hyperv/vms`, `/dashboard`, `/topology`, `/drift`, `/stale`, `/snapshots`, `/mac-lookup`, `/runs` | Hyper-V discovery data |
+| GET/PUT | `/api/ping-monitor` | Ping monitor schedule |
+| GET/PUT | `/api/utilization-monitor` | CPU / memory thresholds |
+| GET  | `/api/host-utilization/summary` | Hosts currently over threshold |
+| GET  | `/api/connectivity-alerts/summary`, `/list` | Connectivity alert history |
+| GET  | `/api/alerts` | Current discovery failures (alert bell) |
+| POST | `/api/hyperv-collect-test/collect` | WMI/DCOM collector test (admin) |
+
+### Operations Tools
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/hostname-rename` | Ansible hostname rename |
+| GET/PUT | `/api/hostname-pattern-config` | Suggested-hostname pattern |
+| GET/POST | `/api/asset-transfer/inventories`, `/preview`, `/transfer` | Move records between inventories (admin) |
+| POST | `/api/db-import/test`, `/columns`, `/preview`, `/apply` | External database import (admin) |
+| GET/PUT | `/api/recurring-activities/my-tasks`, `/status`, `/reckoner`, `/config`, `/overrides` | Rotation tracker |
+| GET/POST | `/api/reports/sources`, `/run` | Report Builder |
+| GET  | `/api/search?q=` | Global search |
+| GET/POST/PUT/DELETE | `/api/custom-pages` | Custom pages and their records |
+| GET/POST | `/api/custom-topology` | Custom topology diagrams |
+| GET/PUT | `/api/page-access`, `/api/user-page-control`, `/api/field-visibility` | Access and field-visibility settings |
+| GET/POST/DELETE | `/api/recycle-bin` | Restore / purge (`/purge-location`, `/empty`: superadmin) |
+
 ### Administration
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -479,7 +584,7 @@ To rotate the session (e.g. after token expiry), repeat the Login flow from the 
 | **JWT** | HS256, signed with `JWT_SECRET`; configurable expiry |
 | **Password access control** | `requirePasswordAccess` middleware DB-checks `can_view_passwords` flag per request |
 | **CORS** | Restricted to explicit `CORS_ORIGIN` list; no wildcard |
-| **Rate limiting** | Login: 20 req/15 min; password change: 5 req/15 min |
+| **Rate limiting** | Login: 20 req/15 min; password change: 5 req/15 min; separate limiters for the general API, dashboard, imports and remote actions |
 | **Password strength** | Min 8 chars, must include uppercase, lowercase, and a number |
 | **File upload validation** | Multer `fileFilter` enforces MIME type + extension |
 | **Input validation** | express-validator on every route |

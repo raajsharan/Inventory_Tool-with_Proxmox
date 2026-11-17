@@ -52,6 +52,7 @@ router.use('/utilization-monitor',      require('./utilizationMonitorRoutes'));
 router.use('/server-models',            authenticate, require('./serverModelsRoutes'));
 router.use('/alerts',                   require('./alertsRoutes'));
 router.use('/connectivity-alerts',      require('./hostAlertsRoutes'));
+router.use('/esxi-utilization',         require('./esxiUtilizationRoutes'));
 router.use('/host-utilization',         require('./hostUtilizationRoutes'));
 router.use('/weekly-report',            require('./weeklyReportRoutes'));
 // /my-tasks is open to any authenticated user (each team member's own

@@ -56,7 +56,7 @@ export default function AppLayout() {
   // Sidebar submenus behave like an accordion — opening one closes any other
   // that was open, instead of letting them stack up indefinitely.
   const [openKeys, setOpenKeys] = useState(() => [
-    ...['/vmware-discovery', '/proxmox-discovery', '/hyperv-discovery'].includes(loc.pathname) ? ['vm-discovery'] : [],
+    ...['/vmware-discovery', '/proxmox-discovery', '/hyperv-discovery', '/esxi-utilization'].includes(loc.pathname) ? ['vm-discovery'] : [],
     ...['/software-status', '/nessus-status', '/tenable-report', '/endpoint-central'].includes(loc.pathname) ? ['software-services'] : [],
     ...loc.pathname.startsWith('/admin/') ? ['admin'] : [],
   ]);
@@ -174,6 +174,7 @@ export default function AppLayout() {
             { key: '/vmware-discovery',   icon: <ApartmentOutlined />, label: <Link to="/vmware-discovery">VMware Discovery</Link> },
             { key: '/proxmox-discovery',  icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },
             { key: '/hyperv-discovery',   icon: <WindowsOutlined />,   label: <Link to="/hyperv-discovery">Hyper-V Discovery</Link> },
+            can('esxi_utilization') && { key: '/esxi-utilization', icon: <BarChartOutlined />, label: <Link to="/esxi-utilization">ESXi Utilization</Link> },
             can('connectivity_alerts') && { key: '/connectivity-alerts', icon: <AlertOutlined />, label: <Link to="/connectivity-alerts">Connectivity Alerts</Link> },
           ].filter(Boolean),
         }];
