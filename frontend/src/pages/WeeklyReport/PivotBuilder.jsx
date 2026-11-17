@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Card, Checkbox, Empty, Input, Popconfirm, Segmented, Select, Space, Spin, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Checkbox, Collapse, Empty, Input, Popconfirm, Segmented, Select, Space, Spin, Table, Tag, Typography } from 'antd';
 import { DeleteOutlined, DownloadOutlined, ReloadOutlined, SaveOutlined, SwapOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 
@@ -90,7 +90,7 @@ function DetailTable({ t }) {
   );
 }
 
-export default function PivotBuilder() {
+export default function PivotBuilder({ manager = null }) {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [opts, setOpts] = useState(null);
@@ -273,6 +273,15 @@ export default function PivotBuilder() {
         )}
       </Card>
       {details.map(t => <DetailTable key={t.key} t={t} />)}
+      {manager && (
+        <Card size="small" title="Manage report tables">
+          <Collapse ghost items={[{
+            key: 'tables',
+            label: 'Edit the Report tables (title, columns, filters, percentage, scope) — same settings as the Table Settings tab',
+            children: manager,
+          }]} />
+        </Card>
+      )}
     </Space>
   );
 }

@@ -865,6 +865,7 @@ export default function WeeklyReport() {
   const [generating, setGenerating] = useState(false);
   // Viewer's per-table asset scope on the live report: { table_key: [inventory keys] }.
   const [scopes, setScopes] = useState({});
+  const [settingsVersion, setSettingsVersion] = useState(0);
 
   const loadSnapshots = () => api.get('/weekly-report/snapshots').then(r => setSnapshots(r.data || [])).catch(() => setSnapshots([]));
 
@@ -931,6 +932,11 @@ export default function WeeklyReport() {
     </div>
   );
 
+  const onSettingsSaved = () => {
+    setScopes({}); setSelectedId('current'); loadReport('current', {});
+    setSettingsVersion(v => v + 1);
+  };
+
   return (
     <div>
       <style>{DASH_CSS}</style>
@@ -945,11 +951,19 @@ export default function WeeklyReport() {
         items={[
           { key: 'report', label: 'Report', children: reportTab },
           { key: 'inputs', label: <span><EditOutlined /> Manage Inputs</span>, children: <ManageInputsPanel /> },
-          { key: 'pivot', label: <span><TableOutlined /> Pivot &amp; Export</span>, children: <PivotBuilder /> },
+          {
+            key: 'pivot',
+            label: <span><TableOutlined /> Pivot &amp; Export</span>,
+            // Table Settings is embedded here too; the key remounts the pivot (and
+            // both settings editors) after a save so every copy shows saved values.
+            children: <PivotBuilder key={`pv-${settingsVersion}`} manager={(
+              <PivotSettingsPanel renderPreview={renderTablePreview} onSaved={onSettingsSaved} />
+            )} />,
+          },
           {
             key: 'table-settings',
             label: <span><SettingOutlined /> Table Settings</span>,
-            children: <PivotSettingsPanel renderPreview={renderTablePreview} onSaved={() => { setScopes({}); setSelectedId('current'); loadReport('current', {}); }} />,
+            children: <PivotSettingsPanel key={`ts-${settingsVersion}`} renderPreview={renderTablePreview} onSaved={onSettingsSaved} />,
           },
           ...(isAdmin ? [{
             key: 'webhook',
