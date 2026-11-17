@@ -167,6 +167,13 @@ async function deleteView(req, res, next) {
   } catch (e) { next(e); }
 }
 
+async function previewView(req, res, next) {
+  try {
+    const t = await tablesSvc.previewView(req.params.id);
+    if (!t) return res.status(404).json({ error: 'Table not found' });
+    res.json(t);
+  } catch (e) { next(e); }
+}
 async function setViewVisibility(req, res, next) {
   try {
     const v = await tablesSvc.setViewVisibility(req.user.id, req.params.id, !!req.body?.show_on_report);
@@ -176,7 +183,7 @@ async function setViewVisibility(req, res, next) {
 }
 
 module.exports = {
-  setViewVisibility,
+  setViewVisibility, previewView,
   getTableConfig, saveTableConfig, previewPivotConfig, getDetailTables, getPivotData,
   exportReport, listViews, saveView, deleteView,
   getCurrent, listSnapshots, getSnapshot, generateNow, deleteSnapshot,

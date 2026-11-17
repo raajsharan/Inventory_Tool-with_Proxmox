@@ -564,6 +564,12 @@ async function pivotTableData(title, view) {
   };
 }
 
+// Live preview of one saved pivot (Table Settings), whether or not it is shown on the Report.
+async function previewView(id) {
+  const { rows } = await db.query(`SELECT * FROM weekly_report_tables WHERE table_key = $1 AND ${CUSTOM_WHERE}`, [String(id)]);
+  return rows[0] ? pivotTableData(rows[0].title, rows[0].config) : null;
+}
+
 // Report-page section: every saved pivot switched on, in Table Settings order.
 async function getCustomPivotSection() {
   await seedIfEmpty();
@@ -581,5 +587,5 @@ async function getCustomPivotSection() {
 module.exports = {
   getAll, getMeta, saveAll, getEngineConfig, getOptions,
   getDetailTables, previewDetail, getPivotData, exportCsv, exportXlsx,
-  listViews, saveView, deleteView, setViewVisibility, getCustomPivotSection,
+  listViews, saveView, deleteView, setViewVisibility, previewView, getCustomPivotSection,
 };

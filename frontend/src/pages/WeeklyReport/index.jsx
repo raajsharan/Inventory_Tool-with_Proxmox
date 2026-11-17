@@ -893,6 +893,7 @@ function renderTablePreview(tableKey, sections) {
     case 'me_compliance':       return patch && <PatchManagementSection data={patch} only="me" />;
     case 'location_count':      return sections?.assetInventory && <AssetInventorySection data={sections.assetInventory.data} onlyLocations />;
     case 'nessus':              return sections?.nessus && <NessusSection data={sections.nessus.data} />;
+    case 'custom_pivot':        return sections?.customTable && <CustomPivotsSection data={{ tables: [sections.customTable] }} />;
     default:                    return null;
   }
 }

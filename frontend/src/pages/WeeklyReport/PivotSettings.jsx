@@ -76,6 +76,23 @@ function SourceFilters({ sources, value, onChange, disabled }) {
   );
 }
 
+// Live preview of a shared saved pivot — available to every user, no draft needed.
+function CustomPreview({ id, renderPreview }) {
+  const [table, setTable] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let live = true;
+    setTable(null); setErr('');
+    api.get(`/weekly-report/views/${id}/preview`)
+      .then(r => { if (live) setTable(r.data); })
+      .catch(e => { if (live) setErr(e.response?.data?.error || 'Could not load the preview'); });
+    return () => { live = false; };
+  }, [id]);
+  if (err) return <Alert type="error" showIcon message={err} />;
+  if (!table) return <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>;
+  return renderPreview ? renderPreview('custom_pivot', { customTable: table }) : null;
+}
+
 // ── Percentage ─────────────────────────────────────────────────────────────
 function PercentageEditor({ cols, rules, onChange, disabled }) {
   const opts = cols.map(c => ({ value: c.key, label: c.label }));
@@ -550,6 +567,12 @@ export default function TableSettingsPanel({ renderPreview, onSaved }) {
               <PivotOptions meta={meta} value={options} disabled={ro}
                 onChange={(o) => { setOptions(o); touch(); }} />
             </Card>
+
+            {isCustom && (
+              <Card size="small" title="Preview (as it appears on the Report)">
+                <CustomPreview id={row.table_key} renderPreview={renderPreview} />
+              </Card>
+            )}
 
             {!ro && !isCustom && (
               <Card

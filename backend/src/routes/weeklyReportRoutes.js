@@ -26,6 +26,7 @@ router.get('/pivot-data',    ...viewGuard,  ctrl.getPivotData);
 router.get('/export',        ...viewGuard,  ctrl.exportReport);
 router.get('/views',         ...viewGuard,  ctrl.listViews);
 router.post('/views',        ...viewGuard,  ctrl.saveView);
+router.get('/views/:id/preview', ...viewGuard, ctrl.previewView);
 router.patch('/views/:id',   ...viewGuard,  ctrl.setViewVisibility);
 router.delete('/views/:id',  ...viewGuard,  ctrl.deleteView);
 
