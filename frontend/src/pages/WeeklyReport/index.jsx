@@ -954,11 +954,8 @@ export default function WeeklyReport() {
           {
             key: 'pivot',
             label: <span><TableOutlined /> Pivot &amp; Export</span>,
-            // Table Settings is embedded here too; the key remounts the pivot (and
-            // both settings editors) after a save so every copy shows saved values.
-            children: <PivotBuilder key={`pv-${settingsVersion}`} manager={(
-              <PivotSettingsPanel renderPreview={renderTablePreview} onSaved={onSettingsSaved} />
-            )} />,
+            // Keyed so the pivot reloads its options after Table Settings is saved.
+            children: <PivotBuilder key={`pv-${settingsVersion}`} />,
           },
           {
             key: 'table-settings',

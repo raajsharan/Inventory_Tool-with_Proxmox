@@ -43,19 +43,32 @@ const FIELDS = [
   { key: 'assigned_user', label: 'Assigned User',    format: 'text' },
   { key: 'serial_number', label: 'Serial Number',    format: 'text' },
   { key: 'source',        label: 'Inventory',        format: 'text' },
+  { key: 'os_version',    label: 'OS Version',       format: 'text' },
+  { key: 'business_purpose', label: 'Business Purpose', format: 'text' },
+  { key: 'server_patch_type', label: 'Server Patch Type', format: 'text' },
+  { key: 'patching_schedule', label: 'Patching Schedule', format: 'text' },
+  { key: 'ome_status',    label: 'OME Status',       format: 'text' },
+  { key: 'idrac_enabled', label: 'iDRAC Enabled',    format: 'text' },
+  { key: 'manage_engine_installed', label: 'ManageEngine Installed', format: 'text' },
+  { key: 'tenable_installed', label: 'Tenable Installed', format: 'text' },
+  { key: 'hosted_ip',     label: 'Hosted IP',        format: 'text' },
+  { key: 'team',          label: 'Team',             format: 'text' },
+  { key: 'tier',          label: 'Tier',             format: 'text' },
 ];
 const FIELD_KEYS = new Set(FIELDS.map(f => f.key));
 const FORMATS = ['text', 'tag', 'date', 'boolean'];
 // Not offered to end users as pivot dimensions (too many distinct values).
-const HIGH_CARDINALITY = new Set(['vm_name', 'os_hostname', 'ip_address', 'asset_tag', 'serial_number', 'assigned_user']);
-const PHYSICAL_NULL = new Set(['patching_type', 'eol_status']);
+const HIGH_CARDINALITY = new Set(['vm_name', 'os_hostname', 'ip_address', 'asset_tag', 'serial_number', 'assigned_user', 'hosted_ip']);
+const PHYSICAL_NULL = new Set(['patching_type', 'eol_status', 'manage_engine_installed', 'tenable_installed']);
 const ALWAYS_EXCLUDED = ['na', 'not in scope'];
 
 const LIMITS = { tables: 20, columns: 30, minWidth: 60, maxWidth: 600, label: 60 };
 
 const DEFAULT_OPTIONS = {
   allow_pivot: true,
-  row_fields: ['department', 'server_status', 'os_type', 'location', 'patching_type', 'eol_status', 'asset_type', 'source'],
+  row_fields: ['department', 'server_status', 'os_type', 'location', 'patching_type', 'eol_status', 'asset_type', 'source',
+    'os_version', 'business_purpose', 'server_patch_type', 'patching_schedule', 'ome_status', 'idrac_enabled',
+    'manage_engine_installed', 'tenable_installed', 'team', 'tier'],
   value_options: ['count', 'pct', 'rowpct'],
   default_rows: 'department',
   default_cols: 'server_status',

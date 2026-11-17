@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Card, Checkbox, Collapse, Empty, Input, Popconfirm, Segmented, Select, Space, Spin, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Checkbox, Empty, Input, Popconfirm, Segmented, Select, Space, Spin, Table, Tag, Typography } from 'antd';
 import { DeleteOutlined, DownloadOutlined, ReloadOutlined, SaveOutlined, SwapOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 
@@ -10,6 +10,10 @@ const FIELD_LABELS = {
   department: 'Department', location: 'Location', server_status: 'Status', patching_type: 'Patching Type',
   eol_status: 'EOL Status', asset_type: 'Asset Type', asset_tag: 'Asset Tag', assigned_user: 'Assigned User',
   serial_number: 'Serial Number', source: 'Inventory',
+  os_version: 'OS Version', business_purpose: 'Business Purpose', server_patch_type: 'Server Patch Type',
+  patching_schedule: 'Patching Schedule', ome_status: 'OME Status', idrac_enabled: 'iDRAC Enabled',
+  manage_engine_installed: 'ManageEngine Installed', tenable_installed: 'Tenable Installed',
+  hosted_ip: 'Hosted IP', team: 'Team', tier: 'Tier',
 };
 const VALUE_LABELS = { count: 'Count', pct: '% of all', rowpct: '% of row' };
 
@@ -90,7 +94,7 @@ function DetailTable({ t }) {
   );
 }
 
-export default function PivotBuilder({ manager = null }) {
+export default function PivotBuilder() {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [opts, setOpts] = useState(null);
@@ -273,15 +277,6 @@ export default function PivotBuilder({ manager = null }) {
         )}
       </Card>
       {details.map(t => <DetailTable key={t.key} t={t} />)}
-      {manager && (
-        <Card size="small" title="Manage report tables">
-          <Collapse ghost items={[{
-            key: 'tables',
-            label: 'Edit the Report tables (title, columns, filters, percentage, scope) — same settings as the Table Settings tab',
-            children: manager,
-          }]} />
-        </Card>
-      )}
     </Space>
   );
 }

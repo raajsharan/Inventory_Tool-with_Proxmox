@@ -1068,6 +1068,13 @@ const STATEMENTS = [
                             ELSE row_fields END,
           migrated_v2 = TRUE
     WHERE migrated_v2 = FALSE`,
+  // One-time: offer the extra pivot dimensions (OS Version, Business Purpose,
+  // ManageEngine / Tenable installed, ...) on installs that stored an older list.
+  `ALTER TABLE weekly_report_pivot_options ADD COLUMN IF NOT EXISTS migrated_v3 BOOLEAN NOT NULL DEFAULT FALSE`,
+  `UPDATE weekly_report_pivot_options
+      SET row_fields = (SELECT ARRAY(SELECT DISTINCT x FROM unnest(row_fields || '{os_version,business_purpose,server_patch_type,patching_schedule,ome_status,idrac_enabled,manage_engine_installed,tenable_installed,team,tier}'::text[]) AS x)),
+          migrated_v3 = TRUE
+    WHERE migrated_v3 = FALSE`,
   `CREATE TABLE IF NOT EXISTS weekly_report_views (
       id          SERIAL PRIMARY KEY,
       user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
