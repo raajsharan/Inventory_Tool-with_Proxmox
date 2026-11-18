@@ -20,7 +20,7 @@ const PAGE_SECTIONS = [
       { key: 'physical_esxi_servers', label: 'Physical & ESXi Servers' },
       { key: 'decommissioned',        label: 'Decommissioned' },
       { key: 'reports',               label: 'Report Builder' },
-      { key: 'vm-discovery',          label: 'VM Discovery' },
+      { key: 'vm-discovery',          label: 'Virtualization Env' },
     ],
   },
   {

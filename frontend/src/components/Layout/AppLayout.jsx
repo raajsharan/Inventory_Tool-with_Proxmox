@@ -169,7 +169,7 @@ export default function AppLayout() {
       }
       case 'vm-discovery':
         return [{
-          key: 'vm-discovery', icon: <CloudServerOutlined />, label: 'VM Discovery',
+          key: 'vm-discovery', icon: <CloudServerOutlined />, label: 'Virtualization Env',
           children: [
             { key: '/vmware-discovery',   icon: <ApartmentOutlined />, label: <Link to="/vmware-discovery">VMware Discovery</Link> },
             { key: '/proxmox-discovery',  icon: <ClusterOutlined />,   label: <Link to="/proxmox-discovery">Proxmox Discovery</Link> },

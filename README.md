@@ -59,7 +59,7 @@ Enterprise-grade IT asset inventory platform built with React (Ant Design 5), No
 - **Test button** — Send a test card to verify the webhook before saving
 - **Admin config page** — Admin → Teams Notifications
 
-### VM Discovery
+### Virtualization Env (VM Discovery)
 - **VMware vSphere** — Discover VMs from multiple vCenter/ESXi hosts; view dashboards, drift detection, ESXi topology, snapshots, stale VMs, MAC lookup
 - **Proxmox VE** — Discover QEMU VMs and LXC containers across nodes; view topology, snapshots, drift, stale VMs
 - **Add to Inventory** — One-click push of any discovered VM into Ext. Asset Inventory with pre-filled hostname, IP, MAC address, OS, hosted IP
@@ -474,7 +474,7 @@ Per-user overrides (set in **User Page Control**):
 | PUT    | `/api/teams-notification` | Save webhook URL and event toggles |
 | POST   | `/api/teams-notification/test` | Send test Adaptive Card to Teams |
 
-### VM Discovery
+### Virtualization Env (VM Discovery)
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET  | `/api/vmware/vms` | List discovered VMware VMs |

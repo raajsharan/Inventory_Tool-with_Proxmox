@@ -18,7 +18,7 @@ export const DEFAULT_NAV_ITEMS = [
   { key: '__custom__',         label: 'Custom Pages',             icon: AppstoreOutlined,          description: 'Dynamically created custom pages' },
   { key: '/reports',           label: 'Report Builder',           icon: BarChartOutlined,          description: 'Report builder and exports' },
   { key: 'software-services',  label: 'Software Services',        icon: SafetyCertificateOutlined, description: 'ManageEngine, Nessus Agent & Tenable Report' },
-  { key: 'vm-discovery',       label: 'VM Discovery',             icon: ApartmentOutlined,         description: 'VMware, Proxmox & Hyper-V discovery' },
+  { key: 'vm-discovery',       label: 'Virtualization Env',             icon: ApartmentOutlined,         description: 'VMware, Proxmox & Hyper-V discovery' },
   { key: '/topology-sites',    label: 'Topology of Sites',        icon: ClusterOutlined,           description: 'VMware, Proxmox, Hyper-V & custom hand-built topology diagrams' },
 ];
 

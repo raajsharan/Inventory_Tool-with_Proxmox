@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Empty, Segmented, Select, Space, Spin, Table, Tag, Typography, theme } from 'antd';
-import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Empty, Input, Segmented, Select, Space, Spin, Table, Tag, Typography, theme } from 'antd';
+import { DownloadOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 
 const { Title, Text } = Typography;
@@ -47,6 +47,7 @@ export default function EsxiUtilization() {
   const [dept, setDept] = useState('all');
   const [mode, setMode] = useState('used');
   const [sortKey, setSortKey] = useState('name');
+  const [search, setSearch] = useState('');
 
   const load = useCallback(() => {
     setLoading(true); setError('');
@@ -105,10 +106,13 @@ export default function EsxiUtilization() {
   }), [deptNames, hosts]);
 
   const rows = useMemo(() => {
-    const list = hosts.filter(h => dept === 'all' || h.department === dept);
+    const q = search.trim().toLowerCase();
+    const list = hosts.filter(h => (dept === 'all' || h.department === dept)
+      && (!q || [h.name, h.ip, h.model, h.department, h.owner, h.location, h.vcenter, h.assetName]
+        .some(v => String(v ?? '').toLowerCase().includes(q))));
     const k = { cpu: 'cpuPct', ram: 'ramPct', storage: 'storagePct' }[sortKey];
     return list.slice().sort((a, b) => (k ? (b[k] ?? -1) - (a[k] ?? -1) : a.name.localeCompare(b.name)));
-  }, [hosts, dept, sortKey]);
+  }, [hosts, dept, sortKey, search]);
 
   const exportCsv = () => {
     const head = ['Host', 'IP', 'vCenter', 'Model', 'Department', 'Owner', 'Location', 'VMs', 'CPU cores', 'CPU used %', 'RAM GB', 'RAM used %', 'Storage TB', 'Storage used %'];
@@ -173,7 +177,16 @@ export default function EsxiUtilization() {
   };
 
   const columns = [
-    { title: sortBtn('name', 'Host'), dataIndex: 'name', render: (v, h) => (<div><div style={{ fontWeight: 600 }}>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{h.ip}</Text></div>) },
+    {
+      title: sortBtn('name', 'Host'), dataIndex: 'name',
+      render: (v, h) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{v}</div>
+          {h.vcenter && <Text type="secondary" style={{ fontSize: 11 }}>vCenter: {h.vcenter}</Text>}
+        </div>
+      ),
+    },
+    { title: 'IP Address', dataIndex: 'ip', render: v => v || <Text type="secondary">—</Text> },
     { title: 'Model', dataIndex: 'model', render: v => v || <Text type="secondary">—</Text> },
     {
       title: 'Department', dataIndex: 'department',
@@ -191,7 +204,7 @@ export default function EsxiUtilization() {
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>VM Discovery › ESXi Utilization</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>Virtualization Env › ESXi Utilization</Text>
           <Title level={4} style={{ margin: 0 }}>ESXi Capacity by Department</Title>
         </div>
         <Space wrap>
@@ -357,9 +370,15 @@ export default function EsxiUtilization() {
           <Title level={5} style={{ margin: 0 }}>
             Host detail <Text type="secondary" style={{ fontWeight: 400 }}>· {dept === 'all' ? 'All departments' : dept} · {rows.length} hosts</Text>
           </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>Each cell: used % / free %. Click a column heading to sort by highest usage.</Text>
+          <Space wrap>
+            <Input allowClear prefix={<SearchOutlined />} style={{ width: 300 }} value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search host, IP, owner, department, location, model" />
+            <Text type="secondary" style={{ fontSize: 12 }}>Each cell: used % / free %. Click a column heading to sort by highest usage.</Text>
+          </Space>
         </div>
         <Table size="small" rowKey={(h) => `${h.vcenter || 'standalone'}|${h.name}|${h.ip}`} columns={columns} dataSource={rows}
+          locale={{ emptyText: search ? `No hosts match “${search}”` : 'No hosts' }}
           pagination={rows.length > 25 ? { pageSize: 25, showSizeChanger: false } : false} scroll={{ x: 'max-content' }} />
         <div style={{ padding: '10px 4px 12px', fontSize: 11, color: token.colorTextSecondary }}>
           Capacity and usage are the figures on VMware Discovery → Hosts &amp; Credentials (standalone ESXi connections and the hosts managed by each vCenter). CPU is shown in cores
