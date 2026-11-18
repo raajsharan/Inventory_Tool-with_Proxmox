@@ -25,6 +25,7 @@ const pct = (used, total) => {
   return t && Number.isFinite(u) && Number.isFinite(t) ? Math.round((u / t) * 1000) / 10 : null;
 };
 const clean = (v) => String(v ?? '').trim();
+const isIp = (v) => /^\d{1,3}(\.\d{1,3}){3}$/.test(clean(v));
 const norm = (v) => clean(v).toLowerCase();
 // Short hostname so "esx01.corp.local" also matches an inventory entry "esx01".
 const shortName = (v) => norm(v).split('.')[0];
@@ -103,10 +104,19 @@ async function getCapacity() {
       diskTotalGb: c.disk_total_gb, diskUsedGb: c.disk_used_gb, vmKey: { source: c.host },
     });
   }
+  // A connection that manages exactly one ESXi host is effectively a standalone
+  // host: discovery often stores the hostname in esxi_ip, and the address you
+  // actually registered is the connection itself, so use that for the IP and for
+  // matching Physical & ESXi Servers.
+  const perConnection = new Map();
+  for (const s of statRows) perConnection.set(s.vcenter, (perConnection.get(s.vcenter) || 0) + 1);
   for (const s of statRows) {
     if (s.esxi_ip && seenIps.has(clean(s.esxi_ip))) continue;
+    const single = perConnection.get(s.vcenter) === 1;
+    const viaConn = single && isIp(s.vcenter) ? clean(s.vcenter) : null;
+    const ip = isIp(s.esxi_ip) ? clean(s.esxi_ip) : (viaConn || s.esxi_ip);
     raw.push({
-      name: s.esxi_name || s.esxi_ip, ip: s.esxi_ip, vcenter: s.vcenter, model: s.hardware_model,
+      name: s.esxi_name || s.esxi_ip, ip, matchIps: [s.esxi_ip, viaConn], vcenter: s.vcenter, model: s.hardware_model,
       cpuCores: s.cpu_cores, cpuPct: s.cpu_usage_pct, memTotalMb: s.memory_total_mb, memUsedMb: s.memory_used_mb,
       diskTotalGb: s.disk_total_gb, diskUsedGb: s.disk_used_gb, vmKey: { ip: s.esxi_ip, name: s.esxi_name },
     });
@@ -114,7 +124,8 @@ async function getCapacity() {
 
   // 2) Numbers, VM counts and Physical & ESXi mapping.
   const hosts = raw.map((h) => {
-    const o = (h.ip && inv.byIp.get(clean(h.ip))) || inv.byName.get(shortName(h.name)) || null;
+    const o = [h.ip, ...(h.matchIps || [])].map(x => x && inv.byIp.get(clean(x))).find(Boolean)
+      || inv.byName.get(shortName(h.name)) || null;
     const vc = (h.vmKey.ip && counts.byIp.get(clean(h.vmKey.ip)))
       || (h.vmKey.name && counts.byName.get(norm(h.vmKey.name)))
       || (h.vmKey.source && counts.bySource.get(norm(h.vmKey.source)))

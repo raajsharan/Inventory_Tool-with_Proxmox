@@ -101,8 +101,7 @@ export default function EsxiUtilization() {
   const depts = useMemo(() => deptNames.map(n => {
     const list = hosts.filter(h => h.department === n);
     const t = aggregate(list);
-    const owners = [...new Set(list.map(h => h.owner).filter(Boolean))].sort();
-    return { name: n, hosts: list.length, vms: t.vms, t, owners };
+    return { name: n, hosts: list.length, vms: t.vms, t };
   }), [deptNames, hosts]);
 
   const rows = useMemo(() => {
@@ -182,7 +181,7 @@ export default function EsxiUtilization() {
       render: (v, h) => (
         <div>
           <div style={{ fontWeight: 600 }}>{v}</div>
-          {h.vcenter && <Text type="secondary" style={{ fontSize: 11 }}>vCenter: {h.vcenter}</Text>}
+          {h.vcenter && <Text type="secondary" style={{ fontSize: 11 }}>via {h.vcenter}</Text>}
         </div>
       ),
     },
@@ -300,9 +299,7 @@ export default function EsxiUtilization() {
                   <Text strong style={{ fontSize: 15 }}>{d.name}</Text>
                   <Text type="secondary" style={{ fontSize: 12 }}>{d.hosts} hosts · {d.vms} VMs</Text>
                 </div>
-                <Text type="secondary" style={{ fontSize: 12, marginTop: -8 }}>
-                  Owner{d.owners.length === 1 ? '' : 's'}: {d.owners.length ? d.owners.join(', ') : '—'}
-                </Text>
+
                 {metricsOf(d.t).map(m => (
                   <div key={m.key} style={{ display: 'flex', flexDirection: 'column', gap: 5, width: '100%' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
