@@ -214,10 +214,20 @@ export default function SoftwareStatus() {
 
     patchMap(setInstallMap, key, { state: 'loading', result: null, method });
     try {
-      const { data: r } = await api.post('/software-status/install', {
+      // Start the install as a background job and poll for it — one long HTTP
+      // request gets cut off (504) by gateways well before a slow install ends.
+      const { data: started } = await api.post('/software-status/install-async', {
         ip_address: vm.ip_address, source: vm.source, port: 22,
         windows_method_override: win ? method : undefined,
       });
+      let r = null;
+      const deadline = Date.now() + 20 * 60 * 1000;
+      while (!r) {
+        await new Promise((res) => setTimeout(res, 3000));
+        if (Date.now() > deadline) throw new Error('Timed out waiting for the install to finish — check the install log.');
+        const { data: s } = await api.get(`/software-status/install-status/${started.job_id}`);
+        if (s.state === 'done') r = s.result;
+      }
       if (r.needs_credentials) {
         const err = missingCredsError(vm, r);
         message.warning(err);

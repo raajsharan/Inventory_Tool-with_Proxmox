@@ -12,6 +12,7 @@ const { installWindowsViaAnsible } = require('../utils/ansibleWindowsInstall');
 const { verifyWindowsAgentViaAnsible } = require('../utils/ansibleWindowsVerify');
 const { WINDOWS_CONFIG } = require('../utils/sshVerify');
 const ApiError    = require('../utils/ApiError');
+const crypto      = require('crypto');
 const audit       = require('../services/auditService');
 
 function appendLog(logFilePath, ip, level, message) {
@@ -740,7 +741,61 @@ async function clearInstallLog(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Async install jobs ────────────────────────────────────────────────────────
+// An install can run for minutes (copy + silent install + service wait), longer
+// than any gateway in front of the app will hold one HTTP request open — the
+// browser got a 504 while the playbook was still running. POST
+// /install-async runs the same install() in the background and returns a job id
+// immediately; the UI polls GET /install-status/:id. Held in memory only: the
+// result is just for the UI that started it, and the install log file remains
+// the durable record. Finished jobs are dropped after an hour.
+const installJobs = new Map();
+const JOB_TTL_MS = 60 * 60 * 1000;
+
+function pruneInstallJobs() {
+  const cutoff = Date.now() - JOB_TTL_MS;
+  for (const [id, j] of installJobs) if (j.finishedAt && j.finishedAt < cutoff) installJobs.delete(id);
+}
+
+async function installAsync(req, res, next) {
+  try {
+    pruneInstallJobs();
+    const { ip_address, source } = req.body || {};
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+
+    // One install per host at a time — a second click would otherwise start a
+    // second playbook against the same machine.
+    for (const [id, j] of installJobs) {
+      if (!j.finishedAt && j.ip_address === ip_address && j.source === source) {
+        return res.status(202).json({ job_id: id, already_running: true });
+      }
+    }
+
+    const jobId = crypto.randomUUID();
+    const job = { ip_address, source, userId: req.user?.id, startedAt: Date.now(), finishedAt: null, result: null };
+    installJobs.set(jobId, job);
+
+    const finish = (result) => { job.result = result; job.finishedAt = Date.now(); };
+    // install() answers through res.json / next(err); capture both.
+    const capture = { json: finish, status() { return capture; } };
+    install(req, capture, (e) => finish({
+      connected: false, error: e?.message || 'Install failed', output: '', exitCode: null,
+    })).catch((e) => finish({ connected: false, error: e?.message || 'Install failed', output: '', exitCode: null }));
+
+    res.status(202).json({ job_id: jobId });
+  } catch (e) { next(e); }
+}
+
+// ── GET /software-status/install-status/:id ───────────────────────────────────
+function installStatus(req, res) {
+  const job = installJobs.get(req.params.id);
+  if (!job || job.userId !== req.user?.id) throw new ApiError(404, 'Install job not found (it may have expired)');
+  if (!job.finishedAt) return res.json({ state: 'running', elapsed_ms: Date.now() - job.startedAt });
+  res.json({ state: 'done', result: job.result });
+}
+
 module.exports = {
+  installAsync, installStatus,
   get, verify, getInstallConfig, saveInstallConfig, install, reinstall, getInstallLog, clearInstallLog,
   getInstallConfigLocations, deleteLocationConfig,
 };

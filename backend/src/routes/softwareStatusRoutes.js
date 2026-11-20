@@ -16,7 +16,9 @@ router.get('/install-config/locations', ...guard,      ctrl.getInstallConfigLoca
 router.put('/install-config',           ...adminGuard, ctrl.saveInstallConfig);
 router.delete('/install-config',        ...adminGuard, ctrl.deleteLocationConfig);
 router.post('/install',        ...agentGuard, remoteActionLimiter, ctrl.install);
-router.post('/reinstall',      ...agentGuard, remoteActionLimiter, ctrl.reinstall);
+router.post('/install-async',  ...agentGuard, remoteActionLimiter, ctrl.installAsync);
+router.get('/install-status/:id', ...agentGuard, ctrl.installStatus);
+router.post('/reinstall',     ...agentGuard, remoteActionLimiter, ctrl.reinstall);
 router.get('/install-log',     ...guard,      ctrl.getInstallLog);
 router.delete('/install-log',  ...adminGuard, ctrl.clearInstallLog);
 
