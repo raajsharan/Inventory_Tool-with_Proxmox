@@ -83,6 +83,10 @@
           # rather than a bare executable call.
           ansible.windows.win_shell: "{{ me_install_cmd }}"
           register: me_install
+          # Bounded: a hung installer (waiting on a prompt/UAC) fails this task
+          # after 10 minutes instead of blocking the run indefinitely.
+          async: 600
+          poll: 10
           # 1641 and 3010 both mean "installed, reboot needed" — successes.
           changed_when: me_install.rc in [0, 1641, 3010]
           failed_when: me_install.rc not in [0, 1641, 3010]
