@@ -998,7 +998,6 @@ body[data-theme="dark"] a.wr-figure:hover .wr-figure-value { color: #7AA5FF; }
    scrollbar pinned to the viewport bottom for whichever table is in
    view, so it's always reachable regardless of scroll position.
    ──────────────────────────────────────────────────────────────────── */
-.hscroll-managed { cursor: grab; }
 .hscroll-managed.hscroll-dragging { cursor: grabbing; user-select: none; }
 
 .hscroll-float-track {

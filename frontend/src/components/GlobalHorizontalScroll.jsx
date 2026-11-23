@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-// Any horizontally-overflowing table on any page gets three things, with
-// zero per-page wiring: (1) click-and-drag panning from anywhere inside
-// the table, not just the native scrollbar strip, (2) plain mouse-wheel
-// scrolls it sideways instead of requiring Shift, and (3) a single
+// Any horizontally-overflowing table on any page gets two things, with
+// zero per-page wiring: (1) Alt+drag panning from anywhere inside the
+// table (plain drag selects text; the wheel scrolls the page), and (2) a single
 // floating scrollbar pinned to the bottom of the viewport for whichever
 // wide table is currently in view, so users never have to scroll the page
 // down to the table's own edge to find a horizontal scrollbar. Mounted
@@ -77,16 +76,12 @@ export default function GlobalHorizontalScroll() {
 
       el.addEventListener('scroll', () => { if (activeRef.current === el) updateThumb(); }, { passive: true });
 
-      el.addEventListener('wheel', (e) => {
-        if (!isScrollable(el)) return;
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-          el.scrollLeft += e.deltaY;
-          e.preventDefault();
-        }
-      }, { passive: false });
+      // The mouse wheel is left alone so the page scrolls vertically as normal
+      // over a table (Shift+wheel / trackpad still pan sideways natively).
 
+      // Drag-panning needs Alt held, so a plain click-drag still selects text.
       el.addEventListener('mousedown', (e) => {
-        if (e.button !== 0 || !isScrollable(el) || e.target.closest(INTERACTIVE_SELECTOR)) return;
+        if (e.button !== 0 || !e.altKey || !isScrollable(el) || e.target.closest(INTERACTIVE_SELECTOR)) return;
         dragState.current = { el, startX: e.clientX, startScroll: el.scrollLeft, moved: false };
         el.classList.add('hscroll-dragging');
       });
