@@ -694,24 +694,49 @@ async function reinstall(req, res, next) {
   try {
     const { ip_address, source, port = 22, otp } = req.body;
     if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
-    if (!otp || !String(otp).trim()) throw new ApiError(400, 'otp is required');
-
     const { username, password, osType, location } = await resolveVm(ip_address, source);
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
 
-    if (isWindows(osType)) {
-      throw new ApiError(422, 'Reinstall via OTP is currently only supported for Linux hosts.');
-    }
+    // The OTP is only needed for the Linux uninstaller; Windows hosts are
+    // uninstalled through the registry-registered uninstaller via Ansible.
+    if (!isWindows(osType) && (!otp || !String(otp).trim())) throw new ApiError(400, 'otp is required');
 
     const { rows: cfg } = await db.query(
-      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd, log_file_path
+      `SELECT linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
+              windows_file_path, windows_cmd, log_file_path
          FROM software_install_config WHERE id = 1`,
     );
     const locCfg  = await getLocationConfigRow(location);
     const cfgRow  = mergeLocationConfig(cfg[0] || {}, locCfg);
     const logFile = cfgRow.log_file_path || null;
     if (locCfg) appendLog(logFile, ip_address, 'INFO', `Using "${location}" location installer configuration`);
+
+    if (isWindows(osType)) {
+      appendLog(logFile, ip_address, 'INFO', 'Uninstalling ManageEngine Agent (Windows)...');
+      const uninstallResult = await installWindowsViaAnsible({
+        ip_address, username, password, osType,
+        playbookPath: ansible.ME_UNINSTALL_WINDOWS_PLAYBOOK,
+        playbookName: 'me_agent_uninstall_windows.yml',
+        vars: {}, command: 'Uninstall ManageEngine UEMS Agent',
+        appendLog, logFile, agentLabel: 'ManageEngine Agent uninstall',
+      });
+      await audit.log({
+        user: req.user, action: 'UPDATE', entityType: 'manage_engine_reinstall', entityId: ip_address,
+        details: { ip_address, step: 'uninstall', exitCode: uninstallResult.exitCode, connected: uninstallResult.connected },
+        ipAddress: req.ip,
+      });
+      if (!uninstallResult.connected || uninstallResult.exitCode !== 0) {
+        return res.json({ uninstall: uninstallResult, install: null });
+      }
+      const installResult = await installMeWindowsViaAnsible({ ip_address, username, password, cfgRow, osType, logFile });
+      await audit.log({
+        user: req.user, action: 'UPDATE', entityType: 'manage_engine_reinstall', entityId: ip_address,
+        details: { ip_address, step: 'install', exitCode: installResult.exitCode, connected: installResult.connected },
+        ipAddress: req.ip,
+      });
+      return res.json({ uninstall: uninstallResult, install: installResult });
+    }
 
     const uninstallResult = await performLinuxUninstall({
       ip_address, port, username, password, cfgRow, logFile, otp: String(otp).trim(),

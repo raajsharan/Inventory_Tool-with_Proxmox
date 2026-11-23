@@ -7,7 +7,8 @@ const crypto = require('crypto');
 // Windows-only agent installs. Their Linux counterparts never come through
 // Ansible — see nessusStatusController.js / softwareStatusController.js.
 const NESSUS_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'nessus_agent_windows.yml');
-const ME_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'me_agent_windows.yml');
+const ME_UNINSTALL_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'me_agent_uninstall_windows.yml');
+const ME_WINDOWS_PLAYBOOK =path.join(__dirname, '..', '..', 'ansible', 'me_agent_windows.yml');
 // Agent-agnostic Windows service/binary check — which agent to look for is
 // passed per host, so both status pages share it.
 const VERIFY_WINDOWS_PLAYBOOK = path.join(__dirname, '..', '..', 'ansible', 'agent_verify_windows.yml');
@@ -96,5 +97,5 @@ function runPlaybook(inventoryPath, extraVars = {}, playbookPath) {
 
 module.exports = {
   buildVarsInventory, writeTempInventory, runPlaybook,
-  NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK, VERIFY_WINDOWS_PLAYBOOK,
+  NESSUS_WINDOWS_PLAYBOOK, ME_WINDOWS_PLAYBOOK, ME_UNINSTALL_WINDOWS_PLAYBOOK, VERIFY_WINDOWS_PLAYBOOK,
 };

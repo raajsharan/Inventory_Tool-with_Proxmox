@@ -1,0 +1,80 @@
+# ManageEngine UEMS Agent uninstall — Windows targets only (Software Status
+# "Reinstall"). Finds the agent's entry in the Windows uninstall registry keys
+# and removes it silently, elevated (runas as SYSTEM), then waits for the
+# service to disappear. The install step afterwards reuses me_agent_windows.yml.
+---
+- name: Uninstall the ManageEngine UEMS Agent
+  hosts: windows
+  gather_facts: false
+
+  vars:
+    me_service_name: 'ManageEngine UEMS - Agent'
+
+  tasks:
+    - name: Check if the ManageEngine UEMS Agent service exists
+      ansible.windows.win_service_info:
+        name: "{{ me_service_name }}"
+      register: me_service_before
+
+    - name: Uninstall the agent
+      when: me_service_before.exists | default(false)
+      become: true
+      become_method: ansible.builtin.runas
+      become_user: SYSTEM
+      block:
+        - name: Find the agent's uninstall command in the registry
+          ansible.windows.win_shell: |
+            $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            $e = Get-ItemProperty $keys -ErrorAction SilentlyContinue |
+                 Where-Object { $_.DisplayName -match 'ManageEngine UEMS|ManageEngine.*Agent|Desktop Central.*Agent|Endpoint Central.*Agent' } |
+                 Select-Object -First 1
+            if (-not $e) { Write-Output 'NOT_FOUND'; exit 0 }
+            if ($e.PSChildName -match '^\{[0-9A-Fa-f-]+\}$') {
+              Write-Output ("MSI::" + $e.PSChildName)
+            } elseif ($e.UninstallString) {
+              Write-Output ("EXE::" + $e.UninstallString)
+            } else { Write-Output 'NOT_FOUND' }
+          register: me_uninst_lookup
+          changed_when: false
+
+        - name: Fail if no uninstall entry was found
+          ansible.builtin.fail:
+            msg: >-
+              The agent service exists but no uninstall entry was found in the registry.
+              Remove it manually (Endpoint Central may require an uninstall OTP).
+          when: (me_uninst_lookup.stdout | trim) == 'NOT_FOUND'
+
+        - name: Uninstall via msiexec (MSI product code)
+          ansible.windows.win_command: msiexec.exe /x "{{ (me_uninst_lookup.stdout | trim).split('::')[1] }}" /qn /norestart
+          register: me_uninstall_msi
+          when: (me_uninst_lookup.stdout | trim).startswith('MSI::')
+          async: 600
+          poll: 10
+          changed_when: me_uninstall_msi.rc in [0, 1605, 1641, 3010]
+          failed_when: me_uninstall_msi.rc not in [0, 1605, 1641, 3010]
+
+        - name: Uninstall via the registered uninstaller (EXE)
+          ansible.windows.win_shell: "& cmd.exe /c \"{{ (me_uninst_lookup.stdout | trim).split('::', 1)[1] }} /silent\""
+          register: me_uninstall_exe
+          when: (me_uninst_lookup.stdout | trim).startswith('EXE::')
+          async: 600
+          poll: 10
+          failed_when: me_uninstall_exe.rc not in [0, 1641, 3010]
+
+        - name: Wait for the agent service to be removed
+          ansible.windows.win_service_info:
+            name: "{{ me_service_name }}"
+          register: me_service_after
+          retries: 24
+          delay: 5
+          until: not (me_service_after.exists | default(false))
+
+        - name: Report success
+          ansible.builtin.debug:
+            msg: "ManageEngine UEMS Agent uninstalled."
+
+    - name: Report that the agent was not installed
+      ansible.builtin.debug:
+        msg: "ManageEngine UEMS Agent is not installed — nothing to uninstall."
+      when: not (me_service_before.exists | default(false))

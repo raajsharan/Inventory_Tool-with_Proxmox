@@ -70,7 +70,7 @@ const vmKey = (v) => `${v.ip_address}||${v.source}`;
 // ── component ─────────────────────────────────────────────────────────────────
 export default function SoftwareStatus() {
   const { user, canManageAgents } = useAuth();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const isAdmin = ['admin', 'superadmin'].includes(user?.role);
   // Install/Reinstall specifically also open up to users granted
   // can_manage_agents (Administration > Password & Page Control) — Install
@@ -271,6 +271,17 @@ export default function SoftwareStatus() {
   }, []); // eslint-disable-line
 
   function openOtpPrompt(vm) {
+    // Windows hosts are uninstalled through their registered uninstaller — no OTP needed.
+    if (isWindows(vm.os_type)) {
+      modal.confirm({
+        title: `Reinstall — ${vm.vm_name || vm.ip_address}`,
+        content: 'The ManageEngine agent is uninstalled first, and only if that succeeds is it installed fresh again.',
+        okText: 'Uninstall & Reinstall',
+        okButtonProps: { danger: true },
+        onOk: () => runReinstall(vm, ''),
+      });
+      return;
+    }
     setOtpPrompt({ open: true, vm, otp: '' });
   }
   function confirmOtpPrompt() {
@@ -504,7 +515,7 @@ export default function SoftwareStatus() {
         // see softwareStatusController.reinstall. Independent of whatever
         // the regular Install flow above is currently showing.
         const ri = reinstallMap[key] || { state: 'idle' };
-        const reinstallContent = win ? null : (
+        const reinstallContent = (
           ri.state === 'loading' ? (
             <Space size={4}><Spin size="small" /><Typography.Text type="secondary" style={{ fontSize: 11 }}>Reinstalling…</Typography.Text></Space>
           ) : ri.state === 'done' && ri.result ? (
@@ -517,7 +528,7 @@ export default function SoftwareStatus() {
               <Button size="small" icon={<ReloadOutlined />} onClick={() => openOtpPrompt(vm)} />
             </Space>
           ) : (
-            <Tooltip title="Uninstalls the agent (requires an OTP from Endpoint Central for this device), then installs it fresh">
+            <Tooltip title={win ? 'Uninstalls the agent, then installs it fresh' : 'Uninstalls the agent (requires an OTP from Endpoint Central for this device), then installs it fresh'}>
               <Button size="small" icon={<ReloadOutlined />} onClick={() => openOtpPrompt(vm)}>
                 Reinstall
               </Button>
