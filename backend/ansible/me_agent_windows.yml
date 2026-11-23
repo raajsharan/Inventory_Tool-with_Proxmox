@@ -77,6 +77,12 @@
             src: "{{ me_source }}"
             dest: "{{ me_destination }}"
 
+        - name: Copy companion files (transforms etc.) next to the installer
+          ansible.windows.win_copy:
+            src: "{{ item }}"
+            dest: "{{ me_temp_dir }}\\{{ item | basename }}"
+          loop: "{{ me_extra_sources | default([]) }}"
+
         - name: Confirm the installer arrived
           ansible.windows.win_stat:
             path: "{{ me_destination }}"
@@ -97,6 +103,9 @@
           # after 10 minutes instead of blocking the run indefinitely.
           async: 600
           poll: 10
+          args:
+            # run from the deployment dir so relative references (.mst) resolve
+            chdir: "{{ me_temp_dir }}"
           # 1641 and 3010 both mean "installed, reboot needed" — successes.
           changed_when: me_install.rc in [0, 1641, 3010]
           failed_when: me_install.rc not in [0, 1641, 3010]

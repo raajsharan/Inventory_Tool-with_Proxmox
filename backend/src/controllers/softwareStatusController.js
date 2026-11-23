@@ -447,14 +447,41 @@ function installMeWindowsViaAnsible({ ip_address, username, password, cfgRow, os
   // side knows where win_copy will land the file — the same substitution the
   // WinRM/WMI/PsExec transports do against their own remote dir.
   const remotePath = `${ME_REMOTE_DIR}\\${path.basename(filePath)}`;
-  const command = (cfgRow.windows_cmd || `& '{installer}' /Silent`)
+  let command = (cfgRow.windows_cmd || `& '{installer}' /Silent`)
     .replace(/\{installer\}/g, remotePath);
+
+  // A saved command often hardcodes the path of the installer on THIS server
+  // (e.g. /software/Windows/x/Agent.exe), which doesn't exist on the target —
+  // point it at the copied file instead.
+  const srcVariants = [filePath, filePath.replace(/\\/g, '/'), filePath.replace(/\//g, '\\')];
+  for (const s of new Set(srcVariants)) command = command.split(s).join(remotePath);
+
+  // msiexec /i only opens .msi packages; handed an .exe it never completes
+  // under /qn. Run the .exe directly instead.
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.exe' && /^\s*(&\s*)?msiexec/i.test(command)) {
+    appendLog(logFile, ip_address, 'WARN',
+      'Configured command uses msiexec on an .exe installer — running the .exe directly with /silent instead');
+    command = `& '${remotePath}' /silent`;
+  }
+
+  // Companion files the command refers to (e.g. TRANSFORMS=UEMSAgent.mst) must
+  // sit next to the installer on the target — copy any that exist beside the
+  // source file.
+  const srcDir = path.dirname(filePath);
+  const extras = [];
+  for (const m of command.matchAll(/([\w.\-]+\.(?:mst|json))/gi)) {
+    const candidate = path.join(srcDir, m[1]);
+    if (fs.existsSync(candidate) && !extras.includes(candidate)) extras.push(candidate);
+  }
+  const serverInfo = cfgRow.linux_serverinfo_path;
+  if (ext === '.msi' && serverInfo && fs.existsSync(serverInfo) && !extras.includes(serverInfo)) extras.push(serverInfo);
 
   return installWindowsViaAnsible({
     ip_address, username, password, osType,
     playbookPath: ansible.ME_WINDOWS_PLAYBOOK,
     playbookName: 'me_agent_windows.yml',
-    vars: { me_source: filePath, me_install_cmd: command },
+    vars: { me_source: filePath, me_install_cmd: command, me_extra_sources: extras },
     command,
     appendLog, logFile, agentLabel: 'ManageEngine Agent',
   });
