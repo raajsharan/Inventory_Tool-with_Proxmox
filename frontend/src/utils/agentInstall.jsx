@@ -26,6 +26,21 @@ function outcomeLine(label, data) {
   return `${label}: failed — ${data.error || 'see Software Status / Nessus Status for details'}.`;
 }
 
+async function runJob(api, base, source, ipAddress) {
+  try {
+    const { data: started } = await api.post(`${base}/install-async`, { ip_address: ipAddress, source, port: 22 });
+    const deadline = Date.now() + 20 * 60 * 1000;
+    for (;;) {
+      await new Promise((res) => setTimeout(res, 3000));
+      if (Date.now() > deadline) return { error: 'Timed out waiting for the install — check the install log.' };
+      const { data: s } = await api.get(`${base}/install-status/${started.job_id}`);
+      if (s.state === 'done') return s.result;
+    }
+  } catch (e) {
+    return { error: e.response?.data?.error || e.message || 'Request failed' };
+  }
+}
+
 // Calls the existing ME Agent / Nessus Agent install endpoints — the same
 // ones Software Status's and Nessus Status's own per-host "Install" button
 // call — for a just-saved asset, so a brand-new host can get both agents
@@ -42,16 +57,11 @@ export async function runAgentInstalls({ api, modal, message, source, ipAddress,
   const sourceLabel = SOURCE_LABEL[source];
   message.loading({ content: 'Installing ManageEngine / Nessus agents…', key: 'agent-install', duration: 0 });
   try {
-    const [meResult, nessusResult] = await Promise.all([
-      installMe
-        ? api.post('/software-status/install', { ip_address: ipAddress, source: sourceLabel })
-          .then((r) => r.data).catch((e) => ({ error: e.response?.data?.error || 'Request failed' }))
-        : null,
-      installNessus
-        ? api.post('/nessus-status/install', { ip_address: ipAddress, source: sourceLabel })
-          .then((r) => r.data).catch((e) => ({ error: e.response?.data?.error || 'Request failed' }))
-        : null,
-    ]);
+    // One at a time: two installers on the same Windows host can collide on
+    // the Windows Installer mutex. Each runs as a background job and is polled,
+    // since a single long request gets cut off (504) by gateways.
+    const meResult     = installMe     ? await runJob(api, '/software-status', sourceLabel, ipAddress) : null;
+    const nessusResult = installNessus ? await runJob(api, '/nessus-status',   sourceLabel, ipAddress) : null;
     message.destroy('agent-install');
 
     const items = [];

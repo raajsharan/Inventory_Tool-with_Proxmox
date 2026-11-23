@@ -31,12 +31,16 @@ function extractTagNumber(tag) {
 // Map snake_case server field keys to camelCase Form.Item names.
 function camel(s) { return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase()); }
 
-const NO_AGENT_ASSET_TYPES = ['physical server', 'bare metal server'];
-const NO_AGENT_OS_TYPES = ['proxmox', 'vmware'];
+// Auto-install applies only to Assets / Ext. Assets, for VMs and physical
+// servers running Windows or Linux. Hypervisors/appliances (Proxmox, VMware,
+// ESXi, EVE-NG, appliances) can't take an agent, so they're skipped.
+const AGENT_PAGES = ['assets', 'ext_assets'];
+const NO_AGENT_OS_TYPES = ['proxmox', 'vmware', 'esxi', 'appliance', 'eve-ng', 'eveng'];
 function skipAgentInstall(assetType, osType) {
-  const t = String(assetType || '').trim().toLowerCase();
   const o = String(osType || '').trim().toLowerCase();
-  return NO_AGENT_ASSET_TYPES.includes(t) || NO_AGENT_OS_TYPES.some(x => o.includes(x));
+  if (!o) return false;
+  if (NO_AGENT_OS_TYPES.some(x => o.includes(x))) return true;
+  return !(o.includes('windows') || o.includes('linux') || /ubuntu|centos|rhel|red hat|debian|rocky|alma|suse|oracle/.test(o));
 }
 
 export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/assets', entityLabel = 'Asset', pageKey = 'assets', disableAgentInstall = false }) {
@@ -207,7 +211,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       // quietly (no popup when it's skipped for lack of credentials).
       // Never deploy agents to hypervisor hosts: Physical / Bare Metal servers,
       // or anything whose OS Type is Proxmox or VMware.
-      if (savedId && values.ipAddress && (isAdmin || canManageAgents) && !disableAgentInstall && !skipAgentInstall(values.assetType, values.osType)) {
+      if (savedId && values.ipAddress && (isAdmin || canManageAgents) && !disableAgentInstall && AGENT_PAGES.includes(pageKey) && !skipAgentInstall(values.assetType, values.osType)) {
         const isCreate  = mode === 'create';
         const installMe     = isCreate ? hnInstallAgents : !values.manageEngineInstalled;
         const installNessus = isCreate ? hnInstallAgents : !values.tenableInstalled;
@@ -610,7 +614,7 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
                     assign={hnAssign} setAssign={setHnAssign}
                     siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                     segmentOrder={hnConfig.segment_order}
-                    canInstallAgents={(isAdmin || canManageAgents) && !disableAgentInstall && !skipAgentInstall(watchedAssetType, osType)}
+                    canInstallAgents={(isAdmin || canManageAgents) && !disableAgentInstall && AGENT_PAGES.includes(pageKey) && !skipAgentInstall(watchedAssetType, osType)}
                     installAgents={hnInstallAgents} setInstallAgents={setHnInstallAgents}
                   />
                 )}

@@ -15,7 +15,9 @@ router.post('/service-action', ...adminGuard, ctrl.serviceAction);
 router.get('/install-config',  ...guard,      ctrl.getInstallConfig);
 router.put('/install-config',  ...adminGuard, ctrl.saveInstallConfig);
 router.post('/install',        ...agentGuard, remoteActionLimiter, ctrl.install);
-router.get('/install-log',     ...guard,      ctrl.getInstallLog);
+router.post('/install-async',  ...agentGuard, remoteActionLimiter, ctrl.installAsync);
+router.get('/install-status/:id', ...agentGuard, ctrl.installStatus);
+router.get('/install-log',    ...guard,      ctrl.getInstallLog);
 router.delete('/install-log',  ...adminGuard, ctrl.clearInstallLog);
 router.post('/cleanup-non-applicable', ...adminGuard, ctrl.cleanupNonApplicable);
 

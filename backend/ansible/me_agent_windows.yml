@@ -35,6 +35,16 @@
 
     - name: Install the ManageEngine Agent when it isn't already present
       when: not (me_service_before.exists | default(false))
+      # Run every step of the install elevated ("Run as administrator"). A plain
+      # WinRM logon by a non-built-in admin gets a UAC-filtered token, so the
+      # setup can't write to Program Files or register its service. become via
+      # runas as SYSTEM gives a full-privilege token without needing the
+      # account's password again, and needs no interactive UAC prompt. Because
+      # the process is already elevated, the configured install command must NOT
+      # add "-Verb RunAs" (SYSTEM has no desktop to show a prompt on).
+      become: true
+      become_method: ansible.builtin.runas
+      become_user: SYSTEM
       block:
 
         - name: Read the target's hostname

@@ -742,7 +742,48 @@ async function cleanupNonApplicable(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Async install jobs ────────────────────────────────────────────────────────
+// Same pattern as softwareStatusController.installAsync: a Nessus install can
+// outlast a gateway's HTTP timeout, so it runs in the background and the UI
+// polls /install-status/:id. In-memory only; the install log is the durable record.
+const installJobs = new Map();
+const JOB_TTL_MS = 60 * 60 * 1000;
+
+async function installAsync(req, res, next) {
+  try {
+    const cutoff = Date.now() - JOB_TTL_MS;
+    for (const [id, j] of installJobs) if (j.finishedAt && j.finishedAt < cutoff) installJobs.delete(id);
+
+    const { ip_address, source } = req.body || {};
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+
+    for (const [id, j] of installJobs) {
+      if (!j.finishedAt && j.ip_address === ip_address && j.source === source) {
+        return res.status(202).json({ job_id: id, already_running: true });
+      }
+    }
+
+    const jobId = require('crypto').randomUUID();
+    const job = { ip_address, source, userId: req.user?.id, startedAt: Date.now(), finishedAt: null, result: null };
+    installJobs.set(jobId, job);
+
+    const fail = (e) => ({ connected: false, error: e?.message || 'Install failed', output: '', exitCode: null });
+    const finish = (result) => { job.result = result; job.finishedAt = Date.now(); };
+    const capture = { json: finish, status() { return capture; } };
+    install(req, capture, (e) => finish(fail(e))).catch((e) => finish(fail(e)));
+
+    res.status(202).json({ job_id: jobId });
+  } catch (e) { next(e); }
+}
+
+function installStatus(req, res) {
+  const job = installJobs.get(req.params.id);
+  if (!job || job.userId !== req.user?.id) throw new ApiError(404, 'Install job not found (it may have expired)');
+  if (!job.finishedAt) return res.json({ state: 'running', elapsed_ms: Date.now() - job.startedAt });
+  res.json({ state: 'done', result: job.result });
+}
+
 module.exports = {
   get, verify, serviceAction, getInstallConfig, saveInstallConfig, install, getInstallLog, clearInstallLog,
-  cleanupNonApplicable,
+  cleanupNonApplicable, installAsync, installStatus,
 };

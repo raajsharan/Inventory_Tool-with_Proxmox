@@ -40,6 +40,12 @@
 
     - name: Install the Nessus Agent when it isn't already present
       when: not (nessus_service_before.exists | default(false))
+      # Run the install elevated ("Run as administrator"): become via runas as
+      # SYSTEM gives msiexec a full-privilege token instead of the UAC-filtered
+      # one a plain WinRM logon gets, with no password and no UAC prompt.
+      become: true
+      become_method: ansible.builtin.runas
+      become_user: SYSTEM
       block:
 
         - name: Create the temporary deployment directory
