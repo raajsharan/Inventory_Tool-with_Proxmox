@@ -251,9 +251,19 @@ export default function SoftwareStatus() {
     const key = vmKey(vm);
     patchMap(setReinstallMap, key, { state: 'loading', result: null });
     try {
-      const { data: r } = await api.post('/software-status/reinstall', {
+      // Background job + polling: uninstall + install outlasts a gateway's
+      // request timeout (504), so one long request can't be used.
+      const { data: started } = await api.post('/software-status/reinstall-async', {
         ip_address: vm.ip_address, source: vm.source, port: 22, otp,
       });
+      let r = null;
+      const deadline = Date.now() + 30 * 60 * 1000;
+      while (!r) {
+        await new Promise((res) => setTimeout(res, 3000));
+        if (Date.now() > deadline) throw new Error('Timed out waiting for the reinstall to finish — check the install log.');
+        const { data: s } = await api.get(`/software-status/install-status/${started.job_id}`);
+        if (s.state === 'done') r = s.result;
+      }
       if (r.needs_credentials) {
         const err = missingCredsError(vm, r);
         message.warning(err);

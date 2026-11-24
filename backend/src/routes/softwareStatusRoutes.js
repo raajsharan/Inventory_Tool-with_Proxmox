@@ -19,6 +19,7 @@ router.post('/install',        ...agentGuard, remoteActionLimiter, ctrl.install)
 router.post('/install-async',  ...agentGuard, remoteActionLimiter, ctrl.installAsync);
 router.get('/install-status/:id', ...agentGuard, ctrl.installStatus);
 router.post('/reinstall',     ...agentGuard, remoteActionLimiter, ctrl.reinstall);
+router.post('/reinstall-async', ...agentGuard, remoteActionLimiter, ctrl.reinstallAsync);
 router.get('/install-log',     ...guard,      ctrl.getInstallLog);
 router.delete('/install-log',  ...adminGuard, ctrl.clearInstallLog);
 

@@ -851,6 +851,38 @@ async function installAsync(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── POST /software-status/reinstall-async ─────────────────────────────────────
+// Same background-job pattern for Reinstall (uninstall + install), which on
+// Windows runs far longer than a gateway keeps one request open. Polled with the
+// same GET /install-status/:id; the result is reinstall()'s { uninstall, install }.
+async function reinstallAsync(req, res, next) {
+  try {
+    pruneInstallJobs();
+    const { ip_address, source, otp } = req.body || {};
+    if (!ip_address || !source) throw new ApiError(400, 'ip_address and source are required');
+    if (!otp || !String(otp).trim()) throw new ApiError(400, 'otp is required');
+
+    for (const [id, j] of installJobs) {
+      if (!j.finishedAt && j.ip_address === ip_address && j.source === source) {
+        return res.status(202).json({ job_id: id, already_running: true });
+      }
+    }
+
+    const jobId = crypto.randomUUID();
+    const job = { ip_address, source, userId: req.user?.id, startedAt: Date.now(), finishedAt: null, result: null };
+    installJobs.set(jobId, job);
+
+    const finish = (result) => { job.result = result; job.finishedAt = Date.now(); };
+    const fail = (e) => finish({
+      uninstall: { connected: false, error: e?.message || 'Reinstall failed', output: '', exitCode: null }, install: null,
+    });
+    const capture = { json: finish, status() { return capture; } };
+    reinstall(req, capture, fail).catch(fail);
+
+    res.status(202).json({ job_id: jobId });
+  } catch (e) { next(e); }
+}
+
 // ── GET /software-status/install-status/:id ───────────────────────────────────
 function installStatus(req, res) {
   const job = installJobs.get(req.params.id);
@@ -860,7 +892,7 @@ function installStatus(req, res) {
 }
 
 module.exports = {
-  installAsync, installStatus,
+  installAsync, reinstallAsync, installStatus,
   get, verify, getInstallConfig, saveInstallConfig, install, reinstall, getInstallLog, clearInstallLog,
   getInstallConfigLocations, deleteLocationConfig,
 };
