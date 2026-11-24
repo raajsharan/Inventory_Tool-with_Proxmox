@@ -271,17 +271,6 @@ export default function SoftwareStatus() {
   }, []); // eslint-disable-line
 
   function openOtpPrompt(vm) {
-    // Windows hosts are uninstalled through their registered uninstaller — no OTP needed.
-    if (isWindows(vm.os_type)) {
-      modal.confirm({
-        title: `Reinstall — ${vm.vm_name || vm.ip_address}`,
-        content: 'The ManageEngine agent is uninstalled first, and only if that succeeds is it installed fresh again.',
-        okText: 'Uninstall & Reinstall',
-        okButtonProps: { danger: true },
-        onOk: () => runReinstall(vm, ''),
-      });
-      return;
-    }
     setOtpPrompt({ open: true, vm, otp: '' });
   }
   function confirmOtpPrompt() {
@@ -528,7 +517,7 @@ export default function SoftwareStatus() {
               <Button size="small" icon={<ReloadOutlined />} onClick={() => openOtpPrompt(vm)} />
             </Space>
           ) : (
-            <Tooltip title={win ? 'Uninstalls the agent, then installs it fresh' : 'Uninstalls the agent (requires an OTP from Endpoint Central for this device), then installs it fresh'}>
+            <Tooltip title="Uninstalls the agent (requires an OTP from the Endpoint Central console for this device), then installs it fresh">
               <Button size="small" icon={<ReloadOutlined />} onClick={() => openOtpPrompt(vm)}>
                 Reinstall
               </Button>
@@ -755,7 +744,8 @@ export default function SoftwareStatus() {
         destroyOnClose
       >
         <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-          Fetch an uninstall OTP from Endpoint Central for this device, then enter it below. The
+          Fetch the uninstall OTP for this device from the Endpoint Central console (Agent →
+          Computers → View OTP), then enter it below. The
           agent is uninstalled first (authorized by this OTP), and only if that succeeds is it
           installed fresh again.
         </Typography.Paragraph>

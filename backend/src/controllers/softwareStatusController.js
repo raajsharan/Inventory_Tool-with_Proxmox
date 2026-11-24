@@ -57,6 +57,14 @@ async function ensureTarInstalled({ host, port, username, password }) {
 // convention as {installer} in the install command below.
 const DEFAULT_LINUX_UNINSTALL_CMD = 'echo "{otp}" | sudo /usr/local/manageengine/uems_agent/RemoveUEMSAgent.sh';
 
+// Windows counterpart. {target} is the agent's MSI product code (or its
+// registered uninstall string); {otp} is the one-time password from the
+// Endpoint Central console. ManageEngine doesn't document a silent OTP switch,
+// so override this with ME_WIN_UNINSTALL_CMD if your agent version expects a
+// different property/argument.
+const WINDOWS_UNINSTALL_TEMPLATE = process.env.ME_WIN_UNINSTALL_CMD
+  || 'msiexec.exe /x {target} /qn /norestart OTP={otp}';
+
 const SOURCE_TABLE = {
   'MSL Assets':      'assets',
   'Beijing Assets':  'beijing_assets',
@@ -698,9 +706,8 @@ async function reinstall(req, res, next) {
     if (!username) return res.json({ needs_credentials: true, has_username: false, has_password: false, os_type: osType });
     if (!password) return res.json({ needs_credentials: true, has_username: true, prefill_username: username, has_password: false, os_type: osType });
 
-    // The OTP is only needed for the Linux uninstaller; Windows hosts are
-    // uninstalled through the registry-registered uninstaller via Ansible.
-    if (!isWindows(osType) && (!otp || !String(otp).trim())) throw new ApiError(400, 'otp is required');
+    // Both platforms need the uninstall OTP from the Endpoint Central console.
+    if (!otp || !String(otp).trim()) throw new ApiError(400, 'otp is required');
 
     const { rows: cfg } = await db.query(
       `SELECT linux_file_path, linux_serverinfo_path, linux_cmd, linux_uninstall_cmd,
@@ -718,7 +725,8 @@ async function reinstall(req, res, next) {
         ip_address, username, password, osType,
         playbookPath: ansible.ME_UNINSTALL_WINDOWS_PLAYBOOK,
         playbookName: 'me_agent_uninstall_windows.yml',
-        vars: {}, command: 'Uninstall ManageEngine UEMS Agent',
+        vars: { me_uninstall_otp: String(otp).trim(), me_uninstall_template: WINDOWS_UNINSTALL_TEMPLATE },
+        command: WINDOWS_UNINSTALL_TEMPLATE.replace(/\{otp\}/g, '••••••'),
         appendLog, logFile, agentLabel: 'ManageEngine Agent uninstall',
       });
       await audit.log({

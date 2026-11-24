@@ -45,22 +45,35 @@
               Remove it manually (Endpoint Central may require an uninstall OTP).
           when: (me_uninst_lookup.stdout | trim) == 'NOT_FOUND'
 
-        - name: Uninstall via msiexec (MSI product code)
-          ansible.windows.win_command: msiexec.exe /x "{{ (me_uninst_lookup.stdout | trim).split('::')[1] }}" /qn /norestart
-          register: me_uninstall_msi
-          when: (me_uninst_lookup.stdout | trim).startswith('MSI::')
-          async: 600
-          poll: 10
-          changed_when: me_uninstall_msi.rc in [0, 1605, 1641, 3010]
-          failed_when: me_uninstall_msi.rc not in [0, 1605, 1641, 3010]
+        - name: Build the uninstall command
+          # Endpoint Central's agent protection requires the one-time password
+          # shown in the console (Agent > Computers > View OTP) to uninstall.
+          # me_uninstall_template ({target} = product code or uninstall string,
+          # {otp}) comes from the backend and can be overridden with the
+          # ME_WIN_UNINSTALL_CMD environment variable there.
+          ansible.builtin.set_fact:
+            me_uninstall_final: >-
+              {{ me_uninstall_template
+                 | replace('{target}', (me_uninst_lookup.stdout | trim).split('::', 1)[1])
+                 | replace('{otp}', me_uninstall_otp | default('')) }}
+          no_log: true
 
-        - name: Uninstall via the registered uninstaller (EXE)
-          ansible.windows.win_shell: "& cmd.exe /c \"{{ (me_uninst_lookup.stdout | trim).split('::', 1)[1] }} /silent\""
-          register: me_uninstall_exe
-          when: (me_uninst_lookup.stdout | trim).startswith('EXE::')
+        - name: Run the uninstaller
+          # no_log hides the OTP; the exit code is checked in the next task.
+          ansible.windows.win_shell: "{{ me_uninstall_final }}"
+          register: me_uninstall
           async: 600
           poll: 10
-          failed_when: me_uninstall_exe.rc not in [0, 1641, 3010]
+          changed_when: true
+          failed_when: false
+          no_log: true
+
+        - name: Fail if the uninstaller returned an error
+          ansible.builtin.fail:
+            msg: >-
+              Uninstall command failed with exit code {{ me_uninstall.rc | default('unknown') }}.
+              Check that the OTP is current and correct (Endpoint Central: Agent > Computers > View OTP).
+          when: me_uninstall.rc | default(1) not in [0, 1605, 1641, 3010]
 
         - name: Wait for the agent service to be removed
           ansible.windows.win_service_info:
