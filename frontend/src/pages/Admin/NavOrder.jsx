@@ -7,7 +7,8 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 
-export const NAV_STORAGE_KEY = 'inventoryNavOrder';
+import { NAV_STORAGE_KEY, loadNavOrder } from '../../utils/navOrder.js';
+export { NAV_STORAGE_KEY, loadNavOrder };
 
 export const DEFAULT_NAV_ITEMS = [
   { key: '/dashboard',         label: 'Dashboard',                icon: DashboardOutlined,         description: 'Main overview dashboard' },
@@ -21,24 +22,6 @@ export const DEFAULT_NAV_ITEMS = [
   { key: 'vm-discovery',       label: 'Virtualization Env',             icon: ApartmentOutlined,         description: 'VMware, Proxmox & Hyper-V discovery' },
   { key: '/topology-sites',    label: 'Topology of Sites',        icon: ClusterOutlined,           description: 'VMware, Proxmox, Hyper-V & custom hand-built topology diagrams' },
 ];
-
-export function loadNavOrder() {
-  try {
-    const saved = localStorage.getItem(NAV_STORAGE_KEY);
-    if (!saved) return null;
-    let keys = JSON.parse(saved);
-    // Migrate old separate software-status / nessus-status keys → software-services group
-    const hasGroup = keys.includes('software-services');
-    if (!hasGroup) {
-      const oldIdx = keys.findIndex(k => k === '/software-status' || k === '/nessus-status');
-      keys = keys.filter(k => k !== '/software-status' && k !== '/nessus-status');
-      if (oldIdx !== -1) keys.splice(oldIdx, 0, 'software-services');
-      else keys.push('software-services');
-      localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(keys));
-    }
-    return keys;
-  } catch { return null; }
-}
 
 export default function NavOrder() {
   const { message } = App.useApp();

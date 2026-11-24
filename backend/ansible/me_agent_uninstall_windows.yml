@@ -26,9 +26,14 @@
           ansible.windows.win_shell: |
             $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
                     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-            $e = Get-ItemProperty $keys -ErrorAction SilentlyContinue |
-                 Where-Object { $_.DisplayName -match 'ManageEngine UEMS|ManageEngine.*Agent|Desktop Central.*Agent|Endpoint Central.*Agent' } |
-                 Select-Object -First 1
+            $all = Get-ItemProperty $keys -ErrorAction SilentlyContinue
+            $pat = 'UEMS|ManageEngine|Desktop\s*Central|Endpoint\s*Central|Zoho|DCAgent'
+            $cands = @($all | Where-Object {
+              $_.DisplayName -and ($_.DisplayName -match $pat -or $_.Publisher -match 'Zoho|ManageEngine')
+            })
+            # Prefer an entry that looks like the agent itself over the server/other tools.
+            $e = $cands | Where-Object { $_.DisplayName -match 'agent' } | Select-Object -First 1
+            if (-not $e) { $e = $cands | Select-Object -First 1 }
             if (-not $e) { Write-Output 'NOT_FOUND'; exit 0 }
             if ($e.PSChildName -match '^\{[0-9A-Fa-f-]+\}$') {
               Write-Output ("MSI::" + $e.PSChildName)
@@ -38,11 +43,35 @@
           register: me_uninst_lookup
           changed_when: false
 
+        - name: Gather diagnostics when no uninstall entry was found
+          ansible.windows.win_shell: |
+            "--- agent service ---"
+            Get-CimInstance Win32_Service -Filter "Name like '%UEMS%' or DisplayName like '%UEMS%' or DisplayName like '%ManageEngine%'" |
+              Select-Object Name, DisplayName, PathName | Format-List | Out-String
+            "--- agent install folders ---"
+            Get-ChildItem 'C:\Program Files (x86)\ManageEngine','C:\Program Files\ManageEngine' -ErrorAction SilentlyContinue |
+              Select-Object FullName | Format-Table -HideTableHeaders | Out-String
+            "--- uninstall entries mentioning ManageEngine/Zoho/Central ---"
+            Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+              Where-Object { "$($_.DisplayName) $($_.Publisher)" -match 'Manage|Zoho|Central|UEMS' } |
+              Select-Object DisplayName, Publisher, PSChildName | Format-List | Out-String
+          register: me_uninst_diag
+          changed_when: false
+          failed_when: false
+          when: (me_uninst_lookup.stdout | trim) == 'NOT_FOUND'
+
+        - name: Show diagnostics
+          ansible.builtin.debug:
+            var: me_uninst_diag.stdout_lines
+          when: (me_uninst_lookup.stdout | trim) == 'NOT_FOUND'
+
         - name: Fail if no uninstall entry was found
           ansible.builtin.fail:
             msg: >-
-              The agent service exists but no uninstall entry was found in the registry.
-              Remove it manually (Endpoint Central may require an uninstall OTP).
+              The agent service exists but no matching uninstall entry was found in the registry
+              (see the diagnostics above for what is installed). The agent may not register in
+              Programs and Features; remove it with ManageEngine's AgentCleanupTool or the
+              console, then run the install again.
           when: (me_uninst_lookup.stdout | trim) == 'NOT_FOUND'
 
         - name: Build the uninstall command

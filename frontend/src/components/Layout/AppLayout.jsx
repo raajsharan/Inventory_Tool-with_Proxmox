@@ -22,7 +22,7 @@ import GlobalSearch from '../GlobalSearch.jsx';
 import AlertBell from '../AlertBell.jsx';
 import GlobalHorizontalScroll from '../GlobalHorizontalScroll.jsx';
 import RouteErrorBoundary from '../RouteErrorBoundary.jsx';
-import { NAV_STORAGE_KEY, loadNavOrder } from '../../pages/Admin/NavOrder.jsx';
+import { NAV_STORAGE_KEY, loadNavOrder } from '../../utils/navOrder.js';
 
 const { Sider, Header, Content, Footer } = Layout;
 
