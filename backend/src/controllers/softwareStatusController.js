@@ -68,7 +68,7 @@ const WINDOWS_UNINSTALL_TEMPLATE = process.env.ME_WIN_UNINSTALL_CMD
 // Used when the agent has no MSI product code and is removed through an
 // uninstaller executable instead (override with ME_WIN_UNINSTALL_EXE_CMD).
 const WINDOWS_UNINSTALL_EXE_TEMPLATE = process.env.ME_WIN_UNINSTALL_EXE_CMD
-  || '{target} /silent';
+  || '& {target} /silent';  // must not start with "{": Ansible would try to parse it as a dict
 
 const SOURCE_TABLE = {
   'MSL Assets':      'assets',
