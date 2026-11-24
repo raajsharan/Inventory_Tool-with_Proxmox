@@ -65,6 +65,11 @@ const DEFAULT_LINUX_UNINSTALL_CMD = 'echo "{otp}" | sudo /usr/local/manageengine
 const WINDOWS_UNINSTALL_TEMPLATE = process.env.ME_WIN_UNINSTALL_CMD
   || 'msiexec.exe /x {target} /qn /norestart OTP={otp}';
 
+// Used when the agent has no MSI product code and is removed through an
+// uninstaller executable instead (override with ME_WIN_UNINSTALL_EXE_CMD).
+const WINDOWS_UNINSTALL_EXE_TEMPLATE = process.env.ME_WIN_UNINSTALL_EXE_CMD
+  || '{target} /silent';
+
 const SOURCE_TABLE = {
   'MSL Assets':      'assets',
   'Beijing Assets':  'beijing_assets',
@@ -725,7 +730,7 @@ async function reinstall(req, res, next) {
         ip_address, username, password, osType,
         playbookPath: ansible.ME_UNINSTALL_WINDOWS_PLAYBOOK,
         playbookName: 'me_agent_uninstall_windows.yml',
-        vars: { me_uninstall_otp: String(otp).trim(), me_uninstall_template: WINDOWS_UNINSTALL_TEMPLATE },
+        vars: { me_uninstall_otp: String(otp).trim(), me_uninstall_template: WINDOWS_UNINSTALL_TEMPLATE, me_uninstall_exe_template: WINDOWS_UNINSTALL_EXE_TEMPLATE },
         command: WINDOWS_UNINSTALL_TEMPLATE.replace(/\{otp\}/g, '••••••'),
         appendLog, logFile, agentLabel: 'ManageEngine Agent uninstall',
       });
