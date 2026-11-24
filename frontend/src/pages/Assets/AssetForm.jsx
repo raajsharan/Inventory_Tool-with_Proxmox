@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Card, Form, Input, Select, Switch, Row, Col, Button, Space, App, Typography, Divider, Alert, Tag,
+  Card, Form, Input, Select, Switch, Row, Col, Button, Space, App, Typography, Divider, Alert, Tag, Checkbox,
   InputNumber, DatePicker,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -60,11 +60,17 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
   const watchedLocation = Form.useWatch('location', form);
   const watchedAssetTag = Form.useWatch('assetTag', form);
   const watchedAssetType = Form.useWatch('assetType', form);
+  const watchedIp = Form.useWatch('ipAddress', form);
+  const watchedMeInstalled = Form.useWatch('manageEngineInstalled', form);
+  const watchedNessusInstalled = Form.useWatch('tenableInstalled', form);
   const { config: hnConfig } = useHostnamePatternConfig();
   const [hnTeam, setHnTeam] = useState(null);
   const [hnTier, setHnTier] = useState(null);
   const [hnAssign, setHnAssign] = useState(false);
   const [hnInstallAgents, setHnInstallAgents] = useState(true); // auto-deploy on create unless unticked
+  // Edit mode: installing agents is opt-in, so re-saving an existing record
+  // never deploys anything unless this is ticked on the form.
+  const [editInstallAgents, setEditInstallAgents] = useState(false);
   const [autoTagInfo, setAutoTagInfo] = useState(null);
   const [autoTagLoading, setAutoTagLoading] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
@@ -205,20 +211,23 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
       if (suggestedHostname && savedId) {
         await runHostnameRename({ api, modal, message, source: pageKey, id: savedId });
       }
-      // Auto-deploy ManageEngine + Nessus on every save for users allowed to
-      // install agents: create → both (unless unticked in the hostname
-      // panel); edit → only the agent whose "installed" flag is still No,
-      // quietly (no popup when it's skipped for lack of credentials).
+      // Deploy ManageEngine + Nessus for users allowed to install agents:
+      // create → both (unless unticked in the hostname panel); edit → only
+      // when "Install ... on Save" was ticked on the form, and then only the
+      // agent whose "installed" flag is still No. An edit never installs on
+      // its own — it has to be asked for each time.
       // Never deploy agents to hypervisor hosts: Physical / Bare Metal servers,
       // or anything whose OS Type is Proxmox or VMware.
       if (savedId && values.ipAddress && (isAdmin || canManageAgents) && !disableAgentInstall && AGENT_PAGES.includes(pageKey) && !skipAgentInstall(values.assetType, values.osType)) {
         const isCreate  = mode === 'create';
-        const installMe     = isCreate ? hnInstallAgents : !values.manageEngineInstalled;
-        const installNessus = isCreate ? hnInstallAgents : !values.tenableInstalled;
+        const installMe     = isCreate ? hnInstallAgents : (editInstallAgents && !values.manageEngineInstalled);
+        const installNessus = isCreate ? hnInstallAgents : (editInstallAgents && !values.tenableInstalled);
         if (installMe || installNessus) {
           await runAgentInstalls({
             api, modal, message, source: pageKey, ipAddress: values.ipAddress,
-            installMe, installNessus, quiet: !isCreate,
+            // Not quiet on edit any more: the install was explicitly asked
+            // for here, so its outcome is always reported back.
+            installMe, installNessus, quiet: false,
           });
         }
       }
@@ -558,6 +567,15 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
 
   const dynamicSections = useMemo(() => buildDynamicSections(fieldMeta), [fieldMeta]);
 
+  const canInstallAgentsHere = (isAdmin || canManageAgents) && !disableAgentInstall
+    && AGENT_PAGES.includes(pageKey) && !skipAgentInstall(watchedAssetType, osType);
+  // Only the agents still flagged as not installed can be deployed from here;
+  // redeploying an installed one is Software Status / Nessus Status's Reinstall.
+  const pendingAgents = [
+    !watchedMeInstalled && 'ManageEngine Agent',
+    !watchedNessusInstalled && 'Nessus Agent',
+  ].filter(Boolean);
+
   return (
     <Card title={<Typography.Title level={4} style={{ margin: 0 }}>{mode === 'create' ? `Add ${effectiveEntityLabel}` : `Edit ${effectiveEntityLabel}`}</Typography.Title>}
       className="inventory-form-card"
@@ -614,13 +632,45 @@ export default function AssetForm({ mode, apiPrefix = '/assets', listPath = '/as
                     assign={hnAssign} setAssign={setHnAssign}
                     siteCodes={hnConfig.site_codes} teamCodes={hnConfig.team_codes} tierCodes={hnConfig.tier_codes}
                     segmentOrder={hnConfig.segment_order}
-                    canInstallAgents={(isAdmin || canManageAgents) && !disableAgentInstall && AGENT_PAGES.includes(pageKey) && !skipAgentInstall(watchedAssetType, osType)}
+                    canInstallAgents={canInstallAgentsHere}
                     installAgents={hnInstallAgents} setInstallAgents={setHnInstallAgents}
                   />
                 )}
               </div>
             );
           })
+        )}
+        {mode === 'edit' && canInstallAgentsHere && (
+          <Alert
+            style={{ marginBottom: 16 }}
+            type="info"
+            showIcon
+            message="Agent installation"
+            description={pendingAgents.length === 0 ? (
+              <Typography.Text type="secondary">
+                ManageEngine and Nessus are both marked as installed here, so there is nothing to deploy.
+                To redeploy one, use Reinstall on Software Status / Nessus Status.
+              </Typography.Text>
+            ) : (
+              <>
+                <Checkbox
+                  checked={editInstallAgents}
+                  disabled={!watchedIp}
+                  onChange={(e) => setEditInstallAgents(e.target.checked)}
+                >
+                  Install the {pendingAgents.join(' and the ')} on Save, via Ansible — using the install
+                  configuration already set up under Software Status / Nessus Status.
+                </Checkbox>
+                <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {watchedIp
+                      ? 'Leave it unticked to save your changes without touching the server.'
+                      : 'Enter an IP address first — the install connects to it.'}
+                  </Typography.Text>
+                </div>
+              </>
+            )}
+          />
         )}
         <Space>
           <Button type="primary" htmlType="submit" loading={submitting}>{mode === 'create' ? `Create ${effectiveEntityLabel}` : 'Save Changes'}</Button>
