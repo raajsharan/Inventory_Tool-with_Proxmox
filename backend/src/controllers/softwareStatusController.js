@@ -62,8 +62,13 @@ const DEFAULT_LINUX_UNINSTALL_CMD = 'echo "{otp}" | sudo /usr/local/manageengine
 // Endpoint Central console. ManageEngine doesn't document a silent OTP switch,
 // so override this with ME_WIN_UNINSTALL_CMD if your agent version expects a
 // different property/argument.
+//
+// {target} MUST stay double-quoted: the playbook runs this through PowerShell,
+// which parses a bare {GUID} as a script block and passes it on with the braces
+// stripped — msiexec then rejects the line and prints its usage help (exit 0),
+// so the uninstall silently does nothing.
 const WINDOWS_UNINSTALL_TEMPLATE = process.env.ME_WIN_UNINSTALL_CMD
-  || 'msiexec.exe /x {target} /qn /norestart OTP={otp}';
+  || 'msiexec.exe /x "{target}" /qn /norestart OTP={otp}';
 
 // Used when the agent has no MSI product code and is removed through an
 // uninstaller executable instead (override with ME_WIN_UNINSTALL_EXE_CMD).

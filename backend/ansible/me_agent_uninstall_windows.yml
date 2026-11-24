@@ -37,7 +37,12 @@
               if (-not $e) { $e = $cands | Select-Object -First 1 }
               if ($e) {
                 if ($e.PSChildName -match '^\{[0-9A-Fa-f-]+\}$') { Write-Output ("MSI::" + $e.PSChildName); exit 0 }
-                if ($e.UninstallString) { Write-Output ("EXE::" + $e.UninstallString); exit 0 }
+                if ($e.UninstallString) {
+                  # Usually "MsiExec.exe /X{GUID}" or /I{GUID} — take the product code,
+                  # never run that string as-is (/I would repair/install, not remove).
+                  if ($e.UninstallString -match '(\{[0-9A-Fa-f-]{36}\})') { Write-Output ("MSI::" + $Matches[1]); exit 0 }
+                  Write-Output ("EXE::" + $e.UninstallString); exit 0
+                }
               }
               # Fallback 1: the agent is often not listed in Programs and Features,
               # but is still an installed MSI package — ask Windows Installer.
@@ -130,6 +135,18 @@
               - "rc: {{ me_uninstall.rc | default('none') }}"
               - "stdout: {{ ((me_uninstall.stdout | default('')) | replace(me_uninstall_otp, '******')) if (me_uninstall_otp | default('') | length > 0) else ((me_uninstall.stdout | default(''))) }}"
               - "stderr: {{ ((me_uninstall.stderr | default('')) | replace(me_uninstall_otp, '******')) if (me_uninstall_otp | default('') | length > 0) else ((me_uninstall.stderr | default(''))) }}"
+
+        - name: Fail if msiexec rejected the command line
+          # msiexec answers an unparsable command line by printing its usage help
+          # and exiting 0, so this has to be caught by the output, not the rc.
+          ansible.builtin.fail:
+            msg: >-
+              msiexec printed its usage help instead of uninstalling, so it rejected the command
+              line (see the command above). Check ME_WIN_UNINSTALL_CMD on the backend — the
+              product code must stay double-quoted, or PowerShell strips its braces.
+          when: >-
+            '/Option' in (me_uninstall.stdout | default(''))
+            or 'Install Options' in (me_uninstall.stdout | default(''))
 
         - name: Fail if the uninstaller returned an error
           # 1605 ("not installed") is NOT a success here: the service is still present.
