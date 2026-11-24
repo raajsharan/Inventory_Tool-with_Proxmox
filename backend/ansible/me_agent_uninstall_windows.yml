@@ -23,55 +23,57 @@
       become_user: SYSTEM
       block:
         - name: Find the agent's uninstall command in the registry
-          ansible.windows.win_shell: |
-            $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-                    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-            $all = Get-ItemProperty $keys -ErrorAction SilentlyContinue
-            $pat = 'UEMS|ManageEngine|Desktop\s*Central|Endpoint\s*Central|Zoho|DCAgent'
-            $cands = @($all | Where-Object {
-              $_.DisplayName -and ($_.DisplayName -match $pat -or $_.Publisher -match 'Zoho|ManageEngine')
-            })
-            # Prefer an entry that looks like the agent itself over the server/other tools.
-            $e = $cands | Where-Object { $_.DisplayName -match 'agent' } | Select-Object -First 1
-            if (-not $e) { $e = $cands | Select-Object -First 1 }
-            if ($e) {
-              if ($e.PSChildName -match '^\{[0-9A-Fa-f-]+\}$') { Write-Output ("MSI::" + $e.PSChildName); exit 0 }
-              if ($e.UninstallString) { Write-Output ("EXE::" + $e.UninstallString); exit 0 }
-            }
-            # Fallback 1: the agent is often not listed in Programs and Features,
-            # but is still an installed MSI package — ask Windows Installer.
-            $p = Get-CimInstance Win32_Product -Filter "Name like '%UEMS%' and Name like '%Agent%'" -ErrorAction SilentlyContinue |
-                 Select-Object -First 1
-            if ($p -and $p.IdentifyingNumber) { Write-Output ("MSI::" + $p.IdentifyingNumber); exit 0 }
-            # Fallback 2: an uninstaller shipped in the agent's own folder.
-            foreach ($d in 'C:\Program Files (x86)\ManageEngine\UEMS_Agent','C:\Program Files\ManageEngine\UEMS_Agent') {
-              if (-not (Test-Path $d)) { continue }
-              $u = Get-ChildItem $d -Recurse -Include 'uninst*.exe','unins*.exe','*uninstall*.exe','Remove*.exe' -ErrorAction SilentlyContinue |
+          ansible.windows.win_shell:
+            cmd: |
+              $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                      'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+              $all = Get-ItemProperty $keys -ErrorAction SilentlyContinue
+              $pat = 'UEMS|ManageEngine|Desktop\s*Central|Endpoint\s*Central|Zoho|DCAgent'
+              $cands = @($all | Where-Object {
+                $_.DisplayName -and ($_.DisplayName -match $pat -or $_.Publisher -match 'Zoho|ManageEngine')
+              })
+              # Prefer an entry that looks like the agent itself over the server/other tools.
+              $e = $cands | Where-Object { $_.DisplayName -match 'agent' } | Select-Object -First 1
+              if (-not $e) { $e = $cands | Select-Object -First 1 }
+              if ($e) {
+                if ($e.PSChildName -match '^\{[0-9A-Fa-f-]+\}$') { Write-Output ("MSI::" + $e.PSChildName); exit 0 }
+                if ($e.UninstallString) { Write-Output ("EXE::" + $e.UninstallString); exit 0 }
+              }
+              # Fallback 1: the agent is often not listed in Programs and Features,
+              # but is still an installed MSI package — ask Windows Installer.
+              $p = Get-CimInstance Win32_Product -Filter "Name like '%UEMS%' and Name like '%Agent%'" -ErrorAction SilentlyContinue |
                    Select-Object -First 1
-              if ($u) { Write-Output ('EXE::"' + $u.FullName + '"'); exit 0 }
-            }
-            Write-Output 'NOT_FOUND'
+              if ($p -and $p.IdentifyingNumber) { Write-Output ("MSI::" + $p.IdentifyingNumber); exit 0 }
+              # Fallback 2: an uninstaller shipped in the agent's own folder.
+              foreach ($d in 'C:\Program Files (x86)\ManageEngine\UEMS_Agent','C:\Program Files\ManageEngine\UEMS_Agent') {
+                if (-not (Test-Path $d)) { continue }
+                $u = Get-ChildItem $d -Recurse -Include 'uninst*.exe','unins*.exe','*uninstall*.exe','Remove*.exe' -ErrorAction SilentlyContinue |
+                     Select-Object -First 1
+                if ($u) { Write-Output ('EXE::"' + $u.FullName + '"'); exit 0 }
+              }
+              Write-Output 'NOT_FOUND'
           register: me_uninst_lookup
           changed_when: false
 
         - name: Gather diagnostics when no uninstall entry was found
-          ansible.windows.win_shell: |
-            "--- agent service ---"
-            Get-CimInstance Win32_Service -Filter "Name like '%UEMS%' or DisplayName like '%UEMS%' or DisplayName like '%ManageEngine%'" |
-              Select-Object Name, DisplayName, PathName | Format-List | Out-String
-            "--- agent install folders ---"
-            Get-ChildItem 'C:\Program Files (x86)\ManageEngine','C:\Program Files\ManageEngine' -ErrorAction SilentlyContinue |
-              Select-Object FullName | Format-Table -HideTableHeaders | Out-String
-            "--- executables in the agent folder ---"
-            Get-ChildItem 'C:\Program Files (x86)\ManageEngine\UEMS_Agent' -Recurse -Include *.exe,*.bat,*.cmd,*.ps1 -ErrorAction SilentlyContinue |
-              Select-Object -ExpandProperty FullName | Out-String
-            "--- MSI packages mentioning UEMS ---"
-            Get-CimInstance Win32_Product -Filter "Name like '%UEMS%' or Name like '%ManageEngine%'" -ErrorAction SilentlyContinue |
-              Select-Object Name, IdentifyingNumber | Format-List | Out-String
-            "--- uninstall entries mentioning ManageEngine/Zoho/Central ---"
-            Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-              Where-Object { "$($_.DisplayName) $($_.Publisher)" -match 'Manage|Zoho|Central|UEMS' } |
-              Select-Object DisplayName, Publisher, PSChildName | Format-List | Out-String
+          ansible.windows.win_shell:
+            cmd: |
+              "--- agent service ---"
+              Get-CimInstance Win32_Service -Filter "Name like '%UEMS%' or DisplayName like '%UEMS%' or DisplayName like '%ManageEngine%'" |
+                Select-Object Name, DisplayName, PathName | Format-List | Out-String
+              "--- agent install folders ---"
+              Get-ChildItem 'C:\Program Files (x86)\ManageEngine','C:\Program Files\ManageEngine' -ErrorAction SilentlyContinue |
+                Select-Object FullName | Format-Table -HideTableHeaders | Out-String
+              "--- executables in the agent folder ---"
+              Get-ChildItem 'C:\Program Files (x86)\ManageEngine\UEMS_Agent' -Recurse -Include *.exe,*.bat,*.cmd,*.ps1 -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName | Out-String
+              "--- MSI packages mentioning UEMS ---"
+              Get-CimInstance Win32_Product -Filter "Name like '%UEMS%' or Name like '%ManageEngine%'" -ErrorAction SilentlyContinue |
+                Select-Object Name, IdentifyingNumber | Format-List | Out-String
+              "--- uninstall entries mentioning ManageEngine/Zoho/Central ---"
+              Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+                Where-Object { "$($_.DisplayName) $($_.Publisher)" -match 'Manage|Zoho|Central|UEMS' } |
+                Select-Object DisplayName, Publisher, PSChildName | Format-List | Out-String
           register: me_uninst_diag
           changed_when: false
           failed_when: false
@@ -106,7 +108,8 @@
 
         - name: Run the uninstaller
           # no_log hides the OTP; the exit code is checked in the next task.
-          ansible.windows.win_shell: "{{ me_uninstall_final }}"
+          ansible.windows.win_shell:
+            cmd: "{{ me_uninstall_final }}"
           register: me_uninstall
           async: 600
           poll: 10
