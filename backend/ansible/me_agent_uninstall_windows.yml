@@ -24,7 +24,7 @@
       block:
         - name: Find the agent's uninstall command in the registry
           ansible.windows.win_shell:
-            cmd: |
+            _raw_params: |
               $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
                       'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
               $all = Get-ItemProperty $keys -ErrorAction SilentlyContinue
@@ -57,7 +57,7 @@
 
         - name: Gather diagnostics when no uninstall entry was found
           ansible.windows.win_shell:
-            cmd: |
+            _raw_params: |
               "--- agent service ---"
               Get-CimInstance Win32_Service -Filter "Name like '%UEMS%' or DisplayName like '%UEMS%' or DisplayName like '%ManageEngine%'" |
                 Select-Object Name, DisplayName, PathName | Format-List | Out-String
@@ -109,7 +109,7 @@
         - name: Run the uninstaller
           # no_log hides the OTP; the exit code is checked in the next task.
           ansible.windows.win_shell:
-            cmd: "{{ me_uninstall_final }}"
+            _raw_params: "{{ me_uninstall_final }}"
           register: me_uninstall
           async: 600
           poll: 10
