@@ -106,8 +106,15 @@
                  | replace('{otp}', me_uninstall_otp | default('')) }}
           no_log: true
 
+        - name: Show what was found and the command that will run (OTP masked)
+          ansible.builtin.debug:
+            msg:
+              - "lookup: {{ me_uninst_lookup.stdout | trim }}"
+              - "command: {{ (me_uninstall_final | replace(me_uninstall_otp, '******')) if (me_uninstall_otp | default('') | length > 0) else (me_uninstall_final) }}"
+
         - name: Run the uninstaller
-          # no_log hides the OTP; the exit code is checked in the next task.
+          # no_log: win_shell echoes the command (which carries the OTP) in its result;
+          # the masked outcome is printed by the next task instead.
           ansible.windows.win_shell:
             _raw_params: "{{ me_uninstall_final }}"
           register: me_uninstall
@@ -117,20 +124,38 @@
           failed_when: false
           no_log: true
 
+        - name: Show the uninstaller outcome (OTP masked)
+          ansible.builtin.debug:
+            msg:
+              - "rc: {{ me_uninstall.rc | default('none') }}"
+              - "stdout: {{ ((me_uninstall.stdout | default('')) | replace(me_uninstall_otp, '******')) if (me_uninstall_otp | default('') | length > 0) else ((me_uninstall.stdout | default(''))) }}"
+              - "stderr: {{ ((me_uninstall.stderr | default('')) | replace(me_uninstall_otp, '******')) if (me_uninstall_otp | default('') | length > 0) else ((me_uninstall.stderr | default(''))) }}"
+
         - name: Fail if the uninstaller returned an error
+          # 1605 ("not installed") is NOT a success here: the service is still present.
           ansible.builtin.fail:
             msg: >-
-              Uninstall command failed with exit code {{ me_uninstall.rc | default('unknown') }}.
-              Check that the OTP is current and correct (Endpoint Central: Agent > Computers > View OTP).
-          when: me_uninstall.rc | default(1) not in [0, 1605, 1641, 3010]
+              Uninstall command failed with exit code {{ me_uninstall.rc | default('unknown') }}
+              (see the outcome above). Check that the OTP is current and correct
+              (Endpoint Central: Agent > Computers > View OTP).
+          when: me_uninstall.rc | default(1) not in [0, 1641, 3010]
 
         - name: Wait for the agent service to be removed
           ansible.windows.win_service_info:
             name: "{{ me_service_name }}"
           register: me_service_after
-          retries: 24
+          retries: 12
           delay: 5
           until: not (me_service_after.exists | default(false))
+          failed_when: false
+
+        - name: Fail if the agent service is still present
+          ansible.builtin.fail:
+            msg: >-
+              The uninstall command finished (rc {{ me_uninstall.rc | default('none') }}) but the
+              "{{ me_service_name }}" service is still installed. The uninstaller probably did not
+              remove the agent — see the lookup, command and outcome above.
+          when: me_service_after.exists | default(false)
 
         - name: Report success
           ansible.builtin.debug:
