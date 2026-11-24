@@ -978,6 +978,14 @@ function StepResult({ title, result }) {
       <Space direction="vertical" style={{ width: '100%' }} size={8}>
         <Typography.Text strong>{title}</Typography.Text>
         <Alert type="error" showIcon message="Connection failed" description={result.error} />
+        {result.output && (
+          <>
+            <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+              Output
+            </Typography.Text>
+            <TerminalBox>{result.output}</TerminalBox>
+          </>
+        )}
       </Space>
     );
   }
